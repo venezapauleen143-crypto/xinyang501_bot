@@ -2,5 +2,6 @@
 .env.txt
 __pycache__/
 *.pyc
-*.log
+#*.log  # messages.log 不上傳但 bot_output.log 也不需要
+bot_output.log
 memory.db

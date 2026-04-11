@@ -22,6 +22,15 @@ import datetime
 
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 
+MSG_LOG = Path(__file__).parent / "messages.log"
+
+def log_message(direction: str, sender: str, chat_id: int, text: str):
+    """寫入訊息日誌供終端機同步使用"""
+    ts = datetime.datetime.now().strftime("%H:%M:%S")
+    line = f"[{ts}] {direction} [{chat_id}] {sender}: {text}\n"
+    with open(MSG_LOG, "a", encoding="utf-8") as f:
+        f.write(line)
+
 client = Anthropic()
 
 # ── 持久化記憶（SQLite）──────────────────────────────
@@ -304,6 +313,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             user_text = user_text.replace(f"@{bot_username}", "").strip()
 
+        sender_name = update.effective_user.first_name or str(update.effective_user.id)
+        log_message(">>", sender_name, chat_id, user_text)
         save_message(chat_id, "user", user_text)
         history = load_history(chat_id)[-40:]  # 只取最近 40 條給 Claude，避免超過 token 限制
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
@@ -397,6 +408,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         reply = text_blocks[0]
         save_message(chat_id, "assistant", reply)
+        log_message("<<", "小牛馬", chat_id, reply)
         await update.message.reply_text(reply)
 
     except Exception as e:
