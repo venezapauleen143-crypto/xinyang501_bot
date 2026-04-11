@@ -1,12 +1,19 @@
 import os
+import io
+import time
+import logging
+import urllib.parse
 import requests
 from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 from anthropic import Anthropic
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
+
+logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 
 client = Anthropic()
 chat_histories = {}
@@ -25,20 +32,34 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
 你的風格：平時說話嘴賤、幽默風趣，喜歡開玩笑。但當用戶遇到問題時，你會立刻切換成專業模式，給出最快、最清楚的解決方式。"""
 
-WEATHER_TOOL = {
-    "name": "get_weather",
-    "description": "查詢指定城市的即時天氣。當用戶詢問任何城市的天氣、氣溫、溫度、下雨、天氣狀況時使用此工具。",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "city": {
-                "type": "string",
-                "description": "城市名稱，可以是中文或英文，例如：台北、Tokyo、New York"
-            }
-        },
-        "required": ["city"]
+TOOLS = [
+    {
+        "name": "get_weather",
+        "description": "查詢指定城市的即時天氣。當用戶詢問任何城市的天氣、氣溫、溫度、下雨、天氣狀況時使用此工具。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "city": {"type": "string", "description": "城市名稱，可以是中文或英文，例如：台北、Tokyo、New York"}
+            },
+            "required": ["city"]
+        }
+    },
+    {
+        "name": "generate_image",
+        "description": "根據文字描述生成圖片。當用戶要求畫圖、生成圖片、產生圖像、畫一張、幫我生成圖片時使用此工具。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "圖片的英文描述（必須是英文），要具體詳細。如果用戶用中文描述，必須先翻譯成英文再填入。例如：a cute cat sitting on a sunset beach, warm colors, realistic photo。不要在 prompt 裡要求生成文字"},
+                "overlay_text": {"type": "string", "description": "要疊加在圖片上的中文文字（選填）。如果用戶想要圖片上有文字（如早安、祝福語等），填入這裡，會用美觀字型疊加上去"},
+                "width": {"type": "integer", "description": "圖片寬度，預設 1024"},
+                "height": {"type": "integer", "description": "圖片高度，預設 1024"}
+            },
+            "required": ["prompt"]
+        }
     }
-}
+]
+
 
 def fetch_weather(city: str) -> str:
     try:
@@ -50,7 +71,6 @@ def fetch_weather(city: str) -> str:
         data = res.json()
         current = data["current_condition"][0]
         area = data["nearest_area"][0]
-
         location = area["areaName"][0]["value"] + ", " + area["country"][0]["value"]
         desc = current["lang_zh-tw"][0]["value"] if "lang_zh-tw" in current else current["weatherDesc"][0]["value"]
         temp = current["temp_C"]
@@ -58,7 +78,6 @@ def fetch_weather(city: str) -> str:
         humidity = current["humidity"]
         wind = current["windspeedKmph"]
         wind_dir = current["winddir16Point"]
-
         return (
             f"📍 {location}\n"
             f"🌤 {desc}\n"
@@ -69,69 +88,160 @@ def fetch_weather(city: str) -> str:
     except Exception:
         return f"查不到「{city}」的天氣資訊。"
 
+
+def add_text_overlay(image_bytes: bytes, text: str) -> bytes:
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+        w, h = img.size
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        font_size = max(36, w // 12)
+        font_path = "C:/Windows/Fonts/msjhbd.ttc"
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except Exception:
+            font = ImageFont.load_default()
+
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        x = (w - tw) // 2
+        y = h - th - int(h * 0.08)
+
+        # 陰影
+        for dx, dy in [(-2,-2),(2,-2),(-2,2),(2,2)]:
+            draw.text((x+dx, y+dy), text, font=font, fill=(0, 0, 0, 180))
+        # 主文字
+        draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
+
+        result = Image.alpha_composite(img, overlay).convert("RGB")
+        buf = io.BytesIO()
+        result.save(buf, format="JPEG", quality=92)
+        return buf.getvalue()
+    except Exception:
+        return image_bytes
+
+
+def fetch_image(prompt: str, width: int = 512, height: int = 512):
+    hf_token = os.getenv("HF_TOKEN")
+    headers = {"Authorization": f"Bearer {hf_token}"}
+    payload = {"inputs": prompt}
+    models = [
+        "black-forest-labs/FLUX.1-schnell",
+        "stabilityai/stable-diffusion-xl-base-1.0",
+    ]
+    for model in models:
+        for attempt in range(2):
+            try:
+                res = requests.post(
+                    f"https://router.huggingface.co/hf-inference/models/{model}",
+                    headers=headers,
+                    json=payload,
+                    timeout=120
+                )
+                if res.status_code == 200 and res.headers.get("content-type", "").startswith("image"):
+                    return res.content
+                if res.status_code == 503:
+                    time.sleep(10)
+                    continue
+            except Exception:
+                pass
+    return None
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_histories[update.effective_chat.id] = []
     await update.message.reply_text("你好！我是小牛馬，有什麼可以幫你的？")
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    user_text = update.message.text
+    try:
+        chat_id = update.effective_chat.id
+        user_text = update.message.text
 
-    # 群組內只回應有 @ 提及 bot 的訊息
-    if update.effective_chat.type in ("group", "supergroup"):
-        bot_username = context.bot.username
-        if not (update.message.entities and any(
-            e.type == "mention" and user_text[e.offset:e.offset + e.length] == f"@{bot_username}"
-            for e in update.message.entities
-        )):
-            return
-        user_text = user_text.replace(f"@{bot_username}", "").strip()
+        # 群組內只回應有 @ 提及 bot 的訊息
+        if update.effective_chat.type in ("group", "supergroup"):
+            bot_username = context.bot.username
+            if not (update.message.entities and any(
+                e.type == "mention" and user_text[e.offset:e.offset + e.length] == f"@{bot_username}"
+                for e in update.message.entities
+            )):
+                return
+            user_text = user_text.replace(f"@{bot_username}", "").strip()
 
-    if chat_id not in chat_histories:
-        chat_histories[chat_id] = []
+        if chat_id not in chat_histories:
+            chat_histories[chat_id] = []
 
-    chat_histories[chat_id].append({"role": "user", "content": user_text})
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        chat_histories[chat_id].append({"role": "user", "content": user_text})
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    system = SYSTEM_PROMPT_OWNER if update.effective_user.id == OWNER_ID else SYSTEM_PROMPT_DEFAULT
+        system = SYSTEM_PROMPT_OWNER if update.effective_user.id == OWNER_ID else SYSTEM_PROMPT_DEFAULT
 
-    # 第一次呼叫，允許 Claude 使用天氣工具
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=system,
-        tools=[WEATHER_TOOL],
-        messages=chat_histories[chat_id]
-    )
-
-    # 如果 Claude 呼叫了天氣工具
-    if response.stop_reason == "tool_use":
-        tool_use = next(b for b in response.content if b.type == "tool_use")
-        city = tool_use.input["city"]
-        weather_result = fetch_weather(city)
-
-        # 把工具結果回傳給 Claude 繼續生成回覆
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
             system=system,
-            tools=[WEATHER_TOOL],
-            messages=chat_histories[chat_id] + [
-                {"role": "assistant", "content": response.content},
-                {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": weather_result}]}
-            ]
+            tools=TOOLS,
+            messages=chat_histories[chat_id]
         )
 
-    reply = next(b.text for b in response.content if hasattr(b, "text"))
-    chat_histories[chat_id].append({"role": "assistant", "content": reply})
-    await update.message.reply_text(reply)
+        # 處理工具呼叫
+        if response.stop_reason == "tool_use":
+            tool_use = next(b for b in response.content if b.type == "tool_use")
+
+            if tool_use.name == "get_weather":
+                tool_result = fetch_weather(tool_use.input["city"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1024,
+                    system=system,
+                    tools=TOOLS,
+                    messages=chat_histories[chat_id] + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                    ]
+                )
+
+            elif tool_use.name == "generate_image":
+                prompt = tool_use.input["prompt"]
+                width = tool_use.input.get("width", 512)
+                height = tool_use.input.get("height", 512)
+                overlay_text = tool_use.input.get("overlay_text", "")
+                await context.bot.send_chat_action(chat_id=chat_id, action="upload_photo")
+                import asyncio
+                loop = asyncio.get_running_loop()
+                image_bytes = await loop.run_in_executor(None, fetch_image, prompt, width, height)
+                if image_bytes:
+                    if overlay_text:
+                        image_bytes = add_text_overlay(image_bytes, overlay_text)
+                if image_bytes:
+                    await update.message.reply_photo(photo=image_bytes, caption=f"🎨 {prompt}")
+                else:
+                    await update.message.reply_text("圖片生成失敗，請稍後再試。")
+                chat_histories[chat_id].append({"role": "assistant", "content": f"已為用戶生成圖片：{prompt}"})
+                return
+
+        text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+        if not text_blocks:
+            await update.message.reply_text("哎，我卡住了，請再說一次。")
+            return
+        reply = text_blocks[0]
+        chat_histories[chat_id].append({"role": "assistant", "content": reply})
+        await update.message.reply_text(reply)
+
+    except Exception as e:
+        logging.error(f"handle_message error: {e}", exc_info=True)
+        await update.message.reply_text("發生錯誤，請稍後再試。")
+
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"你的 Telegram ID 是：`{update.effective_user.id}`", parse_mode="Markdown")
 
+
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_histories[update.effective_chat.id] = []
     await update.message.reply_text("對話紀錄已清除。")
+
 
 if __name__ == "__main__":
     token = os.getenv("TELEGRAM_BOT_TOKEN")
