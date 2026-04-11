@@ -458,10 +458,21 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
     msg = await loop.run_in_executor(None, generate_goodnight)
     await context.bot.send_message(chat_id=group_id, text=msg)
 
+_learned_today: str = ""  # 防止同一天重複執行
+
 async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
     """每天晚上 9 點：讓 Claude 學習一個新技能並記錄，然後上傳 GitHub"""
+    global _learned_today
     import asyncio
     loop = asyncio.get_running_loop()
+
+    today = datetime.date.today()
+    today_str = str(today)
+
+    # 同一天已執行過則跳過（防止重啟後重複觸發）
+    if _learned_today == today_str:
+        return
+    _learned_today = today_str
 
     topics = [
         "Python asyncio 進階用法與最佳實踐",
@@ -476,7 +487,6 @@ async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
         "pyautogui 桌面自動化進階技巧",
     ]
 
-    today = datetime.date.today()
     topic = topics[today.toordinal() % len(topics)]
 
     def do_learn():
@@ -493,15 +503,19 @@ async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
     # 儲存學習筆記
     log_path = Path(__file__).parent / "learning_log.md"
     existing = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
-    entry = f"\n\n## {today} — {topic}\n\n{learn_content}\n\n---"
+    entry = f"\n\n## {today_str} — {topic}\n\n{learn_content}\n\n---"
     log_path.write_text(existing + entry, encoding="utf-8")
 
     # 上傳 GitHub
     def do_git_push():
         repo = str(Path(__file__).parent)
-        subprocess.run(["git", "-C", repo, "add", "learning_log.md"], capture_output=True)
-        subprocess.run(["git", "-C", repo, "commit", "-m", f"每日學習筆記：{today} {topic}"], capture_output=True)
-        result = subprocess.run(["git", "-C", repo, "push"], capture_output=True, text=True)
+        subprocess.run(["git", "-C", repo, "add", "learning_log.md"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["git", "-C", repo, "commit", "-m", f"每日學習筆記：{today_str} {topic}"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        result = subprocess.run(["git", "-C", repo, "push"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8")
+        # exit 0 = 成功；"Everything up-to-date" 也算成功
         return result.returncode == 0
 
     push_ok = await loop.run_in_executor(None, do_git_push)
