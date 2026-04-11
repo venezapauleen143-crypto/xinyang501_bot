@@ -444,3 +444,155 @@ jobstores = {
     'default': SQLAlchemyJobStore(url
 
 ---
+
+## 2026-04-11 — Python 排程任務：APScheduler 進階用法
+
+# 📓 小牛馬的學習筆記
+**日期：** 今晚  
+**主題：** Python 排程任務：APScheduler 進階用法
+
+---
+
+## 🔑 重點知識
+
+### 1. APScheduler 四大核心元件
+
+- **Scheduler（排程器）**：整個系統的核心，負責管理所有任務
+  - `BlockingScheduler`：阻塞式，適合排程器是程式唯一主體
+  - `BackgroundScheduler`：背景執行，適合與其他應用（如 Flask）整合
+  - `AsyncIOScheduler`：配合 `asyncio` 使用
+  - `GeventScheduler` / `TornadoScheduler`：配合對應框架
+
+- **Trigger（觸發器）**：決定任務「何時」執行
+  - `date`：特定時間點執行一次
+  - `interval`：固定間隔重複執行
+  - `cron`：類 Linux crontab 語法，彈性最高
+
+- **JobStore（任務儲存）**：任務存放位置
+  - 預設：記憶體（程式重啟後消失）
+  - 可改用：`SQLAlchemyJobStore`、`RedisJobStore`、`MongoDBJobStore`
+
+- **Executor（執行器）**：任務的執行方式
+  - `ThreadPoolExecutor`：多執行緒（預設）
+  - `ProcessPoolExecutor`：多行程，適合 CPU 密集型任務
+  - `AsyncIOExecutor`：配合非同步任務
+
+---
+
+### 2. 三種 Trigger 詳細說明
+
+| Trigger | 參數範例 | 適用情境 |
+|--------|---------|---------|
+| `date` | `run_date='2025-12-31 23:59:59'` | 只執行一次的預約任務 |
+| `interval` | `hours=1, minutes=30` | 定時輪詢、定期備份 |
+| `cron` | `hour='9-17', day_of_week='mon-fri'` | 複雜週期，如工作日早上 |
+
+**cron 常用欄位：**
+```
+year / month / day / week / day_of_week / hour / minute / second
+```
+
+---
+
+### 3. 進階功能重點
+
+- **misfire_grace_time**：允許任務「遲到」幾秒仍可執行，避免因短暫延遲被跳過
+- **max_instances**：同一任務最多允許幾個實例同時執行，防止任務堆疊
+- **coalesce**：若任務積壓多次未執行，是否合併成一次執行（預設 `True`）
+- **jitter**：為觸發時間加入隨機偏移，避免大量任務同時爆發（雷群效應）
+
+---
+
+## 💻 實用範例程式碼
+
+### 📦 安裝
+```bash
+pip install apscheduler
+pip install sqlalchemy  # 若需持久化儲存
+```
+
+---
+
+### 範例 1：基本三種 Trigger 示範
+
+```python
+from apscheduler.schedulers.blocking import BlockingScheduler
+from datetime import datetime
+
+scheduler = BlockingScheduler()
+
+# ① date trigger：指定時間執行一次
+scheduler.add_job(
+    func=lambda: print("🎯 定時任務觸發！"),
+    trigger='date',
+    run_date='2025-12-31 23:59:00',
+    id='new_year_job'
+)
+
+# ② interval trigger：每 10 秒執行一次
+scheduler.add_job(
+    func=lambda: print(f"⏱️ interval 觸發：{datetime.now()}"),
+    trigger='interval',
+    seconds=10,
+    id='interval_job'
+)
+
+# ③ cron trigger：每週一到週五，早上 9 點執行
+scheduler.add_job(
+    func=lambda: print("📅 工作日早晨任務！"),
+    trigger='cron',
+    day_of_week='mon-fri',
+    hour=9,
+    minute=0,
+    id='morning_job'
+)
+
+scheduler.start()
+```
+
+---
+
+### 範例 2：BackgroundScheduler + Flask 整合
+
+```python
+from flask import Flask
+from apscheduler.schedulers.background import BackgroundScheduler
+
+app = Flask(__name__)
+scheduler = BackgroundScheduler()
+
+def collect_data():
+    print("📡 背景資料收集中...")
+
+# 每 5 分鐘執行一次
+scheduler.add_job(
+    func=collect_data,
+    trigger='interval',
+    minutes=5,
+    id='data_collector',
+    replace_existing=True  # 避免重複啟動時重複新增
+)
+
+scheduler.start()
+
+@app.route('/')
+def index():
+    return "Flask 正在運行，排程器在背景執行中 ✅"
+
+if __name__ == '__main__':
+    app.run(debug=False)  # debug=True 會導致排程器啟動兩次，需注意！
+```
+
+---
+
+### 範例 3：SQLAlchemy 持久化儲存（重啟不遺失任務）
+
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
+
+# 設定 JobStore 與 Executor
+job
+
+---
