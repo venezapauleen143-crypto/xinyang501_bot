@@ -1,3 +1,6 @@
 .env
+.env.txt
 __pycache__/
 *.pyc
+*.log
+memory.db
