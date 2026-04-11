@@ -443,6 +443,60 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
     msg = await loop.run_in_executor(None, generate_goodnight)
     await context.bot.send_message(chat_id=group_id, text=msg)
 
+async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
+    """每天晚上 9 點：讓 Claude 學習一個新技能並記錄，然後上傳 GitHub"""
+    import asyncio
+    loop = asyncio.get_running_loop()
+
+    topics = [
+        "Python asyncio 進階用法與最佳實踐",
+        "Telegram Bot API 進階功能與限制",
+        "Claude API 工具使用（Tool Use）技巧",
+        "SQLite 效能優化技巧",
+        "Python 錯誤處理與 logging 最佳實踐",
+        "圖片處理：Pillow 進階技巧",
+        "HTTP requests 效能優化與重試機制",
+        "Python 排程任務：APScheduler 進階用法",
+        "Git 自動化流程與 GitHub Actions 入門",
+        "pyautogui 桌面自動化進階技巧",
+    ]
+
+    today = datetime.date.today()
+    topic = topics[today.toordinal() % len(topics)]
+
+    def do_learn():
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            system="你是小牛馬，一個積極自學的 AI 助理。每天晚上你會主動學習一個新技能並做成筆記。",
+            messages=[{"role": "user", "content": f"今天的學習主題是：{topic}。請整理出重點知識、實用範例程式碼（如果適用）、以及你學到的心得，用繁體中文條列式整理，格式清晰。"}]
+        )
+        return response.content[0].text
+
+    learn_content = await loop.run_in_executor(None, do_learn)
+
+    # 儲存學習筆記
+    log_path = Path(__file__).parent / "learning_log.md"
+    existing = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    entry = f"\n\n## {today} — {topic}\n\n{learn_content}\n\n---"
+    log_path.write_text(existing + entry, encoding="utf-8")
+
+    # 上傳 GitHub
+    def do_git_push():
+        repo = str(Path(__file__).parent)
+        subprocess.run(["git", "-C", repo, "add", "learning_log.md"], capture_output=True)
+        subprocess.run(["git", "-C", repo, "commit", "-m", f"每日學習筆記：{today} {topic}"], capture_output=True)
+        result = subprocess.run(["git", "-C", repo, "push"], capture_output=True, text=True)
+        return result.returncode == 0
+
+    push_ok = await loop.run_in_executor(None, do_git_push)
+
+    # 通知于晏哥
+    status = "✅ 已上傳 GitHub" if push_ok else "⚠️ GitHub 上傳失敗"
+    msg = f"📚 今日學習完成！\n主題：{topic}\n{status}"
+    await context.bot.send_message(chat_id=OWNER_ID, text=msg)
+
+
 if __name__ == "__main__":
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     app = ApplicationBuilder().token(token).build()
@@ -456,6 +510,11 @@ if __name__ == "__main__":
     app.job_queue.run_daily(
         goodnight,
         time=datetime.time(hour=14, minute=30, tzinfo=datetime.timezone.utc)
+    )
+    # 每天晚上 9:00 台灣時間（UTC+8）= 13:00 UTC
+    app.job_queue.run_daily(
+        daily_learn_and_push,
+        time=datetime.time(hour=13, minute=0, tzinfo=datetime.timezone.utc)
     )
 
     app.add_handler(CommandHandler("start", start))
