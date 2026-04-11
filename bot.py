@@ -12,6 +12,7 @@ load_dotenv(Path(__file__).parent / ".env")
 from anthropic import Anthropic
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
+import datetime
 
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -234,6 +235,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("發生錯誤，請稍後再試。")
 
 
+async def chatid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"這個聊天室的 ID 是：`{update.effective_chat.id}`", parse_mode="Markdown")
+
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"你的 Telegram ID 是：`{update.effective_user.id}`", parse_mode="Markdown")
 
@@ -243,10 +247,53 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("對話紀錄已清除。")
 
 
+async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
+    group_id = int(os.getenv("GROUP_CHAT_ID"))
+    import asyncio
+    loop = asyncio.get_running_loop()
+    def generate_goodmorning():
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=150,
+            system="你是小牛馬，說話嘴賤幽默。現在是早上11點，用繁體中文生成一段簡短有趣的早安問候語，每次內容都不同，可以包含今日天氣心情預告、幽默吐槽、激勵話語等，結尾加上表情符號。約30-60字。",
+            messages=[{"role": "user", "content": "生成今天的早安訊息"}]
+        )
+        return response.content[0].text
+    msg = await loop.run_in_executor(None, generate_goodmorning)
+    await context.bot.send_message(chat_id=group_id, text=msg)
+
+async def goodnight(context: ContextTypes.DEFAULT_TYPE):
+    group_id = int(os.getenv("GROUP_CHAT_ID"))
+    import asyncio
+    loop = asyncio.get_running_loop()
+    def generate_goodnight():
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=150,
+            system="你是小牛馬，說話嘴賤幽默。現在是晚上10:30，你要下班了，用繁體中文生成一段簡短有趣的晚安問候語，每次內容都不同，可以包含當天心情、幽默吐槽、祝福語等，結尾加上表情符號。約30-60字。",
+            messages=[{"role": "user", "content": "生成今晚的晚安訊息"}]
+        )
+        return response.content[0].text
+    msg = await loop.run_in_executor(None, generate_goodnight)
+    await context.bot.send_message(chat_id=group_id, text=msg)
+
 if __name__ == "__main__":
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     app = ApplicationBuilder().token(token).build()
+
+    # 每天早上 11:00 台灣時間（UTC+8）= 03:00 UTC
+    app.job_queue.run_daily(
+        goodmorning,
+        time=datetime.time(hour=3, minute=0, tzinfo=datetime.timezone.utc)
+    )
+    # 每天晚上 10:30 台灣時間（UTC+8）= 14:30 UTC
+    app.job_queue.run_daily(
+        goodnight,
+        time=datetime.time(hour=14, minute=30, tzinfo=datetime.timezone.utc)
+    )
+
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("chatid", chatid))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("clear", clear))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
