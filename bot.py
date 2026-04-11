@@ -4,11 +4,15 @@ import time
 import json
 import sqlite3
 import logging
+import subprocess
 import urllib.parse
 import requests
+import pyautogui
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
+
+pyautogui.FAILSAFE = True  # 滑鼠移到左上角可緊急停止
 
 load_dotenv(Path(__file__).parent / ".env")
 from anthropic import Anthropic
@@ -109,6 +113,27 @@ TOOLS = [
             },
             "required": ["prompt"]
         }
+    },
+    {
+        "name": "desktop_control",
+        "description": "控制電腦桌面。當用戶要求截圖、點擊、移動滑鼠、輸入文字、按鍵、開啟程式時使用此工具。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["screenshot", "click", "double_click", "right_click", "move", "type", "press_key", "open_app", "scroll"],
+                    "description": "要執行的動作"
+                },
+                "x": {"type": "integer", "description": "滑鼠 X 座標（click/move/scroll 時使用）"},
+                "y": {"type": "integer", "description": "滑鼠 Y 座標（click/move/scroll 時使用）"},
+                "text": {"type": "string", "description": "要輸入的文字或按鍵名稱（type/press_key 時使用）"},
+                "app": {"type": "string", "description": "要開啟的程式名稱或路徑（open_app 時使用）"},
+                "direction": {"type": "string", "enum": ["up", "down"], "description": "滾動方向（scroll 時使用）"},
+                "amount": {"type": "integer", "description": "滾動格數（scroll 時使用，預設 3）"}
+            },
+            "required": ["action"]
+        }
     }
 ]
 
@@ -172,6 +197,61 @@ def add_text_overlay(image_bytes: bytes, text: str) -> bytes:
         return buf.getvalue()
     except Exception:
         return image_bytes
+
+
+def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, direction="down", amount=3) -> dict:
+    """執行桌面控制動作，回傳 {"ok": bool, "message": str, "screenshot": bytes or None}"""
+    try:
+        screenshot_bytes = None
+
+        if action == "screenshot":
+            img = pyautogui.screenshot()
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            screenshot_bytes = buf.getvalue()
+            return {"ok": True, "message": "截圖完成", "screenshot": screenshot_bytes}
+
+        elif action == "click":
+            pyautogui.click(x, y)
+            return {"ok": True, "message": f"已點擊 ({x}, {y})", "screenshot": None}
+
+        elif action == "double_click":
+            pyautogui.doubleClick(x, y)
+            return {"ok": True, "message": f"已雙擊 ({x}, {y})", "screenshot": None}
+
+        elif action == "right_click":
+            pyautogui.rightClick(x, y)
+            return {"ok": True, "message": f"已右鍵點擊 ({x}, {y})", "screenshot": None}
+
+        elif action == "move":
+            pyautogui.moveTo(x, y, duration=0.3)
+            return {"ok": True, "message": f"滑鼠已移動到 ({x}, {y})", "screenshot": None}
+
+        elif action == "type":
+            pyautogui.write(text, interval=0.05)
+            return {"ok": True, "message": f"已輸入文字：{text}", "screenshot": None}
+
+        elif action == "press_key":
+            pyautogui.press(text)
+            return {"ok": True, "message": f"已按下按鍵：{text}", "screenshot": None}
+
+        elif action == "open_app":
+            subprocess.Popen(app, shell=True)
+            return {"ok": True, "message": f"已開啟：{app}", "screenshot": None}
+
+        elif action == "scroll":
+            scroll_amount = amount if direction == "up" else -amount
+            if x is not None and y is not None:
+                pyautogui.scroll(scroll_amount, x=x, y=y)
+            else:
+                pyautogui.scroll(scroll_amount)
+            return {"ok": True, "message": f"已向{direction}滾動 {amount} 格", "screenshot": None}
+
+        else:
+            return {"ok": False, "message": f"未知動作：{action}", "screenshot": None}
+
+    except Exception as e:
+        return {"ok": False, "message": f"執行失敗：{str(e)}", "screenshot": None}
 
 
 def fetch_image(prompt: str, width: int = 512, height: int = 512):
@@ -251,6 +331,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
                     ]
                 )
+
+            elif tool_use.name == "desktop_control":
+                inp = tool_use.input
+                import asyncio
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: execute_desktop_control(
+                        action=inp["action"],
+                        x=inp.get("x"),
+                        y=inp.get("y"),
+                        text=inp.get("text"),
+                        app=inp.get("app"),
+                        direction=inp.get("direction", "down"),
+                        amount=inp.get("amount", 3)
+                    )
+                )
+                tool_result_content = result["message"]
+                # 把截圖或結果回傳給 Claude，讓 Claude 生成回覆
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result_content}]}
+                    ]
+                )
+                # 如果有截圖，先傳圖
+                if result.get("screenshot"):
+                    await update.message.reply_photo(photo=result["screenshot"], caption="📸 桌面截圖")
+                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else result["message"]
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
 
             elif tool_use.name == "generate_image":
                 prompt = tool_use.input["prompt"]
