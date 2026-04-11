@@ -58,6 +58,7 @@ def send_message(chat_id: int, text: str):
 
 
 def main():
+    global target_chat_id
     print("=" * 50)
     print("  小牛馬終端機  ──  雙向同步")
     print(f"  發送目標：chat_id {target_chat_id}")
@@ -69,8 +70,6 @@ def main():
     # 背景執行 log 監聽
     t = threading.Thread(target=tail_log, daemon=True)
     t.start()
-
-    global target_chat_id
     while True:
         try:
             sys.stdout.write("你: ")
