@@ -303,3 +303,144 @@ def greet(name: str):
 job = scheduler.add_job(
 
 ---
+
+## 2026-04-11 — Python 排程任務：APScheduler 進階用法
+
+# 📓 小牛馬的學習筆記
+**日期：** 今晚
+**主題：** Python 排程任務：APScheduler 進階用法
+
+---
+
+## 🔑 重點知識
+
+### 1. APScheduler 核心架構
+- **Scheduler（排程器）**：整個系統的控制中心，常用的有：
+  - `BlockingScheduler`：阻塞主程式執行，適合排程是唯一任務的情境
+  - `BackgroundScheduler`：背景執行，不阻塞主程式，最常用
+  - `AsyncIOScheduler`：搭配 `asyncio` 使用，適合非同步應用
+- **Trigger（觸發器）**：決定任務「何時」執行，三種類型：
+  - `date`：只執行一次，指定特定時間
+  - `interval`：固定間隔重複執行
+  - `cron`：仿 Linux crontab，彈性排程
+- **JobStore（任務儲存）**：任務持久化的地方，預設存於記憶體，可改用 SQLite / Redis 等
+- **Executor（執行器）**：負責實際執行任務的元件，預設是 `ThreadPoolExecutor`
+
+---
+
+### 2. 三種 Trigger 詳解
+
+| Trigger | 說明 | 適用場景 |
+|--------|------|---------|
+| `date` | 指定單一時間點執行 | 一次性延遲任務 |
+| `interval` | 每隔固定時間執行 | 心跳檢測、定期同步 |
+| `cron` | 彈性時間規則（星期、月份等） | 每日報表、每週備份 |
+
+---
+
+### 3. 進階功能重點
+- **`misfire_grace_time`**：任務錯過預定時間後，允許補執行的寬限秒數
+- **`max_instances`**：同一任務允許同時執行的最大實例數，防止任務堆疊
+- **`coalesce`**：若任務積壓多次未執行，設為 `True` 則只補執行一次
+- **任務持久化**：搭配 `SQLAlchemyJobStore` 可讓任務在程式重啟後依然存在
+- **事件監聽（Event Listener）**：可監聽任務成功、失敗、錯過等事件，實作告警機制
+
+---
+
+## 💻 實用範例程式碼
+
+### 範例一：BackgroundScheduler 基本使用
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+import time
+
+def send_report():
+    print("📊 產出每日報表中...")
+
+scheduler = BackgroundScheduler()
+
+# interval：每 30 秒執行一次
+scheduler.add_job(send_report, 'interval', seconds=30)
+
+scheduler.start()
+
+try:
+    while True:
+        time.sleep(1)  # 主程式繼續跑，排程在背景執行
+except KeyboardInterrupt:
+    scheduler.shutdown()
+    print("排程已關閉")
+```
+
+---
+
+### 範例二：三種 Trigger 綜合示範
+```python
+from apscheduler.schedulers.blocking import BlockingScheduler
+from datetime import datetime
+
+scheduler = BlockingScheduler()
+
+def job_once():
+    print("🎯 這個任務只執行一次")
+
+def job_interval():
+    print(f"⏱️ 固定間隔執行：{datetime.now().strftime('%H:%M:%S')}")
+
+def job_cron():
+    print("🗓️ 每天早上 9 點執行晨間摘要")
+
+# date：10 秒後執行一次
+scheduler.add_job(job_once, 'date',
+                  run_date=datetime.now().replace(second=datetime.now().second + 10))
+
+# interval：每 5 秒執行一次
+scheduler.add_job(job_interval, 'interval', seconds=5)
+
+# cron：每天 09:00 執行（週一到週五）
+scheduler.add_job(job_cron, 'cron',
+                  day_of_week='mon-fri',
+                  hour=9,
+                  minute=0)
+
+scheduler.start()
+```
+
+---
+
+### 範例三：misfire_grace_time + max_instances 防護
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+import time
+
+def heavy_task():
+    print("🔄 執行耗時任務...")
+    time.sleep(10)  # 模擬耗時作業
+
+scheduler = BackgroundScheduler()
+
+scheduler.add_job(
+    heavy_task,
+    'interval',
+    seconds=5,
+    max_instances=1,        # 同時只允許 1 個實例，避免任務堆疊
+    coalesce=True,          # 積壓的多次觸發只補執行一次
+    misfire_grace_time=30   # 錯過 30 秒內仍可補執行
+)
+
+scheduler.start()
+```
+
+---
+
+### 範例四：SQLAlchemy 持久化任務儲存
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.executors.pool import ThreadPoolExecutor
+
+# 設定 JobStore 與 Executor
+jobstores = {
+    'default': SQLAlchemyJobStore(url
+
+---
