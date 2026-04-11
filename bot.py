@@ -1,6 +1,8 @@
 import os
 import io
 import time
+import json
+import sqlite3
 import logging
 import urllib.parse
 import requests
@@ -17,7 +19,56 @@ import datetime
 logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 
 client = Anthropic()
-chat_histories = {}
+
+# ── 持久化記憶（SQLite）──────────────────────────────
+DB_PATH = Path(__file__).parent / "memory.db"
+MAX_HISTORY = 300  # 每個聊天室最多保留幾條訊息
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def load_history(chat_id: int) -> list:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT role, content FROM chat_history WHERE chat_id=? ORDER BY id DESC LIMIT ?",
+        (chat_id, MAX_HISTORY)
+    ).fetchall()
+    conn.close()
+    return [{"role": r, "content": c} for r, c in reversed(rows)]
+
+def save_message(chat_id: int, role: str, content: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO chat_history (chat_id, role, content) VALUES (?, ?, ?)",
+        (chat_id, role, content)
+    )
+    # 超過上限自動刪除舊的
+    conn.execute("""
+        DELETE FROM chat_history WHERE chat_id=? AND id NOT IN (
+            SELECT id FROM chat_history WHERE chat_id=? ORDER BY id DESC LIMIT ?
+        )
+    """, (chat_id, chat_id, MAX_HISTORY))
+    conn.commit()
+    conn.close()
+
+def clear_history(chat_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM chat_history WHERE chat_id=?", (chat_id,))
+    conn.commit()
+    conn.close()
+
+init_db()
 
 OWNER_ID = 8362721681
 
@@ -151,7 +202,7 @@ def fetch_image(prompt: str, width: int = 512, height: int = 512):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_histories[update.effective_chat.id] = []
+    clear_history(update.effective_chat.id)
     await update.message.reply_text("你好！我是小牛馬，有什麼可以幫你的？")
 
 
@@ -170,10 +221,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             user_text = user_text.replace(f"@{bot_username}", "").strip()
 
-        if chat_id not in chat_histories:
-            chat_histories[chat_id] = []
-
-        chat_histories[chat_id].append({"role": "user", "content": user_text})
+        save_message(chat_id, "user", user_text)
+        history = load_history(chat_id)[-40:]  # 只取最近 40 條給 Claude，避免超過 token 限制
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
         system = SYSTEM_PROMPT_OWNER if update.effective_user.id == OWNER_ID else SYSTEM_PROMPT_DEFAULT
@@ -183,7 +232,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             max_tokens=1024,
             system=system,
             tools=TOOLS,
-            messages=chat_histories[chat_id]
+            messages=history
         )
 
         # 處理工具呼叫
@@ -197,7 +246,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     max_tokens=1024,
                     system=system,
                     tools=TOOLS,
-                    messages=chat_histories[chat_id] + [
+                    messages=history + [
                         {"role": "assistant", "content": response.content},
                         {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
                     ]
@@ -219,7 +268,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_photo(photo=image_bytes, caption=f"🎨 {prompt}")
                 else:
                     await update.message.reply_text("圖片生成失敗，請稍後再試。")
-                chat_histories[chat_id].append({"role": "assistant", "content": f"已為用戶生成圖片：{prompt}"})
+                save_message(chat_id, "assistant", f"已為用戶生成圖片：{prompt}")
                 return
 
         text_blocks = [b.text for b in response.content if hasattr(b, "text")]
@@ -227,7 +276,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("哎，我卡住了，請再說一次。")
             return
         reply = text_blocks[0]
-        chat_histories[chat_id].append({"role": "assistant", "content": reply})
+        save_message(chat_id, "assistant", reply)
         await update.message.reply_text(reply)
 
     except Exception as e:
@@ -243,7 +292,7 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_histories[update.effective_chat.id] = []
+    clear_history(update.effective_chat.id)
     await update.message.reply_text("對話紀錄已清除。")
 
 
