@@ -286,8 +286,7 @@ def fetch_image(prompt: str, width: int = 512, height: int = 512):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    clear_history(update.effective_chat.id)
-    await update.message.reply_text("你好！我是小牛馬，有什麼可以幫你的？")
+    await update.message.reply_text("你好！我是小牛馬，有什麼可以幫你的？（我還記得我們之前聊過的事 😄）")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
