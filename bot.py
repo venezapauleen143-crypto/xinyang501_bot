@@ -92,7 +92,9 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 
 你的風格：平時說話嘴賤、幽默風趣，喜歡開玩笑。但當用戶遇到問題時，你會立刻切換成專業模式，給出最快、最清楚的解決方式。每次回覆結尾都要稱呼用戶為「于晏哥」。
 
-你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。"""
+你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。
+
+股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。"""
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
@@ -100,7 +102,9 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
 你的風格：平時說話嘴賤、幽默風趣，喜歡開玩笑。但當用戶遇到問題時，你會立刻切換成專業模式，給出最快、最清楚的解決方式。
 
-你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。"""
+你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。
+
+股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。"""
 
 TOOLS = [
     {
@@ -171,11 +175,25 @@ TOOLS = [
 ]
 
 
+def calc_rsi(closes, period=14):
+    """計算 RSI 指標"""
+    deltas = closes.diff().dropna()
+    gains = deltas.clip(lower=0)
+    losses = -deltas.clip(upper=0)
+    avg_gain = gains.rolling(period).mean().iloc[-1]
+    avg_loss = losses.rolling(period).mean().iloc[-1]
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100 - (100 / (1 + rs)), 1)
+
+
 def fetch_stock(symbol: str, period: str = "1mo") -> str:
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info
-        hist = ticker.history(period=period)
+        # 取較長歷史以便計算 RSI
+        hist = ticker.history(period="3mo")
 
         if hist.empty:
             return f"找不到「{symbol}」的股票數據，請確認代號是否正確。"
@@ -188,33 +206,72 @@ def fetch_stock(symbol: str, period: str = "1mo") -> str:
         change_pct = (change / prev) * 100 if prev else 0
         arrow = "▲" if change >= 0 else "▼"
         volume = hist["Volume"].iloc[-1]
+        avg_volume = hist["Volume"].tail(20).mean()
+        volume_ratio = volume / avg_volume if avg_volume else 1
 
-        # 技術分析
+        # 技術指標
         ma5 = hist["Close"].tail(5).mean()
-        ma20 = hist["Close"].tail(20).mean() if len(hist) >= 20 else hist["Close"].mean()
-        high_period = hist["High"].max()
-        low_period = hist["Low"].min()
+        ma20 = hist["Close"].tail(20).mean()
+        ma60 = hist["Close"].tail(60).mean() if len(hist) >= 60 else hist["Close"].mean()
+        rsi = calc_rsi(hist["Close"]) if len(hist) >= 15 else None
 
-        trend = "多頭排列（MA5 > MA20）📈" if ma5 > ma20 else "空頭排列（MA5 < MA20）📉"
+        # 趨勢
+        if ma5 > ma20 > ma60:
+            trend = "強勢多頭（MA5>MA20>MA60）📈"
+        elif ma5 < ma20 < ma60:
+            trend = "強勢空頭（MA5<MA20<MA60）📉"
+        elif ma5 > ma20:
+            trend = "短線偏多（MA5>MA20）🔼"
+        else:
+            trend = "短線偏空（MA5<MA20）🔽"
+
+        # RSI 解讀
+        rsi_note = ""
+        if rsi is not None:
+            if rsi >= 80:
+                rsi_note = "（嚴重超買 ⚠️）"
+            elif rsi >= 70:
+                rsi_note = "（超買區間）"
+            elif rsi <= 20:
+                rsi_note = "（嚴重超賣 💡）"
+            elif rsi <= 30:
+                rsi_note = "（超賣區間）"
+            else:
+                rsi_note = "（中性）"
 
         # 基本面
         market_cap = info.get("marketCap")
         pe_ratio = info.get("trailingPE")
         week52_high = info.get("fiftyTwoWeekHigh")
         week52_low = info.get("fiftyTwoWeekLow")
+        high_period = hist["High"].tail(20).max()
+        low_period = hist["Low"].tail(20).min()
+
+        # 距離高低點百分比
+        pct_from_high = ((current - high_period) / high_period * 100) if high_period else 0
+        pct_from_low = ((current - low_period) / low_period * 100) if low_period else 0
 
         result = (
             f"📊 {name} ({symbol})\n"
             f"💰 現價：{current:.2f} {currency}  {arrow} {abs(change):.2f} ({change_pct:+.2f}%)\n"
-            f"📦 成交量：{volume:,}\n"
-            f"\n── 技術分析（{period}）──\n"
-            f"MA5：{ma5:.2f}　MA20：{ma20:.2f}\n"
+            f"📦 成交量：{volume:,}（均量 {volume_ratio:.1f}x）\n"
+            f"\n── 技術指標 ──\n"
+            f"MA5：{ma5:.2f}　MA20：{ma20:.2f}　MA60：{ma60:.2f}\n"
             f"趨勢：{trend}\n"
-            f"區間高點：{high_period:.2f}　低點：{low_period:.2f}\n"
+        )
+
+        if rsi is not None:
+            result += f"RSI(14)：{rsi}{rsi_note}\n"
+
+        result += (
+            f"近20日高點：{high_period:.2f}（距高 {pct_from_high:.1f}%）\n"
+            f"近20日低點：{low_period:.2f}（距低 +{pct_from_low:.1f}%）\n"
         )
 
         if week52_high and week52_low:
             result += f"52週高低：{week52_low:.2f} ~ {week52_high:.2f}\n"
+
+        result += "\n── 基本面 ──\n"
         if market_cap:
             mc_str = f"{market_cap/1e12:.2f}兆" if market_cap >= 1e12 else f"{market_cap/1e8:.0f}億"
             result += f"市值：{mc_str} {currency}\n"
