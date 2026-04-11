@@ -8,6 +8,7 @@ import subprocess
 import urllib.parse
 import requests
 import pyautogui
+import yfinance as yf
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
@@ -128,6 +129,25 @@ TOOLS = [
         }
     },
     {
+        "name": "get_stock",
+        "description": "查詢全球股票即時數據與分析。當用戶詢問股票價格、漲跌、股市行情、技術分析、某檔股票怎麼樣時使用此工具。支援台股（如 2330.TW）、美股（如 AAPL）、港股（如 0700.HK）、日股（如 7203.T）等全球市場。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "股票代號。台股加 .TW（如 2330.TW）、港股加 .HK（如 0700.HK）、日股加 .T（如 7203.T）、美股直接輸入（如 AAPL、TSLA、NVDA）"
+                },
+                "period": {
+                    "type": "string",
+                    "enum": ["1d", "5d", "1mo", "3mo", "6mo", "1y"],
+                    "description": "查詢區間，預設 1mo（一個月）"
+                }
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
         "name": "desktop_control",
         "description": "控制電腦桌面。當用戶要求截圖、點擊、移動滑鼠、輸入文字、按鍵、開啟程式時使用此工具。",
         "input_schema": {
@@ -149,6 +169,62 @@ TOOLS = [
         }
     }
 ]
+
+
+def fetch_stock(symbol: str, period: str = "1mo") -> str:
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period=period)
+
+        if hist.empty:
+            return f"找不到「{symbol}」的股票數據，請確認代號是否正確。"
+
+        name = info.get("longName") or info.get("shortName") or symbol
+        currency = info.get("currency", "")
+        current = hist["Close"].iloc[-1]
+        prev = hist["Close"].iloc[-2] if len(hist) > 1 else current
+        change = current - prev
+        change_pct = (change / prev) * 100 if prev else 0
+        arrow = "▲" if change >= 0 else "▼"
+        volume = hist["Volume"].iloc[-1]
+
+        # 技術分析
+        ma5 = hist["Close"].tail(5).mean()
+        ma20 = hist["Close"].tail(20).mean() if len(hist) >= 20 else hist["Close"].mean()
+        high_period = hist["High"].max()
+        low_period = hist["Low"].min()
+
+        trend = "多頭排列（MA5 > MA20）📈" if ma5 > ma20 else "空頭排列（MA5 < MA20）📉"
+
+        # 基本面
+        market_cap = info.get("marketCap")
+        pe_ratio = info.get("trailingPE")
+        week52_high = info.get("fiftyTwoWeekHigh")
+        week52_low = info.get("fiftyTwoWeekLow")
+
+        result = (
+            f"📊 {name} ({symbol})\n"
+            f"💰 現價：{current:.2f} {currency}  {arrow} {abs(change):.2f} ({change_pct:+.2f}%)\n"
+            f"📦 成交量：{volume:,}\n"
+            f"\n── 技術分析（{period}）──\n"
+            f"MA5：{ma5:.2f}　MA20：{ma20:.2f}\n"
+            f"趨勢：{trend}\n"
+            f"區間高點：{high_period:.2f}　低點：{low_period:.2f}\n"
+        )
+
+        if week52_high and week52_low:
+            result += f"52週高低：{week52_low:.2f} ~ {week52_high:.2f}\n"
+        if market_cap:
+            mc_str = f"{market_cap/1e12:.2f}兆" if market_cap >= 1e12 else f"{market_cap/1e8:.0f}億"
+            result += f"市值：{mc_str} {currency}\n"
+        if pe_ratio:
+            result += f"本益比：{pe_ratio:.1f}\n"
+
+        return result.strip()
+
+    except Exception as e:
+        return f"查詢「{symbol}」失敗：{str(e)}"
 
 
 def fetch_weather(city: str) -> str:
@@ -333,7 +409,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
 
-            if tool_use.name == "get_weather":
+            if tool_use.name == "get_stock":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(
+                    None, fetch_stock,
+                    tool_use.input["symbol"],
+                    tool_use.input.get("period", "1mo")
+                )
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1024,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                    ]
+                )
+
+            elif tool_use.name == "get_weather":
                 tool_result = fetch_weather(tool_use.input["city"])
                 response = client.messages.create(
                     model="claude-sonnet-4-6",
