@@ -154,3 +154,152 @@ scheduler.shutdown()
 from apscheduler.
 
 ---
+
+## 2026-04-11 — Python 排程任務：APScheduler 進階用法
+
+# 📓 小牛馬的學習筆記
+**日期：** 今晚
+**主題：** Python 排程任務：APScheduler 進階用法
+
+---
+
+## 一、重點知識
+
+### 🔧 APScheduler 核心架構
+- **APScheduler**（Advanced Python Scheduler）是 Python 最成熟的排程框架之一
+- 四大核心元件：
+  - `Scheduler`（排程器）：整個系統的控制中心
+  - `JobStore`（工作儲存）：儲存已排程的工作（預設為記憶體）
+  - `Executor`（執行器）：決定工作如何被執行（thread / process）
+  - `Trigger`（觸發器）：決定工作何時被觸發
+
+---
+
+### ⏰ 三種觸發器（Trigger）比較
+
+| 觸發器 | 說明 | 適用場景 |
+|--------|------|----------|
+| `date` | 在指定時間點執行一次 | 一次性任務 |
+| `interval` | 每隔固定時間執行 | 定期輪詢、心跳檢查 |
+| `cron` | 類似 Linux cron 的彈性排程 | 每天固定時間、複雜週期 |
+
+---
+
+### 💾 JobStore 工作儲存後端
+
+- `MemoryJobStore`（預設）：程式重啟後工作會消失
+- `SQLAlchemyJobStore`：支援 SQLite / PostgreSQL / MySQL，可持久化
+- `RedisJobStore`：適合高效能、分散式場景
+- `MongoDBJobStore`：文件型資料庫儲存
+
+---
+
+### ⚙️ Executor 執行器類型
+
+- `ThreadPoolExecutor`：適合 I/O 密集型任務（預設，max_workers 可設定）
+- `ProcessPoolExecutor`：適合 CPU 密集型任務，使用多進程避免 GIL
+- `AsyncIOExecutor`：配合 `AsyncIOScheduler` 使用非同步任務
+
+---
+
+### 🎛️ 排程器種類
+
+| 排程器 | 說明 |
+|--------|------|
+| `BlockingScheduler` | 主執行緒阻塞，程式只做排程 |
+| `BackgroundScheduler` | 背景執行緒，不影響主程式 |
+| `AsyncIOScheduler` | 搭配 asyncio 事件迴圈 |
+| `GeventScheduler` | 搭配 Gevent 協程 |
+
+---
+
+### 🛡️ 進階設定重點
+
+- **misfire_grace_time**：工作錯過執行時間後，允許的補跑寬限秒數
+- **coalesce**：若多次錯過，設為 `True` 只補跑一次（避免爆量執行）
+- **max_instances**：同一工作最多同時執行幾個實例（防止重疊）
+- **replace_existing**：加入同 ID 工作時是否覆蓋舊工作
+
+---
+
+## 二、實用範例程式碼
+
+### 📦 安裝
+
+```bash
+pip install apscheduler
+pip install sqlalchemy  # 若需要持久化
+```
+
+---
+
+### 範例 1：基本三種觸發器示範
+
+```python
+from apscheduler.schedulers.blocking import BlockingScheduler
+from datetime import datetime, timedelta
+
+scheduler = BlockingScheduler()
+
+# ── 1. date：指定時間執行一次 ──────────────────
+def one_time_task():
+    print(f"[date] 只執行這一次！{datetime.now()}")
+
+scheduler.add_job(
+    one_time_task,
+    trigger='date',
+    run_date=datetime.now() + timedelta(seconds=5),
+    id='one_time'
+)
+
+# ── 2. interval：每 10 秒執行一次 ──────────────
+def interval_task():
+    print(f"[interval] 定期執行：{datetime.now()}")
+
+scheduler.add_job(
+    interval_task,
+    trigger='interval',
+    seconds=10,
+    id='interval_job',
+    max_instances=1,          # 最多 1 個同時執行
+    coalesce=True             # 錯過多次只補跑一次
+)
+
+# ── 3. cron：每天早上 9:30 執行 ─────────────────
+def daily_report():
+    print(f"[cron] 早安！產生每日報表：{datetime.now()}")
+
+scheduler.add_job(
+    daily_report,
+    trigger='cron',
+    hour=9,
+    minute=30,
+    id='daily_report',
+    misfire_grace_time=60     # 60 秒內錯過仍可補跑
+)
+
+print("排程器啟動，按 Ctrl+C 停止")
+try:
+    scheduler.start()
+except KeyboardInterrupt:
+    print("排程器已停止")
+```
+
+---
+
+### 範例 2：BackgroundScheduler + 動態新增/移除工作
+
+```python
+from apscheduler.schedulers.background import BackgroundScheduler
+import time
+
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+def greet(name: str):
+    print(f"👋 Hello, {name}！時間：{time.strftime('%H:%M:%S')}")
+
+# 動態新增工作
+job = scheduler.add_job(
+
+---
