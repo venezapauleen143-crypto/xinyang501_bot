@@ -21,12 +21,16 @@ tools:
   schedule_list                 列出所有排程任務
   schedule_add <名稱> <時間HH:MM> <腳本路徑>   新增每日排程（並設定可喚醒）
   schedule_del <名稱>           刪除排程任務
+  memory_save <chat_id> <內容>  儲存長期記憶
+  memory_list <chat_id>         列出長期記憶
+  memory_del <chat_id> <id>     刪除指定記憶
 """
 
 import sys
 import os
 import io
 import time
+import sqlite3
 import subprocess
 import requests
 import pyautogui
@@ -295,6 +299,38 @@ def pos():
     print(f"目前滑鼠位置：({x}, {y})")
 
 
+# ── 長期記憶 ────────────────────────────────────────
+
+MEMORY_DB = Path("C:/Users/blue_/claude-telegram-bot/memory.db")
+
+def memory_save(chat_id: int, content: str):
+    conn = sqlite3.connect(MEMORY_DB)
+    conn.execute("CREATE TABLE IF NOT EXISTS long_term_memory (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    conn.execute("INSERT INTO long_term_memory (chat_id, content) VALUES (?, ?)", (chat_id, content))
+    conn.commit()
+    conn.close()
+    print(f"✅ 已儲存記憶：{content}")
+
+def memory_list(chat_id: int):
+    conn = sqlite3.connect(MEMORY_DB)
+    conn.execute("CREATE TABLE IF NOT EXISTS long_term_memory (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    rows = conn.execute("SELECT id, content, created_at FROM long_term_memory WHERE chat_id=? ORDER BY id DESC", (chat_id,)).fetchall()
+    conn.close()
+    if not rows:
+        print("目前沒有長期記憶。")
+        return
+    print(f"📝 長期記憶（chat_id={chat_id}）：")
+    for r in rows:
+        print(f"  [{r[0]}] {r[1]}  ({r[2]})")
+
+def memory_del(chat_id: int, memory_id: int):
+    conn = sqlite3.connect(MEMORY_DB)
+    conn.execute("DELETE FROM long_term_memory WHERE id=? AND chat_id=?", (memory_id, chat_id))
+    conn.commit()
+    conn.close()
+    print(f"✅ 已刪除記憶 ID {memory_id}")
+
+
 # ── 排程管理 ────────────────────────────────────────
 
 SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
@@ -392,6 +428,9 @@ if __name__ == "__main__":
         "schedule_list": lambda: schedule_list(),
         "schedule_add":  lambda: schedule_add(args[0], args[1], args[2]),
         "schedule_del":  lambda: schedule_del(args[0]),
+        "memory_save":   lambda: memory_save(int(args[0]), " ".join(args[1:])),
+        "memory_list":   lambda: memory_list(int(args[0])),
+        "memory_del":    lambda: memory_del(int(args[0]), int(args[1])),
     }
 
     if tool not in tools:

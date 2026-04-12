@@ -49,6 +49,38 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS long_term_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def save_long_term_memory(chat_id: int, content: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO long_term_memory (chat_id, content) VALUES (?, ?)",
+        (chat_id, content)
+    )
+    conn.commit()
+    conn.close()
+
+def load_long_term_memory(chat_id: int) -> list:
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT id, content, created_at FROM long_term_memory WHERE chat_id=? ORDER BY id DESC",
+        (chat_id,)
+    ).fetchall()
+    conn.close()
+    return [{"id": r[0], "content": r[1], "created_at": r[2]} for r in rows]
+
+def delete_long_term_memory(memory_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM long_term_memory WHERE id=?", (memory_id,))
     conn.commit()
     conn.close()
 
@@ -172,6 +204,23 @@ TOOLS = [
                 "app": {"type": "string", "description": "要開啟的程式名稱或路徑（open_app 時使用）"},
                 "direction": {"type": "string", "enum": ["up", "down"], "description": "滾動方向（scroll 時使用）"},
                 "amount": {"type": "integer", "description": "滾動格數（scroll 時使用，預設 3）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "long_term_memory",
+        "description": "管理長期記憶。當用戶說了重要的事（偏好、習慣、重要資訊、個人資料）或要求記住某件事時，主動儲存。當用戶問你記不記得某件事時，先查詢記憶再回答。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["save", "list", "delete"],
+                    "description": "save=儲存新記憶, list=列出所有記憶, delete=刪除指定記憶"
+                },
+                "content": {"type": "string", "description": "要儲存的記憶內容（save 時使用）"},
+                "memory_id": {"type": "integer", "description": "要刪除的記憶 ID（delete 時使用）"}
             },
             "required": ["action"]
         }
@@ -547,7 +596,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = load_history(chat_id)[-40:]
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-        system = SYSTEM_PROMPT_OWNER if update.effective_user.id == OWNER_ID else SYSTEM_PROMPT_DEFAULT
+        base_system = SYSTEM_PROMPT_OWNER if update.effective_user.id == OWNER_ID else SYSTEM_PROMPT_DEFAULT
+
+        # 注入長期記憶
+        memories = load_long_term_memory(chat_id)
+        if memories:
+            mem_text = "\n".join(f"- [{m['id']}] {m['content']}" for m in memories)
+            system = base_system + f"\n\n【長期記憶】以下是你記住的重要資訊，回覆時請參考：\n{mem_text}"
+        else:
+            system = base_system
 
         response = client.messages.create(
             model="claude-sonnet-4-6",
@@ -561,7 +618,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
 
-            if tool_use.name == "get_stock":
+            if tool_use.name == "long_term_memory":
+                inp = tool_use.input
+                action = inp["action"]
+                if action == "save":
+                    save_long_term_memory(chat_id, inp.get("content", ""))
+                    tool_result = f"已記住：{inp.get('content', '')}"
+                elif action == "list":
+                    mems = load_long_term_memory(chat_id)
+                    if mems:
+                        tool_result = "長期記憶列表：\n" + "\n".join(f"[{m['id']}] {m['content']}" for m in mems)
+                    else:
+                        tool_result = "目前沒有長期記憶。"
+                elif action == "delete":
+                    delete_long_term_memory(inp.get("memory_id", 0))
+                    tool_result = f"已刪除記憶 ID {inp.get('memory_id')}"
+                else:
+                    tool_result = "未知動作"
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                    ]
+                )
+                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else tool_result
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "get_stock":
                 import asyncio
                 loop = asyncio.get_running_loop()
                 tool_result = await loop.run_in_executor(
@@ -704,6 +794,15 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("對話紀錄已清除。")
 
 
+async def memories(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mems = load_long_term_memory(update.effective_chat.id)
+    if not mems:
+        await update.message.reply_text("目前沒有長期記憶。")
+        return
+    text = "📝 長期記憶列表：\n\n" + "\n".join(f"[{m['id']}] {m['content']}" for m in mems)
+    await update.message.reply_text(text)
+
+
 async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
     group_id = int(os.getenv("GROUP_CHAT_ID"))
     import asyncio
@@ -826,6 +925,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("chatid", chatid))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("clear", clear))
+    app.add_handler(CommandHandler("memories", memories))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("Bot 已啟動...")
     app.run_polling()
