@@ -63,6 +63,16 @@ tools:
   print_file <檔案路徑>         列印文件
   wifi_list                     列出可用 WiFi 網路
   wifi_connect <SSID> <密碼>    連線 WiFi
+  screen_stream <秒數>          截圖串流（每秒截圖存桌面，持續N秒）
+  wake_listen <關鍵字>          等待語音說出關鍵字後執行
+  drag <x1> <y1> <x2> <y2>     拖曳從(x1,y1)到(x2,y2)
+  right_menu <x> <y> <項目>     右鍵選單並選擇項目
+  ai_plan <目標>                AI 自動規劃並執行多步驟任務
+  clipboard_history             顯示剪貼簿歷史紀錄
+  vdesktop <left|right|new>     切換虛擬桌面
+  power <sleep|restart|shutdown> 電源管理
+  bt_scan                       掃描藍牙裝置
+  bt_connect <MAC位址>          連線藍牙裝置
 """
 
 import sys
@@ -1020,6 +1030,205 @@ def wifi_connect(ssid: str, password: str):
     print(f"✅ 已嘗試連線：{ssid}")
 
 
+# ── 螢幕串流 ─────────────────────────────────────────
+
+def screen_stream(duration: int = 10, interval: float = 1.0):
+    print(f"📹 開始串流 {duration} 秒（每 {interval} 秒截圖）...")
+    end = time.time() + duration
+    count = 0
+    while time.time() < end:
+        img = pyautogui.screenshot()
+        filename = SCREENSHOT_DIR / f"stream_{datetime.now().strftime('%H%M%S')}_{count:03d}.png"
+        img.save(filename)
+        count += 1
+        time.sleep(interval)
+    print(f"✅ 串流完成，共 {count} 張截圖存至桌面")
+
+
+# ── 語音喚醒 ─────────────────────────────────────────
+
+def wake_listen(keyword: str = "小牛馬", duration: int = 5):
+    import sounddevice as sd
+    import soundfile as sf
+    import speech_recognition as sr
+    import tempfile
+    print(f"👂 監聽中，等待說出「{keyword}」...")
+    sample_rate = 16000
+    while True:
+        recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+        sd.wait()
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp_path = f.name
+        sf.write(tmp_path, recording, sample_rate)
+        r = sr.Recognizer()
+        try:
+            with sr.AudioFile(tmp_path) as source:
+                audio = r.record(source)
+            text = r.recognize_google(audio, language="zh-TW")
+            Path(tmp_path).unlink(missing_ok=True)
+            if keyword in text:
+                print(f"✅ 偵測到喚醒詞：{text}")
+                return text
+        except Exception:
+            Path(tmp_path).unlink(missing_ok=True)
+
+
+# ── 拖曳 / 右鍵選單 ──────────────────────────────────
+
+def drag(x1, y1, x2, y2, duration=0.5):
+    pyautogui.moveTo(int(x1), int(y1))
+    pyautogui.dragTo(int(x2), int(y2), duration=float(duration), button="left")
+    print(f"✅ 已拖曳 ({x1},{y1}) → ({x2},{y2})")
+
+def right_menu(x, y, item: str = ""):
+    pyautogui.rightClick(int(x), int(y))
+    time.sleep(0.3)
+    if item:
+        import pygetwindow as gw
+        pyautogui.write(item, interval=0.05)
+        time.sleep(0.2)
+        pyautogui.press("enter")
+        print(f"✅ 已右鍵點擊並選擇：{item}")
+    else:
+        print(f"✅ 已右鍵點擊 ({x},{y})")
+
+
+# ── 多步驟 AI 規劃 ────────────────────────────────────
+
+def ai_plan(goal: str):
+    from anthropic import Anthropic
+    client = Anthropic()
+    print(f"🧠 AI 規劃目標：{goal}")
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2048,
+        system="""你是一個電腦自動化規劃師。用戶給你一個目標，你要把它拆解成可執行的步驟。
+每個步驟使用以下工具之一：click/type/press/hotkey/open/screenshot/browser/file_write/wait/notify
+以 JSON 陣列格式回傳，例如：
+[
+  {"tool": "open", "args": ["notepad"], "delay": 1},
+  {"tool": "type", "args": ["Hello World"]},
+  {"tool": "hotkey", "args": ["ctrl","s"]}
+]
+只回傳 JSON，不要其他文字。""",
+        messages=[{"role": "user", "content": f"目標：{goal}"}]
+    )
+    import json
+    plan_text = response.content[0].text.strip()
+    try:
+        steps = json.loads(plan_text)
+        print(f"📋 規劃完成，共 {len(steps)} 步：")
+        for i, s in enumerate(steps, 1):
+            print(f"  [{i}] {s.get('tool')} {s.get('args', [])}")
+        print("\n▶ 開始執行...")
+        tool_map = {
+            "click": lambda a: pyautogui.click(int(a[0]), int(a[1])),
+            "type": lambda a: pyautogui.write(" ".join(str(x) for x in a), interval=0.05),
+            "press": lambda a: pyautogui.press(a[0]),
+            "hotkey": lambda a: pyautogui.hotkey(*a),
+            "open": lambda a: subprocess.Popen(" ".join(str(x) for x in a), shell=True),
+            "screenshot": lambda a: screenshot(),
+            "wait": lambda a: time.sleep(float(a[0])),
+            "notify": lambda a: notify(a[0], a[1] if len(a) > 1 else ""),
+            "move": lambda a: pyautogui.moveTo(int(a[0]), int(a[1]), duration=0.3),
+            "scroll": lambda a: pyautogui.scroll(int(a[1]) if a[0] == "up" else -int(a[1])),
+            "file_write": lambda a: file_write(a[0], " ".join(str(x) for x in a[1:])),
+            "browser": lambda a: browser(a[0], *a[1:]),
+        }
+        for i, step in enumerate(steps, 1):
+            t = step.get("tool")
+            a = step.get("args", [])
+            d = step.get("delay", 0)
+            if d: time.sleep(d)
+            if t in tool_map:
+                tool_map[t](a)
+                print(f"  ✅ 步驟 {i} 完成")
+            else:
+                print(f"  ⚠️ 未知工具：{t}")
+        print("✅ 全部執行完畢")
+    except json.JSONDecodeError:
+        print(f"規劃結果：\n{plan_text}")
+
+
+# ── 剪貼簿歷史 ───────────────────────────────────────
+
+_clipboard_history = []
+
+def clipboard_history():
+    import pyperclip
+    current = pyperclip.paste()
+    if current and (not _clipboard_history or _clipboard_history[-1] != current):
+        _clipboard_history.append(current)
+    if not _clipboard_history:
+        print("剪貼簿歷史是空的")
+        return
+    for i, item in enumerate(_clipboard_history[-20:], 1):
+        preview = item[:80].replace("\n", "↵")
+        print(f"  [{i}] {preview}")
+
+
+# ── 虛擬桌面 ─────────────────────────────────────────
+
+def vdesktop(action: str):
+    if action == "left":
+        pyautogui.hotkey("ctrl", "win", "left")
+        print("✅ 切換到左邊虛擬桌面")
+    elif action == "right":
+        pyautogui.hotkey("ctrl", "win", "right")
+        print("✅ 切換到右邊虛擬桌面")
+    elif action == "new":
+        pyautogui.hotkey("ctrl", "win", "d")
+        print("✅ 已建立新虛擬桌面")
+    else:
+        print(f"❌ 未知動作：{action}（可用：left/right/new）")
+
+
+# ── 電源管理 ─────────────────────────────────────────
+
+def power(action: str):
+    cmds = {
+        "sleep":    "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
+        "restart":  "shutdown /r /t 5",
+        "shutdown": "shutdown /s /t 5",
+    }
+    if action not in cmds:
+        print(f"❌ 未知動作：{action}（可用：sleep/restart/shutdown）")
+        return
+    subprocess.run(["powershell.exe", "-Command", cmds[action]])
+    print(f"✅ 已執行：{action}")
+
+
+# ── 藍牙管理 ─────────────────────────────────────────
+
+def bt_scan():
+    try:
+        import asyncio
+        import bleak
+        async def _scan():
+            devices = await bleak.BleakScanner.discover(timeout=5.0)
+            return devices
+        devices = asyncio.run(_scan())
+        if not devices:
+            print("找不到藍牙裝置")
+            return
+        for d in devices:
+            print(f"  {d.address}  {d.name or '(未知)'}")
+    except Exception as e:
+        print(f"❌ 藍牙掃描失敗：{e}")
+
+def bt_connect(mac: str):
+    try:
+        import asyncio
+        import bleak
+        async def _connect():
+            async with bleak.BleakClient(mac) as client:
+                print(f"✅ 已連線：{mac}（服務數：{len(client.services)}）")
+                await asyncio.sleep(3)
+        asyncio.run(_connect())
+    except Exception as e:
+        print(f"❌ 連線失敗：{e}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -1089,8 +1298,18 @@ if __name__ == "__main__":
         "unzip":         lambda: unzip(args[0], args[1]),
         "download":      lambda: download(args[0], args[1] if len(args)>1 else ""),
         "print_file":    lambda: print_file(args[0]),
-        "wifi_list":     lambda: wifi_list(),
-        "wifi_connect":  lambda: wifi_connect(args[0], args[1]),
+        "wifi_list":       lambda: wifi_list(),
+        "wifi_connect":    lambda: wifi_connect(args[0], args[1]),
+        "screen_stream":   lambda: screen_stream(int(args[0]) if args else 10),
+        "wake_listen":     lambda: wake_listen(args[0] if args else "小牛馬"),
+        "drag":            lambda: drag(*args),
+        "right_menu":      lambda: right_menu(args[0], args[1], args[2] if len(args)>2 else ""),
+        "ai_plan":         lambda: ai_plan(" ".join(args)),
+        "clipboard_history": lambda: clipboard_history(),
+        "vdesktop":        lambda: vdesktop(args[0]),
+        "power":           lambda: power(args[0]),
+        "bt_scan":         lambda: bt_scan(),
+        "bt_connect":      lambda: bt_connect(args[0]),
     }
 
     if tool not in tools:

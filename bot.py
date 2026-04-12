@@ -335,6 +335,76 @@ TOOLS = [
         }
     },
     {
+        "name": "ai_plan",
+        "description": "AI 自動規劃並執行多步驟任務。用戶給一個目標，自動拆解成步驟並執行。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "goal": {"type": "string", "description": "要達成的目標"}
+            },
+            "required": ["goal"]
+        }
+    },
+    {
+        "name": "screen_stream",
+        "description": "螢幕串流，持續截圖並傳送給用戶。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "duration": {"type": "integer", "description": "持續秒數，預設 10"},
+                "interval": {"type": "number", "description": "截圖間隔秒數，預設 2"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "drag",
+        "description": "拖曳滑鼠從一個位置到另一個位置。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "x1": {"type": "integer"}, "y1": {"type": "integer"},
+                "x2": {"type": "integer"}, "y2": {"type": "integer"},
+                "duration": {"type": "number", "description": "拖曳時間，預設 0.5 秒"}
+            },
+            "required": ["x1","y1","x2","y2"]
+        }
+    },
+    {
+        "name": "power_control",
+        "description": "電源管理：睡眠、重開機、關機。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["sleep","restart","shutdown"]}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "virtual_desktop",
+        "description": "切換或建立 Windows 虛擬桌面。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["left","right","new"]}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "bluetooth",
+        "description": "掃描或連線藍牙裝置。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["scan","connect"]},
+                "mac": {"type": "string", "description": "藍牙 MAC 位址（connect 時使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "stt",
         "description": "語音辨識，錄製麥克風聲音並轉為文字。",
         "input_schema": {"type": "object", "properties": {}, "required": []}
@@ -769,6 +839,90 @@ def execute_tts(text):
     engine.runAndWait()
     return f"已朗讀完畢"
 
+def execute_ai_plan(goal: str) -> str:
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2048,
+        system="""你是電腦自動化規劃師。把目標拆解成可執行步驟，以 JSON 陣列回傳：
+[{"tool":"click","args":[x,y],"delay":0},{"tool":"type","args":["文字"]}]
+可用工具：click/type/press/hotkey/open/screenshot/wait/notify/move/scroll
+只回傳 JSON。""",
+        messages=[{"role": "user", "content": f"目標：{goal}"}]
+    )
+    import json
+    plan_text = response.content[0].text.strip()
+    try:
+        steps = json.loads(plan_text)
+        results = []
+        tool_map = {
+            "click": lambda a: pyautogui.click(int(a[0]), int(a[1])),
+            "type": lambda a: pyautogui.write(" ".join(str(x) for x in a), interval=0.05),
+            "press": lambda a: pyautogui.press(a[0]),
+            "hotkey": lambda a: pyautogui.hotkey(*a),
+            "open": lambda a: subprocess.Popen(" ".join(str(x) for x in a), shell=True),
+            "wait": lambda a: time.sleep(float(a[0])),
+            "move": lambda a: pyautogui.moveTo(int(a[0]), int(a[1]), duration=0.3),
+            "scroll": lambda a: pyautogui.scroll(int(a[1]) if a[0]=="up" else -int(a[1])),
+        }
+        for i, step in enumerate(steps, 1):
+            t = step.get("tool"); a = step.get("args", []); d = step.get("delay", 0)
+            if d: time.sleep(d)
+            if t in tool_map:
+                tool_map[t](a)
+                results.append(f"步驟 {i} ✅ {t}")
+            else:
+                results.append(f"步驟 {i} ⚠️ 未知：{t}")
+        return f"目標「{goal}」執行完畢\n" + "\n".join(results)
+    except Exception as e:
+        return f"規劃結果：{plan_text}\n執行錯誤：{e}"
+
+def execute_screen_stream(duration=10, interval=2):
+    screenshots = []
+    end = time.time() + duration
+    while time.time() < end:
+        img = pyautogui.screenshot()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        screenshots.append(buf.getvalue())
+        time.sleep(interval)
+    return screenshots
+
+def execute_drag(x1, y1, x2, y2, dur=0.5):
+    pyautogui.moveTo(int(x1), int(y1))
+    pyautogui.dragTo(int(x2), int(y2), duration=float(dur), button="left")
+    return f"已拖曳 ({x1},{y1}) → ({x2},{y2})"
+
+def execute_power(action):
+    cmds = {
+        "sleep": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
+        "restart": "shutdown /r /t 5",
+        "shutdown": "shutdown /s /t 5",
+    }
+    subprocess.run(["powershell.exe", "-Command", cmds[action]])
+    return f"已執行：{action}"
+
+def execute_vdesktop(action):
+    acts = {"left": ("ctrl","win","left"), "right": ("ctrl","win","right"), "new": ("ctrl","win","d")}
+    pyautogui.hotkey(*acts[action])
+    return f"虛擬桌面：{action}"
+
+def execute_bluetooth(action, mac=""):
+    try:
+        import asyncio, bleak
+        if action == "scan":
+            async def _scan():
+                return await bleak.BleakScanner.discover(timeout=5.0)
+            devices = asyncio.run(_scan())
+            return "\n".join(f"{d.address} {d.name or '(未知)'}" for d in devices) or "找不到裝置"
+        elif action == "connect":
+            async def _conn():
+                async with bleak.BleakClient(mac) as c:
+                    return f"已連線：{mac}（服務數：{len(c.services)}）"
+            return asyncio.run(_conn())
+    except Exception as e:
+        return f"藍牙操作失敗：{e}"
+
+
 def execute_screen_watch(template_path, command, timeout=60):
     import time as t
     start = t.time()
@@ -1120,6 +1274,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tool_use = next(b for b in response.content if b.type == "tool_use")
 
             simple_tools = {
+                "ai_plan": lambda: execute_ai_plan(tool_use.input["goal"]),
+                "drag": lambda: execute_drag(
+                    tool_use.input["x1"], tool_use.input["y1"],
+                    tool_use.input["x2"], tool_use.input["y2"],
+                    tool_use.input.get("duration", 0.5)),
+                "power_control": lambda: execute_power(tool_use.input["action"]),
+                "virtual_desktop": lambda: execute_vdesktop(tool_use.input["action"]),
+                "bluetooth": lambda: execute_bluetooth(
+                    tool_use.input["action"], tool_use.input.get("mac","")),
                 "stt": lambda: execute_stt(),
                 "ocr": lambda: execute_ocr(tool_use.input.get("image_path","")),
                 "workflow": lambda: execute_workflow(
@@ -1154,7 +1317,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["to"], tool_use.input["subject"], tool_use.input["body"]),
             }
 
-            if tool_use.name in simple_tools:
+            if tool_use.name == "screen_stream":
+                duration = tool_use.input.get("duration", 10)
+                interval = tool_use.input.get("interval", 2)
+                import asyncio
+                loop = asyncio.get_running_loop()
+                await update.message.reply_text(f"📹 開始串流 {duration} 秒...")
+                screenshots = await loop.run_in_executor(None, execute_screen_stream, duration, interval)
+                for i, img_bytes in enumerate(screenshots, 1):
+                    await update.message.reply_photo(photo=img_bytes, caption=f"📸 {i}/{len(screenshots)}")
+                reply = f"串流完成，共傳送 {len(screenshots)} 張截圖"
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name in simple_tools:
                 import asyncio
                 loop = asyncio.get_running_loop()
                 tool_result = await loop.run_in_executor(None, simple_tools[tool_use.name])
