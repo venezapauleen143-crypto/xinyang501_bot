@@ -335,6 +335,61 @@ TOOLS = [
         }
     },
     {
+        "name": "stt",
+        "description": "語音辨識，錄製麥克風聲音並轉為文字。",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "ocr",
+        "description": "OCR 文字辨識，截取畫面或指定圖片，辨識其中的文字內容。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "image_path": {"type": "string", "description": "圖片路徑（選填，不填則截圖）"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "workflow",
+        "description": "執行或儲存自動化工作流程（多步驟串接）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["run", "save", "list"]},
+                "name": {"type": "string", "description": "流程名稱"},
+                "steps": {"type": "string", "description": "JSON 格式的步驟（save 時使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "screen_watch",
+        "description": "監控螢幕，當出現指定圖片時自動執行指令。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "template_path": {"type": "string"},
+                "command": {"type": "string"},
+                "timeout": {"type": "number", "description": "等待秒數，預設 60"}
+            },
+            "required": ["template_path", "command"]
+        }
+    },
+    {
+        "name": "file_transfer",
+        "description": "壓縮/解壓縮檔案或下載網路檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["zip", "unzip", "download"]},
+                "source": {"type": "string", "description": "來源路徑或網址"},
+                "dest": {"type": "string", "description": "目標路徑"}
+            },
+            "required": ["action", "source"]
+        }
+    },
+    {
         "name": "send_email",
         "description": "發送電子郵件。需要 .env 設定 SMTP_USER 和 SMTP_PASS。",
         "input_schema": {
@@ -714,6 +769,117 @@ def execute_tts(text):
     engine.runAndWait()
     return f"已朗讀完畢"
 
+def execute_screen_watch(template_path, command, timeout=60):
+    import time as t
+    start = t.time()
+    while t.time() - start < timeout:
+        try:
+            loc = pyautogui.locateOnScreen(template_path, confidence=0.8)
+            if loc:
+                subprocess.run(command, shell=True)
+                return f"偵測到目標，已執行：{command}"
+        except Exception:
+            pass
+        t.sleep(2)
+    return "監控逾時，未偵測到目標"
+
+
+def execute_stt(duration=5):
+    import sounddevice as sd
+    import soundfile as sf
+    import speech_recognition as sr
+    import tempfile
+    sample_rate = 16000
+    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+    sd.wait()
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        tmp_path = f.name
+    sf.write(tmp_path, recording, sample_rate)
+    r = sr.Recognizer()
+    with sr.AudioFile(tmp_path) as source:
+        audio = r.record(source)
+    Path(tmp_path).unlink(missing_ok=True)
+    try:
+        return r.recognize_google(audio, language="zh-TW")
+    except Exception as e:
+        return f"語音辨識失敗：{e}"
+
+def execute_ocr(image_path=""):
+    import easyocr
+    reader = easyocr.Reader(["ch_tra", "en"], gpu=False)
+    if not image_path:
+        img = pyautogui.screenshot()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        source = buf.getvalue()
+    else:
+        source = image_path
+    results = reader.readtext(source)
+    return "\n".join(r[1] for r in results) or "未辨識到文字"
+
+def execute_workflow(action, name="", steps=""):
+    import json
+    WORKFLOW_DIR = Path("C:/Users/blue_/workflows")
+    WORKFLOW_DIR.mkdir(exist_ok=True)
+    if action == "list":
+        files = list(WORKFLOW_DIR.glob("*.json"))
+        return "\n".join(f.stem for f in files) if files else "沒有儲存的流程"
+    elif action == "save":
+        path = WORKFLOW_DIR / f"{name}.json"
+        data = json.loads(steps)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return f"流程 [{name}] 已儲存"
+    elif action == "run":
+        path = WORKFLOW_DIR / f"{name}.json"
+        if not path.exists():
+            return f"找不到流程：{name}"
+        step_list = json.loads(path.read_text(encoding="utf-8"))
+        for i, step in enumerate(step_list, 1):
+            tool = step.get("tool")
+            args = step.get("args", [])
+            delay = step.get("delay", 0)
+            if delay: time.sleep(delay)
+            try:
+                tool_map = {
+                    "click": lambda a: pyautogui.click(int(a[0]), int(a[1])),
+                    "type": lambda a: pyautogui.write(" ".join(a), interval=0.05),
+                    "press": lambda a: pyautogui.press(a[0]),
+                    "hotkey": lambda a: pyautogui.hotkey(*a),
+                    "wait": lambda a: time.sleep(float(a[0])),
+                    "open": lambda a: subprocess.Popen(" ".join(a), shell=True),
+                }
+                if tool in tool_map:
+                    tool_map[tool](args)
+            except Exception as e:
+                return f"步驟 {i} 失敗：{e}"
+        return f"流程 [{name}] 執行完畢（{len(step_list)} 步）"
+
+def execute_file_transfer(action, source, dest=""):
+    import zipfile
+    if action == "zip":
+        src = Path(source)
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+            if src.is_dir():
+                for f in src.rglob("*"):
+                    zf.write(f, f.relative_to(src.parent))
+            else:
+                zf.write(src, src.name)
+        return f"已壓縮：{source} → {dest}"
+    elif action == "unzip":
+        with zipfile.ZipFile(source, "r") as zf:
+            zf.extractall(dest)
+        return f"已解壓縮：{source} → {dest}"
+    elif action == "download":
+        if not dest:
+            dest = str(Path("C:/Users/blue_/Desktop") / source.split("/")[-1].split("?")[0])
+        r = requests.get(source, stream=True, timeout=60)
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return f"已下載：{dest}"
+
+
 def execute_send_email(to, subject, body):
     import smtplib
     from email.mime.text import MIMEText
@@ -954,6 +1120,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tool_use = next(b for b in response.content if b.type == "tool_use")
 
             simple_tools = {
+                "stt": lambda: execute_stt(),
+                "ocr": lambda: execute_ocr(tool_use.input.get("image_path","")),
+                "workflow": lambda: execute_workflow(
+                    tool_use.input["action"],
+                    tool_use.input.get("name",""),
+                    tool_use.input.get("steps","")),
+                "screen_watch": lambda: execute_screen_watch(
+                    tool_use.input["template_path"],
+                    tool_use.input["command"],
+                    tool_use.input.get("timeout", 60)),
+                "file_transfer": lambda: execute_file_transfer(
+                    tool_use.input["action"],
+                    tool_use.input["source"],
+                    tool_use.input.get("dest","")),
                 "window_control": lambda: execute_window_control(
                     tool_use.input["action"], tool_use.input.get("keyword","")),
                 "hotkey": lambda: execute_hotkey(tool_use.input["keys"]),

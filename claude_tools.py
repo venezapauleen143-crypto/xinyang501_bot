@@ -51,6 +51,18 @@ tools:
   record_stop                   停止錄製並儲存
   record_play <檔案>            重播錄製的動作
   email <收件人> <主旨> <內容>  發送 Email
+  stt                           語音辨識（麥克風錄音轉文字）
+  ocr [圖片路徑]                OCR 截圖或指定圖片，辨識文字
+  workflow_run <json檔>         執行自動化工作流程
+  workflow_save <名稱> <json>   儲存工作流程
+  screen_watch <圖片> <指令>    監控螢幕出現指定圖片時執行指令
+  monitors                      列出所有螢幕資訊
+  zip <來源> <目標zip>          壓縮檔案或資料夾
+  unzip <zip檔> <目標資料夾>    解壓縮
+  download <網址> [儲存路徑]    下載檔案
+  print_file <檔案路徑>         列印文件
+  wifi_list                     列出可用 WiFi 網路
+  wifi_connect <SSID> <密碼>    連線 WiFi
 """
 
 import sys
@@ -805,6 +817,209 @@ def schedule_del(name: str):
         print(f"❌ 刪除失敗：{result.stderr.strip()}")
 
 
+# ── 語音辨識 STT ─────────────────────────────────────
+
+def stt(duration=5):
+    import sounddevice as sd
+    import soundfile as sf
+    import speech_recognition as sr
+    import tempfile
+    print(f"🎤 錄音 {duration} 秒，請說話...")
+    sample_rate = 16000
+    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+    sd.wait()
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        tmp_path = f.name
+    sf.write(tmp_path, recording, sample_rate)
+    r = sr.Recognizer()
+    with sr.AudioFile(tmp_path) as source:
+        audio = r.record(source)
+    Path(tmp_path).unlink(missing_ok=True)
+    try:
+        text = r.recognize_google(audio, language="zh-TW")
+        print(f"✅ 辨識結果：{text}")
+        return text
+    except sr.UnknownValueError:
+        print("❌ 無法辨識語音")
+    except sr.RequestError as e:
+        print(f"❌ STT 服務錯誤：{e}")
+
+
+# ── OCR 文字辨識 ──────────────────────────────────────
+
+def ocr(image_path: str = ""):
+    import easyocr
+    reader = easyocr.Reader(["ch_tra", "en"], gpu=False)
+    if image_path:
+        source = image_path
+    else:
+        img = pyautogui.screenshot()
+        source = str(SCREENSHOT_DIR / f"ocr_tmp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        img.save(source)
+    results = reader.readtext(source)
+    texts = [r[1] for r in results]
+    output = "\n".join(texts)
+    print(output)
+    return output
+
+
+# ── 自動化工作流程 ────────────────────────────────────
+
+WORKFLOW_DIR = Path("C:/Users/blue_/workflows")
+WORKFLOW_DIR.mkdir(exist_ok=True)
+
+def workflow_save(name: str, json_content: str):
+    import json
+    path = WORKFLOW_DIR / f"{name}.json"
+    data = json.loads(json_content)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"✅ 工作流程已儲存：{path}")
+
+def workflow_run(json_path: str):
+    import json
+    path = Path(json_path)
+    if not path.exists():
+        path = WORKFLOW_DIR / f"{json_path}.json"
+    steps = json.loads(path.read_text(encoding="utf-8"))
+    print(f"▶ 執行工作流程：{path.name}（共 {len(steps)} 步）")
+    for i, step in enumerate(steps, 1):
+        tool = step.get("tool")
+        args = step.get("args", [])
+        delay = step.get("delay", 0)
+        print(f"  [{i}] {tool} {args}")
+        if delay:
+            time.sleep(delay)
+        try:
+            # 動態呼叫已有工具
+            tool_map = {
+                "click": lambda a: pyautogui.click(int(a[0]), int(a[1])),
+                "type": lambda a: pyautogui.write(" ".join(a), interval=0.05),
+                "press": lambda a: pyautogui.press(a[0]),
+                "hotkey": lambda a: pyautogui.hotkey(*a),
+                "open": lambda a: subprocess.Popen(" ".join(a), shell=True),
+                "screenshot": lambda a: screenshot(),
+                "move": lambda a: pyautogui.moveTo(int(a[0]), int(a[1]), duration=0.3),
+                "scroll": lambda a: pyautogui.scroll(int(a[1]) if a[0]=="up" else -int(a[1])),
+                "wait": lambda a: time.sleep(float(a[0])),
+                "notify": lambda a: notify(a[0], " ".join(a[1:])),
+                "browser": lambda a: browser(a[0], *a[1:]),
+                "file_write": lambda a: file_write(a[0], " ".join(a[1:])),
+            }
+            if tool in tool_map:
+                tool_map[tool](args)
+            else:
+                print(f"    ⚠️ 未知工具：{tool}")
+        except Exception as e:
+            print(f"    ❌ 步驟失敗：{e}")
+    print("✅ 工作流程執行完畢")
+
+
+# ── 螢幕監控觸發 ──────────────────────────────────────
+
+def screen_watch(template_path: str, command: str, interval: float = 2.0, timeout: float = 60.0):
+    print(f"👁 監控中：等待 [{template_path}] 出現，超時 {timeout}s...")
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            loc = pyautogui.locateOnScreen(template_path, confidence=0.8)
+            if loc:
+                print(f"✅ 偵測到目標！執行：{command}")
+                subprocess.run(command, shell=True)
+                return
+        except Exception:
+            pass
+        time.sleep(interval)
+    print("⏰ 監控逾時，未偵測到目標")
+
+
+# ── 多螢幕支援 ───────────────────────────────────────
+
+def monitors():
+    try:
+        from screeninfo import get_monitors
+        for i, m in enumerate(get_monitors()):
+            print(f"螢幕 {i}: {m.width}x{m.height} 位置({m.x},{m.y}) {'主螢幕' if m.is_primary else ''}")
+    except Exception as e:
+        print(f"❌ {e}")
+
+
+# ── ZIP 壓縮 ─────────────────────────────────────────
+
+def zip_files(source: str, dest: str):
+    import zipfile
+    src = Path(source)
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+        if src.is_dir():
+            for f in src.rglob("*"):
+                zf.write(f, f.relative_to(src.parent))
+        else:
+            zf.write(src, src.name)
+    print(f"✅ 已壓縮：{source} → {dest}")
+
+def unzip(zip_path: str, dest: str):
+    import zipfile
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(dest)
+    print(f"✅ 已解壓縮：{zip_path} → {dest}")
+
+
+# ── 網路下載 ─────────────────────────────────────────
+
+def download(url: str, save_path: str = ""):
+    if not save_path:
+        save_path = str(SCREENSHOT_DIR / url.split("/")[-1].split("?")[0])
+    r = requests.get(url, stream=True, timeout=60)
+    r.raise_for_status()
+    with open(save_path, "wb") as f:
+        for chunk in r.iter_content(chunk_size=8192):
+            f.write(chunk)
+    print(f"✅ 已下載：{save_path}")
+
+
+# ── 印表機 ───────────────────────────────────────────
+
+def print_file(path: str):
+    try:
+        import win32api
+        win32api.ShellExecute(0, "print", path, None, ".", 0)
+        print(f"✅ 已送印：{path}")
+    except Exception as e:
+        print(f"❌ 列印失敗：{e}")
+
+
+# ── WiFi 管理 ────────────────────────────────────────
+
+def wifi_list():
+    result = subprocess.run(
+        ["powershell.exe", "-Command", "netsh wlan show networks mode=bssid"],
+        capture_output=True, text=True, encoding="cp950", errors="replace"
+    )
+    print(result.stdout[:3000])
+
+def wifi_connect(ssid: str, password: str):
+    profile = f"""<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>{ssid}</name>
+    <SSIDConfig><SSID><name>{ssid}</name></SSID></SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>auto</connectionMode>
+    <MSM><security><authEncryption>
+        <authentication>WPA2PSK</authentication>
+        <encryption>AES</encryption>
+    </authEncryption>
+    <sharedKey><keyType>passPhrase</keyType><protected>false</protected>
+        <keyMaterial>{password}</keyMaterial>
+    </sharedKey></security></MSM>
+</WLANProfile>"""
+    profile_path = Path("C:/Users/blue_/wifi_tmp.xml")
+    profile_path.write_text(profile, encoding="utf-8")
+    subprocess.run(["powershell.exe", "-Command",
+                    f"netsh wlan add profile filename='{profile_path}'; netsh wlan connect name='{ssid}'"],
+                   capture_output=True)
+    profile_path.unlink(missing_ok=True)
+    print(f"✅ 已嘗試連線：{ssid}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -864,6 +1079,18 @@ if __name__ == "__main__":
         "record_stop":   lambda: record_stop(),
         "record_play":   lambda: record_play(args[0]),
         "email":         lambda: send_email(args[0], args[1], " ".join(args[2:])),
+        "stt":           lambda: stt(),
+        "ocr":           lambda: ocr(args[0] if args else ""),
+        "workflow_run":  lambda: workflow_run(args[0]),
+        "workflow_save": lambda: workflow_save(args[0], " ".join(args[1:])),
+        "screen_watch":  lambda: screen_watch(args[0], args[1], float(args[2]) if len(args)>2 else 2.0),
+        "monitors":      lambda: monitors(),
+        "zip":           lambda: zip_files(args[0], args[1]),
+        "unzip":         lambda: unzip(args[0], args[1]),
+        "download":      lambda: download(args[0], args[1] if len(args)>1 else ""),
+        "print_file":    lambda: print_file(args[0]),
+        "wifi_list":     lambda: wifi_list(),
+        "wifi_connect":  lambda: wifi_connect(args[0], args[1]),
     }
 
     if tool not in tools:
