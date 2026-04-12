@@ -73,6 +73,25 @@ tools:
   power <sleep|restart|shutdown> 電源管理
   bt_scan                       掃描藍牙裝置
   bt_connect <MAC位址>          連線藍牙裝置
+  run_python <程式碼>           直接執行 Python 程式碼
+  run_shell <指令>              執行 PowerShell 指令
+  word_read <路徑>              讀取 Word 文件
+  word_write <路徑> <內容>      寫入 Word 文件
+  excel_read <路徑> [工作表]    讀取 Excel
+  excel_write <路徑> <工作表> <資料JSON> 寫入 Excel
+  pdf_read <路徑>               讀取 PDF 文字
+  screen_diff <間隔秒> <區域>   偵測螢幕區域變化
+  scrape <網址> <CSS選擇器>     爬取網頁指定內容
+  img_edit <動作> <路徑> [參數] 圖片編輯（crop/resize/text/merge）
+  gdrive_upload <檔案> <資料夾ID> 上傳到 Google Drive
+  gdrive_download <檔案ID> <路徑> 從 Google Drive 下載
+  db_query <資料庫路徑> <SQL>   執行 SQLite 查詢
+  db_mysql <host> <db> <SQL>    執行 MySQL 查詢
+  encrypt <檔案路徑> <密碼>     加密檔案
+  decrypt <檔案路徑> <密碼>     解密檔案
+  clipboard_watch <秒數>        監控剪貼簿變化
+  qr_gen <內容> [路徑]          生成 QR Code
+  qr_scan [圖片路徑]            掃描 QR Code（截圖或指定圖片）
 """
 
 import sys
@@ -1229,6 +1248,302 @@ def bt_connect(mac: str):
         print(f"❌ 連線失敗：{e}")
 
 
+# ── 程式碼執行 ───────────────────────────────────────
+
+def run_python(code: str):
+    import traceback, contextlib
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            exec(code, {"__builtins__": __builtins__})
+        result = buf.getvalue()
+        print(result if result else "✅ 執行完成（無輸出）")
+    except Exception:
+        print(f"❌ 執行錯誤：\n{traceback.format_exc()}")
+
+def run_shell(cmd: str):
+    result = subprocess.run(
+        ["powershell.exe", "-Command", cmd],
+        capture_output=True, text=True, encoding="cp950", errors="replace"
+    )
+    output = result.stdout + result.stderr
+    print(output.strip() or "✅ 執行完成")
+
+
+# ── 文件處理 ─────────────────────────────────────────
+
+def word_read(path: str):
+    from docx import Document
+    doc = Document(path)
+    text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    print(text[:3000])
+
+def word_write(path: str, content: str):
+    from docx import Document
+    doc = Document()
+    for line in content.split("\n"):
+        doc.add_paragraph(line)
+    doc.save(path)
+    print(f"✅ 已寫入：{path}")
+
+def excel_read(path: str, sheet: str = ""):
+    import openpyxl
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb.active
+    for row in ws.iter_rows(values_only=True):
+        print("\t".join(str(c) if c is not None else "" for c in row))
+
+def excel_write(path: str, sheet: str, data_json: str):
+    import openpyxl, json
+    data = json.loads(data_json)
+    try:
+        wb = openpyxl.load_workbook(path)
+    except FileNotFoundError:
+        wb = openpyxl.Workbook()
+    ws = wb[sheet] if sheet in wb.sheetnames else wb.create_sheet(sheet)
+    for row in data:
+        ws.append(row)
+    wb.save(path)
+    print(f"✅ 已寫入 Excel：{path} [{sheet}]")
+
+def pdf_read(path: str):
+    import fitz
+    doc = fitz.open(path)
+    text = "\n".join(page.get_text() for page in doc)
+    print(text[:3000])
+
+
+# ── 螢幕變化偵測 ──────────────────────────────────────
+
+def screen_diff(interval: float = 1.0, duration: float = 30.0, region=None):
+    import numpy as np
+    import cv2
+    print(f"👁 監控螢幕變化（{duration}秒）...")
+    prev = None
+    end = time.time() + duration
+    changes = 0
+    while time.time() < end:
+        img = pyautogui.screenshot(region=region)
+        arr = np.array(img.convert("L"))
+        if prev is not None:
+            diff = cv2.absdiff(prev, arr)
+            score = diff.mean()
+            if score > 5:
+                changes += 1
+                ts = datetime.now().strftime("%H:%M:%S")
+                print(f"  [{ts}] 偵測到變化！差異分數：{score:.1f}")
+        prev = arr
+        time.sleep(interval)
+    print(f"✅ 監控結束，共偵測到 {changes} 次變化")
+
+
+# ── 網頁爬蟲 ─────────────────────────────────────────
+
+def scrape(url: str, selector: str = "body"):
+    from bs4 import BeautifulSoup
+    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+    res.raise_for_status()
+    soup = BeautifulSoup(res.text, "html.parser")
+    elements = soup.select(selector)
+    if not elements:
+        print(f"找不到選擇器：{selector}")
+        return
+    for el in elements[:10]:
+        text = el.get_text(strip=True)
+        if text:
+            print(text[:200])
+
+
+# ── 圖片編輯 ─────────────────────────────────────────
+
+def img_edit(action: str, path: str, *args):
+    from PIL import Image, ImageDraw, ImageFont
+    img = Image.open(path)
+
+    if action == "crop":
+        x1, y1, x2, y2 = int(args[0]), int(args[1]), int(args[2]), int(args[3])
+        img = img.crop((x1, y1, x2, y2))
+    elif action == "resize":
+        w, h = int(args[0]), int(args[1])
+        img = img.resize((w, h), Image.LANCZOS)
+    elif action == "text":
+        text = args[0]
+        x, y = int(args[1]) if len(args) > 1 else img.width // 2, int(args[2]) if len(args) > 2 else img.height - 50
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("C:/Windows/Fonts/msjhbd.ttc", 36)
+        except Exception:
+            font = ImageFont.load_default()
+        draw.text((x, y), text, font=font, fill=(255, 255, 255))
+    elif action == "merge":
+        img2 = Image.open(args[0])
+        new = Image.new("RGB", (img.width + img2.width, max(img.height, img2.height)))
+        new.paste(img, (0, 0))
+        new.paste(img2, (img.width, 0))
+        img = new
+    elif action == "grayscale":
+        img = img.convert("L")
+
+    out_path = args[-1] if args and str(args[-1]).endswith((".png",".jpg",".jpeg")) else path
+    img.save(out_path)
+    print(f"✅ 圖片已儲存：{out_path}")
+
+
+# ── Google Drive ──────────────────────────────────────
+
+def gdrive_upload(file_path: str, folder_id: str = ""):
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+        from google.oauth2.credentials import Credentials
+        creds_path = Path("C:/Users/blue_/gdrive_token.json")
+        if not creds_path.exists():
+            print("❌ 找不到 C:/Users/blue_/gdrive_token.json，請先完成 Google 授權")
+            return
+        creds = Credentials.from_authorized_user_file(str(creds_path))
+        service = build("drive", "v3", credentials=creds)
+        meta = {"name": Path(file_path).name}
+        if folder_id:
+            meta["parents"] = [folder_id]
+        media = MediaFileUpload(file_path)
+        f = service.files().create(body=meta, media_body=media, fields="id").execute()
+        print(f"✅ 已上傳，檔案 ID：{f.get('id')}")
+    except Exception as e:
+        print(f"❌ 上傳失敗：{e}")
+
+def gdrive_download(file_id: str, save_path: str):
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseDownload
+        from google.oauth2.credentials import Credentials
+        creds = Credentials.from_authorized_user_file("C:/Users/blue_/gdrive_token.json")
+        service = build("drive", "v3", credentials=creds)
+        req = service.files().get_media(fileId=file_id)
+        with open(save_path, "wb") as f:
+            downloader = MediaIoBaseDownload(f, req)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+        print(f"✅ 已下載：{save_path}")
+    except Exception as e:
+        print(f"❌ 下載失敗：{e}")
+
+
+# ── 資料庫操作 ───────────────────────────────────────
+
+def db_query(db_path: str, sql: str):
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.execute(sql)
+        if cur.description:
+            headers = [d[0] for d in cur.description]
+            print("\t".join(headers))
+            print("-" * 60)
+            for row in cur.fetchall():
+                print("\t".join(str(c) for c in row))
+        else:
+            conn.commit()
+            print(f"✅ 執行成功，影響 {cur.rowcount} 列")
+    finally:
+        conn.close()
+
+def db_mysql(host: str, database: str, sql: str, user: str = "root", password: str = ""):
+    import pymysql
+    conn = pymysql.connect(host=host, user=user, password=password, database=database, charset="utf8mb4")
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            if cur.description:
+                headers = [d[0] for d in cur.description]
+                print("\t".join(headers))
+                for row in cur.fetchall():
+                    print("\t".join(str(c) for c in row))
+            else:
+                conn.commit()
+                print(f"✅ 執行成功，影響 {cur.rowcount} 列")
+    finally:
+        conn.close()
+
+
+# ── 加密/解密 ────────────────────────────────────────
+
+def encrypt(file_path: str, password: str):
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    import base64
+    salt = b"xinyang501_salt_"
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    f = Fernet(key)
+    data = Path(file_path).read_bytes()
+    out_path = file_path + ".enc"
+    Path(out_path).write_bytes(f.encrypt(data))
+    print(f"✅ 已加密：{out_path}")
+
+def decrypt(file_path: str, password: str):
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    import base64
+    salt = b"xinyang501_salt_"
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    f = Fernet(key)
+    data = Path(file_path).read_bytes()
+    out_path = file_path.replace(".enc", ".dec")
+    Path(out_path).write_bytes(f.decrypt(data))
+    print(f"✅ 已解密：{out_path}")
+
+
+# ── 剪貼簿監控 ───────────────────────────────────────
+
+def clipboard_watch(duration: float = 30.0):
+    import pyperclip
+    print(f"📋 監控剪貼簿 {duration} 秒...")
+    prev = pyperclip.paste()
+    end = time.time() + duration
+    changes = []
+    while time.time() < end:
+        current = pyperclip.paste()
+        if current != prev and current:
+            ts = datetime.now().strftime("%H:%M:%S")
+            preview = current[:80].replace("\n", "↵")
+            print(f"  [{ts}] 新內容：{preview}")
+            changes.append(current)
+            prev = current
+        time.sleep(0.5)
+    print(f"✅ 監控結束，共偵測到 {len(changes)} 次變化")
+
+
+# ── QR Code ──────────────────────────────────────────
+
+def qr_gen(content: str, save_path: str = ""):
+    import qrcode
+    qr = qrcode.make(content)
+    if not save_path:
+        save_path = str(SCREENSHOT_DIR / f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+    qr.save(save_path)
+    print(f"✅ QR Code 已生成：{save_path}")
+
+def qr_scan(image_path: str = ""):
+    try:
+        from pyzbar.pyzbar import decode
+        from PIL import Image
+        if not image_path:
+            img = pyautogui.screenshot()
+        else:
+            img = Image.open(image_path)
+        results = decode(img)
+        if not results:
+            print("❌ 未偵測到 QR Code")
+            return
+        for r in results:
+            print(f"✅ 掃描結果：{r.data.decode('utf-8')}")
+    except Exception as e:
+        print(f"❌ 掃描失敗：{e}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -1310,6 +1625,25 @@ if __name__ == "__main__":
         "power":           lambda: power(args[0]),
         "bt_scan":         lambda: bt_scan(),
         "bt_connect":      lambda: bt_connect(args[0]),
+        "run_python":      lambda: run_python(" ".join(args)),
+        "run_shell":       lambda: run_shell(" ".join(args)),
+        "word_read":       lambda: word_read(args[0]),
+        "word_write":      lambda: word_write(args[0], " ".join(args[1:])),
+        "excel_read":      lambda: excel_read(args[0], args[1] if len(args)>1 else None),
+        "excel_write":     lambda: excel_write(args[0], args[1], " ".join(args[2:])),
+        "pdf_read":        lambda: pdf_read(args[0]),
+        "screen_diff":     lambda: screen_diff(float(args[0]) if args else 2.0, args[1] if len(args)>1 else "full"),
+        "scrape":          lambda: scrape(args[0], args[1] if len(args)>1 else "body"),
+        "img_edit":        lambda: img_edit(args[0], args[1], *args[2:]),
+        "gdrive_upload":   lambda: gdrive_upload(args[0], args[1] if len(args)>1 else "root"),
+        "gdrive_download": lambda: gdrive_download(args[0], args[1]),
+        "db_query":        lambda: db_query(args[0], " ".join(args[1:])),
+        "db_mysql":        lambda: db_mysql(args[0], args[1], " ".join(args[2:])),
+        "encrypt":         lambda: encrypt(args[0], args[1]),
+        "decrypt":         lambda: decrypt(args[0], args[1]),
+        "clipboard_watch": lambda: clipboard_watch(float(args[0]) if args else 30.0),
+        "qr_gen":          lambda: qr_gen(args[0], args[1] if len(args)>1 else ""),
+        "qr_scan":         lambda: qr_scan(args[0] if args else ""),
     }
 
     if tool not in tools:

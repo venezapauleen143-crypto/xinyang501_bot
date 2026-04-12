@@ -506,6 +506,114 @@ TOOLS = [
             },
             "required": ["action"]
         }
+    },
+    {
+        "name": "run_code",
+        "description": "直接執行 Python 程式碼或 PowerShell 指令。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["python", "shell"], "description": "python=執行Python, shell=執行PowerShell"},
+                "code": {"type": "string", "description": "要執行的程式碼或指令"}
+            },
+            "required": ["type", "code"]
+        }
+    },
+    {
+        "name": "document_control",
+        "description": "讀取或寫入 Word、Excel、PDF 文件。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["word_read","word_write","excel_read","excel_write","pdf_read"]},
+                "path": {"type": "string", "description": "文件路徑"},
+                "content": {"type": "string", "description": "要寫入的內容（word_write/excel_write 使用）"},
+                "sheet": {"type": "string", "description": "Excel 工作表名稱（excel_read/excel_write 使用）"}
+            },
+            "required": ["action", "path"]
+        }
+    },
+    {
+        "name": "web_scrape",
+        "description": "爬取網頁指定內容，或偵測螢幕區域變化。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["scrape", "screen_diff"]},
+                "url": {"type": "string", "description": "網址（scrape 使用）"},
+                "selector": {"type": "string", "description": "CSS 選擇器（scrape 使用）"},
+                "interval": {"type": "number", "description": "偵測間隔秒數（screen_diff 使用）"},
+                "region": {"type": "string", "description": "螢幕區域（screen_diff 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "image_edit",
+        "description": "圖片編輯：裁切、縮放、加文字、合併圖片。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["crop","resize","text","merge"]},
+                "path": {"type": "string", "description": "圖片路徑"},
+                "params": {"type": "string", "description": "參數（crop: x y w h; resize: w h; text: x y 文字; merge: 圖片2路徑）"}
+            },
+            "required": ["action", "path"]
+        }
+    },
+    {
+        "name": "cloud_storage",
+        "description": "上傳或下載 Google Drive 檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["upload","download"]},
+                "path": {"type": "string", "description": "本地檔案路徑"},
+                "drive_id": {"type": "string", "description": "Google Drive 檔案或資料夾 ID"}
+            },
+            "required": ["action", "path"]
+        }
+    },
+    {
+        "name": "database",
+        "description": "執行 SQLite 或 MySQL 資料庫查詢。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["sqlite","mysql"]},
+                "db": {"type": "string", "description": "SQLite: 資料庫路徑；MySQL: host"},
+                "name": {"type": "string", "description": "MySQL 資料庫名稱"},
+                "sql": {"type": "string", "description": "SQL 指令"}
+            },
+            "required": ["type", "db", "sql"]
+        }
+    },
+    {
+        "name": "encrypt_file",
+        "description": "加密或解密檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["encrypt","decrypt"]},
+                "path": {"type": "string", "description": "檔案路徑"},
+                "password": {"type": "string", "description": "密碼"}
+            },
+            "required": ["action", "path", "password"]
+        }
+    },
+    {
+        "name": "qr_code",
+        "description": "生成或掃描 QR Code，或監控剪貼簿變化。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["qr_gen","qr_scan","clipboard_watch"]},
+                "content": {"type": "string", "description": "QR Code 內容（qr_gen 使用）"},
+                "path": {"type": "string", "description": "圖片路徑（qr_scan 使用）或儲存路徑（qr_gen 使用）"},
+                "duration": {"type": "number", "description": "監控秒數（clipboard_watch 使用）"}
+            },
+            "required": ["action"]
+        }
     }
 ]
 
@@ -1194,6 +1302,235 @@ def execute_manage_schedule(action: str, name: str = "", time: str = "", script:
         return f"執行失敗：{str(e)}"
 
 
+def execute_run_code(type_, code):
+    try:
+        if type_ == "python":
+            import io as _io, traceback, contextlib
+            buf = _io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                try:
+                    exec(compile(code, "<string>", "exec"), {})
+                except Exception:
+                    buf.write(traceback.format_exc())
+            return buf.getvalue() or "（執行完畢，無輸出）"
+        elif type_ == "shell":
+            result = subprocess.run(
+                ["powershell.exe", "-Command", code],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
+            )
+            return (result.stdout + result.stderr).strip() or "（執行完畢，無輸出）"
+        return "未知類型"
+    except Exception as e:
+        return f"執行失敗：{e}"
+
+
+def execute_document(action, path, content="", sheet=None):
+    try:
+        if action == "word_read":
+            from docx import Document
+            doc = Document(path)
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip()) or "（文件為空）"
+        elif action == "word_write":
+            from docx import Document
+            doc = Document() if not Path(path).exists() else Document(path)
+            doc.add_paragraph(content)
+            doc.save(path)
+            return f"已寫入：{path}"
+        elif action == "excel_read":
+            import openpyxl
+            wb = openpyxl.load_workbook(path)
+            ws = wb[sheet] if sheet else wb.active
+            rows = [[str(c.value or "") for c in row] for row in ws.iter_rows()]
+            return "\n".join(["\t".join(r) for r in rows[:30]])
+        elif action == "excel_write":
+            import openpyxl, json
+            wb = openpyxl.load_workbook(path) if Path(path).exists() else openpyxl.Workbook()
+            ws = wb[sheet] if (sheet and sheet in wb.sheetnames) else wb.active
+            data = json.loads(content)
+            for row in data:
+                ws.append(row)
+            wb.save(path)
+            return f"已寫入 {len(data)} 行到 {path}"
+        elif action == "pdf_read":
+            import fitz
+            doc = fitz.open(path)
+            text = "\n".join(page.get_text() for page in doc)
+            return text[:3000] if text else "（PDF 無可讀文字）"
+        return "未知動作"
+    except Exception as e:
+        return f"文件操作失敗：{e}"
+
+
+def execute_web_scrape(action, url="", selector="body", interval=2.0, region="full"):
+    try:
+        if action == "scrape":
+            from bs4 import BeautifulSoup
+            res = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            soup = BeautifulSoup(res.text, "html.parser")
+            elements = soup.select(selector)
+            return "\n".join(e.get_text(strip=True) for e in elements[:10]) or "（未找到內容）"
+        elif action == "screen_diff":
+            import time as t
+            img1 = pyautogui.screenshot()
+            t.sleep(interval)
+            img2 = pyautogui.screenshot()
+            import numpy as np
+            a1, a2 = np.array(img1), np.array(img2)
+            diff = np.abs(a1.astype(int) - a2.astype(int)).mean()
+            if diff > 2.0:
+                return f"⚠️ 螢幕有變化（差異度：{diff:.1f}）"
+            return f"✅ 螢幕無明顯變化（差異度：{diff:.1f}）"
+        return "未知動作"
+    except Exception as e:
+        return f"操作失敗：{e}"
+
+
+def execute_image_edit(action, path, *params):
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.open(path)
+        if action == "crop":
+            x, y, w, h = int(params[0]), int(params[1]), int(params[2]), int(params[3])
+            img = img.crop((x, y, x+w, y+h))
+        elif action == "resize":
+            w, h = int(params[0]), int(params[1])
+            img = img.resize((w, h))
+        elif action == "text":
+            x, y = int(params[0]), int(params[1])
+            text = " ".join(params[2:]) if len(params) > 2 else ""
+            draw = ImageDraw.Draw(img)
+            draw.text((x, y), text, fill="red")
+        elif action == "merge":
+            img2 = Image.open(params[0])
+            merged = Image.new("RGB", (img.width + img2.width, max(img.height, img2.height)))
+            merged.paste(img, (0, 0))
+            merged.paste(img2, (img.width, 0))
+            img = merged
+        out = path.replace(".", f"_{action}.")
+        img.save(out)
+        return f"✅ 圖片已儲存：{out}"
+    except Exception as e:
+        return f"圖片編輯失敗：{e}"
+
+
+def execute_cloud_storage(action, path, drive_id="root"):
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+        import io as _io
+        creds_path = Path("C:/Users/blue_/claude-telegram-bot/gdrive_token.json")
+        if not creds_path.exists():
+            return "❌ 未找到 Google Drive 憑證（gdrive_token.json）"
+        creds = Credentials.from_authorized_user_file(str(creds_path))
+        service = build("drive", "v3", credentials=creds)
+        if action == "upload":
+            media = MediaFileUpload(path)
+            meta = {"name": Path(path).name, "parents": [drive_id]}
+            f = service.files().create(body=meta, media_body=media, fields="id").execute()
+            return f"✅ 已上傳，檔案 ID：{f.get('id')}"
+        elif action == "download":
+            req = service.files().get_media(fileId=drive_id)
+            buf = _io.BytesIO()
+            dl = MediaIoBaseDownload(buf, req)
+            done = False
+            while not done:
+                _, done = dl.next_chunk()
+            with open(path, "wb") as f:
+                f.write(buf.getvalue())
+            return f"✅ 已下載到：{path}"
+        return "未知動作"
+    except Exception as e:
+        return f"雲端儲存失敗：{e}"
+
+
+def execute_database(type_, db, sql, name=""):
+    try:
+        if type_ == "sqlite":
+            conn = sqlite3.connect(db)
+            cur = conn.cursor()
+            cur.execute(sql)
+            rows = cur.fetchall()
+            conn.commit()
+            conn.close()
+            if rows:
+                return "\n".join(str(r) for r in rows[:20])
+            return "✅ 執行成功（無回傳資料）"
+        elif type_ == "mysql":
+            import pymysql
+            conn = pymysql.connect(host=db, database=name, read_default_file="~/.my.cnf")
+            cur = conn.cursor()
+            cur.execute(sql)
+            rows = cur.fetchall()
+            conn.commit()
+            conn.close()
+            if rows:
+                return "\n".join(str(r) for r in rows[:20])
+            return "✅ 執行成功（無回傳資料）"
+        return "未知類型"
+    except Exception as e:
+        return f"資料庫操作失敗：{e}"
+
+
+def execute_encrypt_file(action, path, password):
+    try:
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.fernet import Fernet
+        import base64
+        salt = b"xiaoniuma_salt_v1"
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+        f = Fernet(key)
+        data = Path(path).read_bytes()
+        if action == "encrypt":
+            enc = f.encrypt(data)
+            out = path + ".enc"
+            Path(out).write_bytes(enc)
+            return f"✅ 已加密：{out}"
+        elif action == "decrypt":
+            dec = f.decrypt(data)
+            out = path.replace(".enc", ".dec")
+            Path(out).write_bytes(dec)
+            return f"✅ 已解密：{out}"
+        return "未知動作"
+    except Exception as e:
+        return f"加密/解密失敗：{e}"
+
+
+def execute_qr_code(action, content="", path="", duration=30.0):
+    try:
+        if action == "qr_gen":
+            import qrcode as _qr
+            img = _qr.make(content)
+            save_path = path or str(Path.home() / "Desktop" / "qrcode.png")
+            img.save(save_path)
+            return f"✅ QR Code 已生成：{save_path}"
+        elif action == "qr_scan":
+            from pyzbar.pyzbar import decode
+            from PIL import Image
+            img = Image.open(path) if path else pyautogui.screenshot()
+            results = decode(img)
+            if not results:
+                return "❌ 未偵測到 QR Code"
+            return "\n".join(f"掃描結果：{r.data.decode('utf-8')}" for r in results)
+        elif action == "clipboard_watch":
+            import pyperclip, time as t
+            last = pyperclip.paste()
+            changes = []
+            start = t.time()
+            while t.time() - start < duration:
+                cur = pyperclip.paste()
+                if cur != last:
+                    changes.append(f"[{datetime.now().strftime('%H:%M:%S')}] {cur[:100]}")
+                    last = cur
+                t.sleep(0.5)
+            return "\n".join(changes) if changes else f"監控 {duration} 秒內無剪貼簿變化"
+        return "未知動作"
+    except Exception as e:
+        return f"操作失敗：{e}"
+
+
 def fetch_image(prompt: str, width: int = 512, height: int = 512):
     hf_token = os.getenv("HF_TOKEN")
     headers = {"Authorization": f"Bearer {hf_token}"}
@@ -1315,6 +1652,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "tts": lambda: execute_tts(tool_use.input["text"]),
                 "send_email": lambda: execute_send_email(
                     tool_use.input["to"], tool_use.input["subject"], tool_use.input["body"]),
+                "run_code": lambda: execute_run_code(
+                    tool_use.input["type"], tool_use.input["code"]),
+                "document_control": lambda: execute_document(
+                    tool_use.input["action"],
+                    tool_use.input["path"],
+                    tool_use.input.get("content",""),
+                    tool_use.input.get("sheet")),
+                "web_scrape": lambda: execute_web_scrape(
+                    tool_use.input["action"],
+                    tool_use.input.get("url",""),
+                    tool_use.input.get("selector","body"),
+                    tool_use.input.get("interval", 2.0),
+                    tool_use.input.get("region","full")),
+                "image_edit": lambda: execute_image_edit(
+                    tool_use.input["action"],
+                    tool_use.input["path"],
+                    *tool_use.input.get("params","").split()),
+                "cloud_storage": lambda: execute_cloud_storage(
+                    tool_use.input["action"],
+                    tool_use.input["path"],
+                    tool_use.input.get("drive_id","root")),
+                "database": lambda: execute_database(
+                    tool_use.input["type"],
+                    tool_use.input["db"],
+                    tool_use.input["sql"],
+                    tool_use.input.get("name","")),
+                "encrypt_file": lambda: execute_encrypt_file(
+                    tool_use.input["action"],
+                    tool_use.input["path"],
+                    tool_use.input["password"]),
+                "qr_code": lambda: execute_qr_code(
+                    tool_use.input["action"],
+                    tool_use.input.get("content",""),
+                    tool_use.input.get("path",""),
+                    tool_use.input.get("duration", 30.0)),
             }
 
             if tool_use.name == "screen_stream":
