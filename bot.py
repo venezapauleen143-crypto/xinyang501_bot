@@ -250,6 +250,104 @@ TOOLS = [
         }
     },
     {
+        "name": "window_control",
+        "description": "管理視窗。列出、切換、最大化、最小化、關閉視窗。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","focus","close","minimize","maximize"]},
+                "keyword": {"type": "string", "description": "視窗標題關鍵字"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "hotkey",
+        "description": "執行鍵盤組合鍵，如 ctrl+c、alt+tab、win+d。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keys": {"type": "string", "description": "組合鍵，用加號連接，例如 ctrl+c 或 alt+tab"}
+            },
+            "required": ["keys"]
+        }
+    },
+    {
+        "name": "clipboard",
+        "description": "讀取或寫入剪貼簿內容。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["get","set"]},
+                "text": {"type": "string", "description": "要寫入的文字（set 時使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "file_system",
+        "description": "操作檔案與資料夾：列出、讀取、寫入、刪除、複製、移動、搜尋。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","read","write","delete","copy","move","search"]},
+                "path": {"type": "string", "description": "檔案或資料夾路徑"},
+                "dest": {"type": "string", "description": "目標路徑（copy/move 時使用）"},
+                "content": {"type": "string", "description": "寫入內容（write 時使用）"},
+                "keyword": {"type": "string", "description": "搜尋關鍵字（search 時使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "system_monitor",
+        "description": "查看系統資源使用狀況（CPU、記憶體、磁碟）或管理程序。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["info","process_list","kill"]},
+                "target": {"type": "string", "description": "程序名稱或 PID（kill 時使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "notify",
+        "description": "發送 Windows 桌面通知彈出視窗。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "message": {"type": "string"}
+            },
+            "required": ["title","message"]
+        }
+    },
+    {
+        "name": "tts",
+        "description": "文字轉語音，讓電腦朗讀指定文字。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string"}
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "send_email",
+        "description": "發送電子郵件。需要 .env 設定 SMTP_USER 和 SMTP_PASS。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string"},
+                "subject": {"type": "string"},
+                "body": {"type": "string"}
+            },
+            "required": ["to","subject","body"]
+        }
+    },
+    {
         "name": "long_term_memory",
         "description": "管理長期記憶。當用戶說了重要的事（偏好、習慣、重要資訊、個人資料）或要求記住某件事時，主動儲存。當用戶問你記不記得某件事時，先查詢記憶再回答。",
         "input_schema": {
@@ -512,7 +610,128 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
         return {"ok": False, "message": f"執行失敗：{str(e)}", "screenshot": None}
 
 
+import shutil
+import psutil
+import pyperclip
+import pygetwindow as gw
+
 _browser_ctx: dict = {}
+
+
+def execute_window_control(action, keyword=""):
+    try:
+        if action == "list":
+            wins = [w for w in gw.getAllWindows() if w.title.strip()]
+            return "\n".join(f"[{w._hWnd}] {w.title}" for w in wins) or "沒有視窗"
+        wins = [w for w in gw.getAllWindows() if keyword.lower() in w.title.lower()]
+        if not wins:
+            return f"找不到視窗：{keyword}"
+        w = wins[0]
+        if action == "focus": w.activate(); return f"已切換到：{w.title}"
+        elif action == "close": w.close(); return f"已關閉：{w.title}"
+        elif action == "minimize": w.minimize(); return f"已最小化：{w.title}"
+        elif action == "maximize": w.maximize(); return f"已最大化：{w.title}"
+    except Exception as e:
+        return f"執行失敗：{e}"
+
+def execute_hotkey(keys: str):
+    parts = [k.strip() for k in keys.split("+")]
+    pyautogui.hotkey(*parts)
+    return f"已執行組合鍵：{keys}"
+
+def execute_clipboard(action, text=""):
+    if action == "get":
+        return pyperclip.paste() or "（剪貼簿是空的）"
+    else:
+        pyperclip.copy(text)
+        return f"已寫入剪貼簿：{text}"
+
+def execute_file_system(action, path="", dest="", content="", keyword=""):
+    try:
+        if action == "list":
+            p = Path(path or ".")
+            items = sorted(p.iterdir())
+            return "\n".join(("📁 " if i.is_dir() else "📄 ") + i.name for i in items)
+        elif action == "read":
+            return Path(path).read_text(encoding="utf-8", errors="replace")[:3000]
+        elif action == "write":
+            Path(path).write_text(content, encoding="utf-8")
+            return f"已寫入：{path}"
+        elif action == "delete":
+            p = Path(path)
+            shutil.rmtree(p) if p.is_dir() else p.unlink()
+            return f"已刪除：{path}"
+        elif action == "copy":
+            shutil.copy2(path, dest)
+            return f"已複製：{path} → {dest}"
+        elif action == "move":
+            shutil.move(path, dest)
+            return f"已移動：{path} → {dest}"
+        elif action == "search":
+            results = list(Path(path).rglob(f"*{keyword}*"))
+            return "\n".join(str(r) for r in results[:50]) or "找不到結果"
+    except Exception as e:
+        return f"執行失敗：{e}"
+
+def execute_system_monitor(action, target=""):
+    try:
+        if action == "info":
+            cpu = psutil.cpu_percent(interval=1)
+            mem = psutil.virtual_memory()
+            disk = psutil.disk_usage("C:/")
+            return (f"CPU：{cpu}%\n"
+                    f"記憶體：{mem.percent}%（{mem.used//1024//1024}MB / {mem.total//1024//1024}MB）\n"
+                    f"磁碟 C：{disk.percent}%（{disk.used//1024//1024//1024}GB / {disk.total//1024//1024//1024}GB）")
+        elif action == "process_list":
+            procs = sorted(psutil.process_iter(["pid","name","memory_info"]),
+                           key=lambda p: p.info["memory_info"].rss if p.info["memory_info"] else 0, reverse=True)
+            lines = [f"PID:{p.info['pid']} {p.info['name']} ({p.info['memory_info'].rss//1024//1024}MB)"
+                     for p in procs[:20] if p.info["memory_info"]]
+            return "\n".join(lines)
+        elif action == "kill":
+            try:
+                psutil.Process(int(target)).kill()
+                return f"已結束 PID {target}"
+            except ValueError:
+                killed = sum(1 for p in psutil.process_iter(["name"]) if target.lower() in p.info["name"].lower() and not p.kill())
+                return f"已結束 {killed} 個「{target}」"
+    except Exception as e:
+        return f"執行失敗：{e}"
+
+def execute_notify(title, message):
+    try:
+        from win10toast import ToastNotifier
+        ToastNotifier().show_toast(title, message, duration=5, threaded=True)
+        return f"通知已送出"
+    except Exception as e:
+        return f"通知失敗：{e}"
+
+def execute_tts(text):
+    import pyttsx3
+    engine = pyttsx3.init()
+    engine.setProperty("rate", 180)
+    engine.say(text)
+    engine.runAndWait()
+    return f"已朗讀完畢"
+
+def execute_send_email(to, subject, body):
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    if not smtp_user:
+        return "未設定 SMTP_USER / SMTP_PASS，請加入 .env"
+    msg = MIMEMultipart()
+    msg["From"] = smtp_user
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+    with smtplib.SMTP(os.getenv("SMTP_HOST","smtp.gmail.com"), int(os.getenv("SMTP_PORT","587"))) as s:
+        s.starttls()
+        s.login(smtp_user, smtp_pass)
+        s.send_message(msg)
+    return f"Email 已寄出到 {to}"
 
 def execute_screen_vision(question: str = "請描述這個畫面上有什麼，以及目前電腦在做什麼事。") -> tuple:
     """截圖並用 Claude vision 分析，回傳 (文字分析, 截圖bytes)"""
@@ -734,7 +953,48 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
 
-            if tool_use.name == "screen_vision":
+            simple_tools = {
+                "window_control": lambda: execute_window_control(
+                    tool_use.input["action"], tool_use.input.get("keyword","")),
+                "hotkey": lambda: execute_hotkey(tool_use.input["keys"]),
+                "clipboard": lambda: execute_clipboard(
+                    tool_use.input["action"], tool_use.input.get("text","")),
+                "file_system": lambda: execute_file_system(
+                    tool_use.input["action"],
+                    tool_use.input.get("path",""),
+                    tool_use.input.get("dest",""),
+                    tool_use.input.get("content",""),
+                    tool_use.input.get("keyword","")),
+                "system_monitor": lambda: execute_system_monitor(
+                    tool_use.input["action"], tool_use.input.get("target","")),
+                "notify": lambda: execute_notify(
+                    tool_use.input["title"], tool_use.input["message"]),
+                "tts": lambda: execute_tts(tool_use.input["text"]),
+                "send_email": lambda: execute_send_email(
+                    tool_use.input["to"], tool_use.input["subject"], tool_use.input["body"]),
+            }
+
+            if tool_use.name in simple_tools:
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, simple_tools[tool_use.name])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                    ]
+                )
+                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else tool_result
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "screen_vision":
                 question = tool_use.input.get("question", "請描述這個畫面上有什麼，以及目前電腦在做什麼事。")
                 import asyncio
                 loop = asyncio.get_running_loop()

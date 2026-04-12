@@ -26,7 +26,31 @@ tools:
   memory_del <chat_id> <id>     刪除指定記憶
   vision [問題]                 截圖並讓 Claude 分析畫面內容
   find_image <圖片路徑>         在螢幕上找到指定圖片的位置
-  browser <動作> [參數]         瀏覽器自動化（open/click/type/get_text/screenshot/close）
+  browser <動作> [參數]         瀏覽器自動化（open/click/type/get_text/screenshot/goto/close）
+  window_list                   列出所有視窗
+  window_focus <標題關鍵字>     切換到指定視窗
+  window_close <標題關鍵字>     關閉指定視窗
+  window_min <標題關鍵字>       最小化視窗
+  window_max <標題關鍵字>       最大化視窗
+  hotkey <按鍵組合>             執行組合鍵（如 ctrl+c, alt+tab）
+  clipboard_get                 讀取剪貼簿內容
+  clipboard_set <內容>          寫入剪貼簿
+  file_list <路徑>              列出資料夾內容
+  file_read <路徑>              讀取文字檔案
+  file_write <路徑> <內容>      寫入文字檔案
+  file_delete <路徑>            刪除檔案或資料夾
+  file_copy <來源> <目標>       複製檔案
+  file_move <來源> <目標>       移動/重新命名檔案
+  file_search <資料夾> <關鍵字> 搜尋檔案
+  sysinfo                       查看 CPU/記憶體/磁碟使用率
+  process_list                  列出所有執行中程序
+  process_kill <名稱或PID>      結束程序
+  notify <標題> <訊息>          發送 Windows 桌面通知
+  tts <文字>                    文字轉語音朗讀
+  record_start                  開始錄製滑鼠鍵盤動作
+  record_stop                   停止錄製並儲存
+  record_play <檔案>            重播錄製的動作
+  email <收件人> <主旨> <內容>  發送 Email
 """
 
 import sys
@@ -449,6 +473,270 @@ def browser(action: str, *args):
         print(f"❌ 未知動作：{action}。可用：open / click / type / get_text / screenshot / goto / close")
 
 
+# ── 視窗管理 ─────────────────────────────────────────
+
+def window_list():
+    import pygetwindow as gw
+    wins = [w for w in gw.getAllWindows() if w.title.strip()]
+    for w in wins:
+        print(f"  [{w._hWnd}] {w.title}")
+
+def _find_window(keyword):
+    import pygetwindow as gw
+    wins = [w for w in gw.getAllWindows() if keyword.lower() in w.title.lower()]
+    return wins[0] if wins else None
+
+def window_focus(keyword):
+    w = _find_window(keyword)
+    if w:
+        w.activate()
+        print(f"✅ 已切換到：{w.title}")
+    else:
+        print(f"❌ 找不到視窗：{keyword}")
+
+def window_close(keyword):
+    w = _find_window(keyword)
+    if w:
+        w.close()
+        print(f"✅ 已關閉：{w.title}")
+    else:
+        print(f"❌ 找不到視窗：{keyword}")
+
+def window_min(keyword):
+    w = _find_window(keyword)
+    if w:
+        w.minimize()
+        print(f"✅ 已最小化：{w.title}")
+    else:
+        print(f"❌ 找不到視窗：{keyword}")
+
+def window_max(keyword):
+    w = _find_window(keyword)
+    if w:
+        w.maximize()
+        print(f"✅ 已最大化：{w.title}")
+    else:
+        print(f"❌ 找不到視窗：{keyword}")
+
+
+# ── 組合鍵 / 剪貼簿 ──────────────────────────────────
+
+def hotkey(*keys):
+    combo = "+".join(keys)
+    pyautogui.hotkey(*keys)
+    print(f"✅ 已執行組合鍵：{combo}")
+
+def clipboard_get():
+    import pyperclip
+    text = pyperclip.paste()
+    print(text)
+
+def clipboard_set(text):
+    import pyperclip
+    pyperclip.copy(text)
+    print(f"✅ 已寫入剪貼簿：{text}")
+
+
+# ── 檔案系統 ─────────────────────────────────────────
+
+def file_list(path="."):
+    p = Path(path)
+    if not p.exists():
+        print(f"❌ 路徑不存在：{path}")
+        return
+    for item in sorted(p.iterdir()):
+        tag = "📁" if item.is_dir() else "📄"
+        print(f"  {tag} {item.name}")
+
+def file_read(path):
+    p = Path(path)
+    if not p.exists():
+        print(f"❌ 檔案不存在：{path}")
+        return
+    print(p.read_text(encoding="utf-8", errors="replace"))
+
+def file_write(path, content):
+    Path(path).write_text(content, encoding="utf-8")
+    print(f"✅ 已寫入：{path}")
+
+def file_delete(path):
+    import shutil
+    p = Path(path)
+    if not p.exists():
+        print(f"❌ 不存在：{path}")
+        return
+    if p.is_dir():
+        shutil.rmtree(p)
+    else:
+        p.unlink()
+    print(f"✅ 已刪除：{path}")
+
+def file_copy(src, dst):
+    import shutil
+    shutil.copy2(src, dst)
+    print(f"✅ 已複製：{src} → {dst}")
+
+def file_move(src, dst):
+    import shutil
+    shutil.move(src, dst)
+    print(f"✅ 已移動：{src} → {dst}")
+
+def file_search(folder, keyword):
+    results = list(Path(folder).rglob(f"*{keyword}*"))
+    if not results:
+        print(f"找不到包含「{keyword}」的檔案")
+        return
+    for r in results:
+        print(f"  {r}")
+
+
+# ── 系統監控 ─────────────────────────────────────────
+
+def sysinfo():
+    import psutil
+    cpu = psutil.cpu_percent(interval=1)
+    mem = psutil.virtual_memory()
+    disk = psutil.disk_usage("C:/")
+    print(
+        f"💻 系統狀態\n"
+        f"CPU：{cpu}%\n"
+        f"記憶體：{mem.percent}%（已用 {mem.used//1024//1024}MB / 共 {mem.total//1024//1024}MB）\n"
+        f"磁碟 C：{disk.percent}%（已用 {disk.used//1024//1024//1024}GB / 共 {disk.total//1024//1024//1024}GB）"
+    )
+
+def process_list():
+    import psutil
+    print(f"{'PID':<8} {'CPU%':<7} {'記憶體MB':<10} 程序名稱")
+    print("-" * 45)
+    procs = sorted(psutil.process_iter(["pid","name","cpu_percent","memory_info"]),
+                   key=lambda p: p.info["memory_info"].rss if p.info["memory_info"] else 0, reverse=True)
+    for p in procs[:30]:
+        mem_mb = p.info["memory_info"].rss // 1024 // 1024 if p.info["memory_info"] else 0
+        print(f"{p.info['pid']:<8} {p.info['cpu_percent']:<7} {mem_mb:<10} {p.info['name']}")
+
+def process_kill(name_or_pid):
+    import psutil
+    try:
+        pid = int(name_or_pid)
+        psutil.Process(pid).kill()
+        print(f"✅ 已結束 PID {pid}")
+    except ValueError:
+        killed = 0
+        for p in psutil.process_iter(["pid","name"]):
+            if name_or_pid.lower() in p.info["name"].lower():
+                p.kill()
+                killed += 1
+        print(f"✅ 已結束 {killed} 個「{name_or_pid}」程序")
+
+
+# ── Windows 通知 ──────────────────────────────────────
+
+def notify(title, message):
+    try:
+        from win10toast import ToastNotifier
+        ToastNotifier().show_toast(title, message, duration=5, threaded=True)
+        print(f"✅ 通知已送出：{title} - {message}")
+    except Exception as e:
+        print(f"❌ 通知失敗：{e}")
+
+
+# ── 語音合成 TTS ──────────────────────────────────────
+
+def tts(text):
+    import pyttsx3
+    engine = pyttsx3.init()
+    engine.setProperty("rate", 180)
+    engine.say(text)
+    engine.runAndWait()
+    print(f"✅ 已朗讀：{text}")
+
+
+# ── 動作錄製/重播 ─────────────────────────────────────
+
+_record_events = []
+_record_listener = None
+RECORD_DIR = Path("C:/Users/blue_/recordings")
+RECORD_DIR.mkdir(exist_ok=True)
+
+def record_start():
+    from pynput import mouse, keyboard
+    global _record_events, _record_listener
+    _record_events = []
+    start_time = time.time()
+
+    def on_move(x, y):
+        _record_events.append({"t": time.time()-start_time, "type": "move", "x": x, "y": y})
+    def on_click(x, y, button, pressed):
+        _record_events.append({"t": time.time()-start_time, "type": "click", "x": x, "y": y, "button": str(button), "pressed": pressed})
+    def on_key(key):
+        try:
+            _record_events.append({"t": time.time()-start_time, "type": "key", "key": key.char})
+        except AttributeError:
+            _record_events.append({"t": time.time()-start_time, "type": "key", "key": str(key)})
+
+    ml = mouse.Listener(on_move=on_move, on_click=on_click)
+    kl = keyboard.Listener(on_press=on_key)
+    ml.start(); kl.start()
+    _record_listener = (ml, kl)
+    print("✅ 開始錄製，執行 record_stop 停止")
+
+def record_stop():
+    global _record_listener
+    if _record_listener:
+        for l in _record_listener:
+            l.stop()
+        _record_listener = None
+    filename = RECORD_DIR / f"rec_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    import json
+    filename.write_text(json.dumps(_record_events, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"✅ 錄製完成，已儲存：{filename}（共 {len(_record_events)} 個事件）")
+
+def record_play(filepath):
+    import json
+    events = json.loads(Path(filepath).read_text(encoding="utf-8"))
+    prev_t = 0
+    for e in events:
+        delay = e["t"] - prev_t
+        if delay > 0:
+            time.sleep(min(delay, 2))
+        prev_t = e["t"]
+        if e["type"] == "move":
+            pyautogui.moveTo(e["x"], e["y"])
+        elif e["type"] == "click" and e["pressed"]:
+            pyautogui.click(e["x"], e["y"])
+        elif e["type"] == "key":
+            try:
+                pyautogui.press(e["key"])
+            except Exception:
+                pass
+    print(f"✅ 重播完成")
+
+
+# ── Email ─────────────────────────────────────────────
+
+def send_email(to: str, subject: str, body: str):
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    if not smtp_user or not smtp_pass:
+        print("❌ 請在 .env 設定 SMTP_USER 和 SMTP_PASS")
+        return
+    msg = MIMEMultipart()
+    msg["From"] = smtp_user
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+    with smtplib.SMTP(smtp_host, smtp_port) as s:
+        s.starttls()
+        s.login(smtp_user, smtp_pass)
+        s.send_message(msg)
+    print(f"✅ Email 已寄出到：{to}")
+
+
 # ── 排程管理 ────────────────────────────────────────
 
 SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
@@ -552,6 +840,30 @@ if __name__ == "__main__":
         "vision":        lambda: vision(" ".join(args) if args else "請描述這個畫面上有什麼，以及目前電腦在做什麼事。"),
         "find_image":    lambda: find_image(args[0], float(args[1]) if len(args) > 1 else 0.8),
         "browser":       lambda: browser(args[0], *args[1:]),
+        "window_list":   lambda: window_list(),
+        "window_focus":  lambda: window_focus(" ".join(args)),
+        "window_close":  lambda: window_close(" ".join(args)),
+        "window_min":    lambda: window_min(" ".join(args)),
+        "window_max":    lambda: window_max(" ".join(args)),
+        "hotkey":        lambda: hotkey(*args),
+        "clipboard_get": lambda: clipboard_get(),
+        "clipboard_set": lambda: clipboard_set(" ".join(args)),
+        "file_list":     lambda: file_list(args[0] if args else "."),
+        "file_read":     lambda: file_read(args[0]),
+        "file_write":    lambda: file_write(args[0], " ".join(args[1:])),
+        "file_delete":   lambda: file_delete(args[0]),
+        "file_copy":     lambda: file_copy(args[0], args[1]),
+        "file_move":     lambda: file_move(args[0], args[1]),
+        "file_search":   lambda: file_search(args[0], args[1]),
+        "sysinfo":       lambda: sysinfo(),
+        "process_list":  lambda: process_list(),
+        "process_kill":  lambda: process_kill(args[0]),
+        "notify":        lambda: notify(args[0], " ".join(args[1:])),
+        "tts":           lambda: tts(" ".join(args)),
+        "record_start":  lambda: record_start(),
+        "record_stop":   lambda: record_stop(),
+        "record_play":   lambda: record_play(args[0]),
+        "email":         lambda: send_email(args[0], args[1], " ".join(args[2:])),
     }
 
     if tool not in tools:
