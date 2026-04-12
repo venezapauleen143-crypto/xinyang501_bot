@@ -94,7 +94,9 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 
 你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。
 
-股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。"""
+股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
+
+群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。"""
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
@@ -104,7 +106,9 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
 你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。
 
-股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。"""
+股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
+
+群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。"""
 
 TOOLS = [
     {
@@ -436,8 +440,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         user_text = update.message.text
 
+        is_group = update.effective_chat.type in ("group", "supergroup")
+        sender_name = update.effective_user.first_name or str(update.effective_user.id)
+
         # 群組內只回應有 @ 提及 bot 的訊息
-        if update.effective_chat.type in ("group", "supergroup"):
+        if is_group:
             bot_username = context.bot.username
             if not (update.message.entities and any(
                 e.type == "mention" and user_text[e.offset:e.offset + e.length] == f"@{bot_username}"
@@ -446,10 +453,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             user_text = user_text.replace(f"@{bot_username}", "").strip()
 
-        sender_name = update.effective_user.first_name or str(update.effective_user.id)
         log_message(">>", sender_name, chat_id, user_text)
-        save_message(chat_id, "user", user_text)
-        history = load_history(chat_id)[-40:]  # 只取最近 40 條給 Claude，避免超過 token 限制
+
+        # 群組訊息加上發話者名字，讓 Claude 分清楚誰在說話
+        saved_text = f"[{sender_name}]: {user_text}" if is_group else user_text
+        save_message(chat_id, "user", saved_text)
+        history = load_history(chat_id)[-40:]
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
         system = SYSTEM_PROMPT_OWNER if update.effective_user.id == OWNER_ID else SYSTEM_PROMPT_DEFAULT
