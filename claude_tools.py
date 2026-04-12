@@ -24,6 +24,9 @@ tools:
   memory_save <chat_id> <內容>  儲存長期記憶
   memory_list <chat_id>         列出長期記憶
   memory_del <chat_id> <id>     刪除指定記憶
+  vision [問題]                 截圖並讓 Claude 分析畫面內容
+  find_image <圖片路徑>         在螢幕上找到指定圖片的位置
+  browser <動作> [參數]         瀏覽器自動化（open/click/type/get_text/screenshot/close）
 """
 
 import sys
@@ -331,6 +334,121 @@ def memory_del(chat_id: int, memory_id: int):
     print(f"✅ 已刪除記憶 ID {memory_id}")
 
 
+# ── Vision 截圖理解 ──────────────────────────────────
+
+def vision(question: str = "請描述這個畫面上有什麼，以及目前電腦在做什麼事。"):
+    from anthropic import Anthropic
+    import base64
+    client = Anthropic()
+    img = pyautogui.screenshot()
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    img_b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text", "text": question}
+            ]
+        }]
+    )
+    print(response.content[0].text)
+
+
+# ── 圖像定位 ─────────────────────────────────────────
+
+def find_image(template_path: str, confidence: float = 0.8):
+    try:
+        location = pyautogui.locateOnScreen(template_path, confidence=confidence)
+        if location:
+            cx, cy = pyautogui.center(location)
+            print(f"✅ 找到圖片：中心座標 ({cx}, {cy})，區域 {location}")
+            return cx, cy
+        else:
+            print("❌ 畫面上找不到該圖片")
+            return None
+    except Exception as e:
+        print(f"❌ 搜尋失敗：{e}")
+        return None
+
+
+# ── 瀏覽器自動化 ──────────────────────────────────────
+
+_browser_context = {}
+
+def browser(action: str, *args):
+    from playwright.sync_api import sync_playwright
+
+    if action == "open":
+        url = args[0] if args else "https://www.google.com"
+        def _open():
+            pw = sync_playwright().start()
+            b = pw.chromium.launch(headless=False)
+            page = b.new_page()
+            page.goto(url)
+            _browser_context["pw"] = pw
+            _browser_context["browser"] = b
+            _browser_context["page"] = page
+            print(f"✅ 已開啟：{url}")
+        _open()
+
+    elif action == "click":
+        page = _browser_context.get("page")
+        if not page:
+            print("❌ 瀏覽器未開啟，請先執行 browser open <url>")
+            return
+        selector = args[0]
+        page.click(selector)
+        print(f"✅ 已點擊：{selector}")
+
+    elif action == "type":
+        page = _browser_context.get("page")
+        if not page:
+            print("❌ 瀏覽器未開啟")
+            return
+        selector, text = args[0], " ".join(args[1:])
+        page.fill(selector, text)
+        print(f"✅ 已輸入到 {selector}：{text}")
+
+    elif action == "get_text":
+        page = _browser_context.get("page")
+        if not page:
+            print("❌ 瀏覽器未開啟")
+            return
+        selector = args[0] if args else "body"
+        text = page.inner_text(selector)
+        print(text[:2000])
+
+    elif action == "screenshot":
+        page = _browser_context.get("page")
+        if not page:
+            print("❌ 瀏覽器未開啟")
+            return
+        filename = SCREENSHOT_DIR / f"browser_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        page.screenshot(path=str(filename))
+        print(f"✅ 截圖已儲存：{filename}")
+
+    elif action == "goto":
+        page = _browser_context.get("page")
+        if not page:
+            print("❌ 瀏覽器未開啟")
+            return
+        page.goto(args[0])
+        print(f"✅ 已前往：{args[0]}")
+
+    elif action == "close":
+        if "browser" in _browser_context:
+            _browser_context["browser"].close()
+            _browser_context["pw"].stop()
+            _browser_context.clear()
+            print("✅ 瀏覽器已關閉")
+    else:
+        print(f"❌ 未知動作：{action}。可用：open / click / type / get_text / screenshot / goto / close")
+
+
 # ── 排程管理 ────────────────────────────────────────
 
 SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
@@ -431,6 +549,9 @@ if __name__ == "__main__":
         "memory_save":   lambda: memory_save(int(args[0]), " ".join(args[1:])),
         "memory_list":   lambda: memory_list(int(args[0])),
         "memory_del":    lambda: memory_del(int(args[0]), int(args[1])),
+        "vision":        lambda: vision(" ".join(args) if args else "請描述這個畫面上有什麼，以及目前電腦在做什麼事。"),
+        "find_image":    lambda: find_image(args[0], float(args[1]) if len(args) > 1 else 0.8),
+        "browser":       lambda: browser(args[0], *args[1:]),
     }
 
     if tool not in tools:

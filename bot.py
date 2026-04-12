@@ -209,6 +209,47 @@ TOOLS = [
         }
     },
     {
+        "name": "screen_vision",
+        "description": "截圖並分析畫面內容。當用戶問「電腦現在在做什麼」、「幫我看一下螢幕」、「截圖分析」時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string", "description": "要問關於畫面的問題，預設為「請描述畫面上有什麼」"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "find_image_on_screen",
+        "description": "在螢幕上找到指定圖片檔案的位置，回傳座標。用於視覺定位按鈕或元素。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "template_path": {"type": "string", "description": "要尋找的圖片檔案路徑"},
+                "confidence": {"type": "number", "description": "匹配信心度 0~1，預設 0.8"}
+            },
+            "required": ["template_path"]
+        }
+    },
+    {
+        "name": "browser_control",
+        "description": "控制瀏覽器自動化。可開啟網頁、點擊元素、輸入文字、擷取內容、截圖。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["open", "click", "type", "get_text", "screenshot", "goto", "close"],
+                    "description": "open=開啟網址, click=點擊選擇器, type=輸入文字, get_text=取得文字, screenshot=截圖, goto=前往網址, close=關閉"
+                },
+                "url": {"type": "string", "description": "網址（open/goto 時使用）"},
+                "selector": {"type": "string", "description": "CSS 選擇器（click/type/get_text 時使用）"},
+                "text": {"type": "string", "description": "要輸入的文字（type 時使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "long_term_memory",
         "description": "管理長期記憶。當用戶說了重要的事（偏好、習慣、重要資訊、個人資料）或要求記住某件事時，主動儲存。當用戶問你記不記得某件事時，先查詢記憶再回答。",
         "input_schema": {
@@ -471,6 +512,81 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
         return {"ok": False, "message": f"執行失敗：{str(e)}", "screenshot": None}
 
 
+_browser_ctx: dict = {}
+
+def execute_screen_vision(question: str = "請描述這個畫面上有什麼，以及目前電腦在做什麼事。") -> tuple:
+    """截圖並用 Claude vision 分析，回傳 (文字分析, 截圖bytes)"""
+    import base64
+    img = pyautogui.screenshot()
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    img_bytes = buf.getvalue()
+    img_b64 = base64.standard_b64encode(img_bytes).decode("utf-8")
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text", "text": question}
+            ]
+        }]
+    )
+    return response.content[0].text, img_bytes
+
+def execute_find_image(template_path: str, confidence: float = 0.8) -> str:
+    try:
+        location = pyautogui.locateOnScreen(template_path, confidence=confidence)
+        if location:
+            cx, cy = pyautogui.center(location)
+            return f"找到圖片，中心座標：({cx}, {cy})，區域：{location}"
+        return "畫面上找不到該圖片"
+    except Exception as e:
+        return f"搜尋失敗：{str(e)}"
+
+def execute_browser_control(action: str, url: str = "", selector: str = "", text: str = "") -> str:
+    try:
+        from playwright.sync_api import sync_playwright
+        if action == "open":
+            if _browser_ctx.get("page"):
+                _browser_ctx["browser"].close()
+                _browser_ctx["pw"].stop()
+                _browser_ctx.clear()
+            pw = sync_playwright().start()
+            b = pw.chromium.launch(headless=True)
+            page = b.new_page()
+            page.goto(url or "https://www.google.com")
+            _browser_ctx.update({"pw": pw, "browser": b, "page": page})
+            return f"已開啟：{url}"
+        page = _browser_ctx.get("page")
+        if not page:
+            return "瀏覽器未開啟，請先使用 open 開啟網頁"
+        if action == "goto":
+            page.goto(url)
+            return f"已前往：{url}"
+        elif action == "click":
+            page.click(selector)
+            return f"已點擊：{selector}"
+        elif action == "type":
+            page.fill(selector, text)
+            return f"已輸入到 {selector}：{text}"
+        elif action == "get_text":
+            return page.inner_text(selector or "body")[:2000]
+        elif action == "screenshot":
+            buf = io.BytesIO()
+            img_bytes = page.screenshot()
+            return f"__BROWSER_SCREENSHOT__:{img_bytes.hex()}"
+        elif action == "close":
+            _browser_ctx["browser"].close()
+            _browser_ctx["pw"].stop()
+            _browser_ctx.clear()
+            return "瀏覽器已關閉"
+        return f"未知動作：{action}"
+    except Exception as e:
+        return f"執行失敗：{str(e)}"
+
+
 SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
 BOT_SCRIPT = r"C:\Users\blue_\claude-telegram-bot\bot.py"
 
@@ -618,7 +734,87 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
 
-            if tool_use.name == "long_term_memory":
+            if tool_use.name == "screen_vision":
+                question = tool_use.input.get("question", "請描述這個畫面上有什麼，以及目前電腦在做什麼事。")
+                import asyncio
+                loop = asyncio.get_running_loop()
+                analysis, img_bytes = await loop.run_in_executor(None, execute_screen_vision, question)
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1024,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": analysis}]}
+                    ]
+                )
+                await update.message.reply_photo(photo=img_bytes, caption="📸 螢幕截圖")
+                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else analysis
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "find_image_on_screen":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(
+                    None, execute_find_image,
+                    tool_use.input["template_path"],
+                    tool_use.input.get("confidence", 0.8)
+                )
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": result}]}
+                    ]
+                )
+                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else result
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "browser_control":
+                inp = tool_use.input
+                import asyncio
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(
+                    None, lambda: execute_browser_control(
+                        action=inp["action"],
+                        url=inp.get("url", ""),
+                        selector=inp.get("selector", ""),
+                        text=inp.get("text", "")
+                    )
+                )
+                if result.startswith("__BROWSER_SCREENSHOT__:"):
+                    img_bytes = bytes.fromhex(result.split(":", 1)[1])
+                    await update.message.reply_photo(photo=img_bytes, caption="🌐 瀏覽器截圖")
+                    tool_result_text = "已截圖並傳送"
+                else:
+                    tool_result_text = result
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result_text}]}
+                    ]
+                )
+                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else tool_result_text
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "long_term_memory":
                 inp = tool_use.input
                 action = inp["action"]
                 if action == "save":
