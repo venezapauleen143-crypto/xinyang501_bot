@@ -175,6 +175,24 @@ TOOLS = [
             },
             "required": ["action"]
         }
+    },
+    {
+        "name": "manage_schedule",
+        "description": "管理 Windows 排程任務與 Bot 狀態。當用戶要查看排程、新增排程、刪除排程、重啟 bot、查看 bot 是否在跑時使用此工具。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "add", "delete", "bot_status", "bot_restart"],
+                    "description": "list=列出所有排程, add=新增排程, delete=刪除排程, bot_status=查看bot狀態, bot_restart=重啟bot"
+                },
+                "name": {"type": "string", "description": "排程任務名稱（add/delete 時使用）"},
+                "time": {"type": "string", "description": "執行時間，格式 HH:MM（add 時使用）"},
+                "script": {"type": "string", "description": "腳本完整路徑（add 時使用）"}
+            },
+            "required": ["action"]
+        }
     }
 ]
 
@@ -404,6 +422,74 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
         return {"ok": False, "message": f"執行失敗：{str(e)}", "screenshot": None}
 
 
+SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
+BOT_SCRIPT = r"C:\Users\blue_\claude-telegram-bot\bot.py"
+
+def execute_manage_schedule(action: str, name: str = "", time: str = "", script: str = "") -> str:
+    try:
+        if action == "list":
+            result = subprocess.run(
+                [SCHTASKS, "/Query", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, encoding="cp950", errors="replace"
+            )
+            lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+            out = "目前排程任務：\n"
+            for line in lines:
+                parts = line.strip('"').split('","')
+                if len(parts) >= 3:
+                    t_name = parts[0].replace("\\", "").strip()
+                    next_run = parts[1].strip()
+                    status = parts[2].strip()
+                    out += f"• {t_name} | 下次執行：{next_run} | {status}\n"
+            return out.strip()
+
+        elif action == "add":
+            subprocess.run([SCHTASKS, "/Create", "/TN", name,
+                            "/TR", f"pythonw {script}",
+                            "/SC", "DAILY", "/ST", time, "/F"],
+                           capture_output=True)
+            ps = (
+                f"$t = Get-ScheduledTask -TaskName '{name}';"
+                f"$t.Settings.WakeToRun = $true;"
+                f"$t.Settings.DisallowStartIfOnBatteries = $false;"
+                f"$t.Settings.StopIfGoingOnBatteries = $false;"
+                f"Set-ScheduledTask -TaskName '{name}' -Settings $t.Settings | Out-Null"
+            )
+            subprocess.run(["powershell.exe", "-Command", ps], capture_output=True)
+            return f"排程 [{name}] 已建立，每天 {time} 執行，電腦待機也會自動喚醒。"
+
+        elif action == "delete":
+            result = subprocess.run([SCHTASKS, "/Delete", "/TN", name, "/F"],
+                                    capture_output=True, text=True, encoding="cp950", errors="replace")
+            if result.returncode == 0:
+                return f"排程 [{name}] 已刪除。"
+            else:
+                return f"刪除失敗：{result.stderr.strip()}"
+
+        elif action == "bot_status":
+            result = subprocess.run(
+                ["powershell.exe", "-Command",
+                 "Get-Process pythonw -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count"],
+                capture_output=True, text=True
+            )
+            count = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
+            return f"Bot 執行中（{count} 個程序）✅" if count > 0 else "Bot 未執行 ❌"
+
+        elif action == "bot_restart":
+            subprocess.run(["powershell.exe", "-Command",
+                            "Stop-Process -Name pythonw -Force -ErrorAction SilentlyContinue"])
+            import time as t
+            t.sleep(1)
+            subprocess.Popen(["pythonw", BOT_SCRIPT], cwd=str(Path(BOT_SCRIPT).parent))
+            return "Bot 已重啟 ✅"
+
+        else:
+            return f"未知動作：{action}"
+
+    except Exception as e:
+        return f"執行失敗：{str(e)}"
+
+
 def fetch_image(prompt: str, width: int = 512, height: int = 512):
     hf_token = os.getenv("HF_TOKEN")
     headers = {"Authorization": f"Bearer {hf_token}"}
@@ -540,6 +626,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_photo(photo=result["screenshot"], caption="📸 桌面截圖")
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else result["message"]
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "manage_schedule":
+                inp = tool_use.input
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(
+                    None,
+                    lambda: execute_manage_schedule(
+                        action=inp["action"],
+                        name=inp.get("name", ""),
+                        time=inp.get("time", ""),
+                        script=inp.get("script", "")
+                    )
+                )
+                response = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    system=system,
+                    tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                    ]
+                )
+                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else tool_result
                 save_message(chat_id, "assistant", reply)
                 await update.message.reply_text(reply)
                 return

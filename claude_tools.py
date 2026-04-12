@@ -16,6 +16,11 @@ tools:
   open <程式>                   開啟程式
   scroll <up|down> [格數]       滾動
   pos                           取得目前滑鼠座標
+  bot_status                    查看 bot 是否在執行
+  bot_restart                   重啟 bot
+  schedule_list                 列出所有排程任務
+  schedule_add <名稱> <時間HH:MM> <腳本路徑>   新增每日排程（並設定可喚醒）
+  schedule_del <名稱>           刪除排程任務
 """
 
 import sys
@@ -290,6 +295,74 @@ def pos():
     print(f"目前滑鼠位置：({x}, {y})")
 
 
+# ── 排程管理 ────────────────────────────────────────
+
+SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
+BOT_SCRIPT = r"C:\Users\blue_\claude-telegram-bot\bot.py"
+
+def bot_status():
+    result = subprocess.run(
+        ["powershell.exe", "-Command",
+         "Get-Process pythonw -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count"],
+        capture_output=True, text=True
+    )
+    count = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
+    if count > 0:
+        print(f"✅ Bot 執行中（{count} 個 pythonw 程序）")
+    else:
+        print("❌ Bot 未執行")
+
+def bot_restart():
+    # 停掉所有 pythonw
+    subprocess.run(["powershell.exe", "-Command", "Stop-Process -Name pythonw -Force -ErrorAction SilentlyContinue"])
+    import time
+    time.sleep(1)
+    subprocess.Popen(["pythonw", BOT_SCRIPT], cwd=str(Path(BOT_SCRIPT).parent))
+    print("✅ Bot 已重啟")
+
+def schedule_list():
+    result = subprocess.run(
+        [SCHTASKS, "/Query", "/FO", "CSV", "/NH"],
+        capture_output=True, text=True, encoding="cp950", errors="replace"
+    )
+    lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+    print(f"{'任務名稱':<35} {'下次執行':<25} {'狀態'}")
+    print("-" * 75)
+    for line in lines:
+        parts = line.strip('"').split('","')
+        if len(parts) >= 3:
+            name = parts[0].replace("\\", "").strip()
+            next_run = parts[1].strip()
+            status = parts[2].strip()
+            print(f"{name:<35} {next_run:<25} {status}")
+
+def schedule_add(name: str, time_hhmm: str, script_path: str):
+    # 建立排程
+    subprocess.run([SCHTASKS, "/Create", "/TN", name,
+                    "/TR", f"pythonw {script_path}",
+                    "/SC", "DAILY", "/ST", time_hhmm, "/F"],
+                   capture_output=True)
+    # 設定喚醒
+    ps = (
+        f"$t = Get-ScheduledTask -TaskName '{name}';"
+        f"$t.Settings.WakeToRun = $true;"
+        f"$t.Settings.DisallowStartIfOnBatteries = $false;"
+        f"$t.Settings.StopIfGoingOnBatteries = $false;"
+        f"Set-ScheduledTask -TaskName '{name}' -Settings $t.Settings | Out-Null;"
+        f"Write-Host '已建立'"
+    )
+    subprocess.run(["powershell.exe", "-Command", ps], capture_output=True, text=True)
+    print(f"✅ 排程 [{name}] 已建立，每天 {time_hhmm} 執行，可喚醒電腦")
+
+def schedule_del(name: str):
+    result = subprocess.run([SCHTASKS, "/Delete", "/TN", name, "/F"],
+                            capture_output=True, text=True, encoding="cp950", errors="replace")
+    if result.returncode == 0:
+        print(f"✅ 排程 [{name}] 已刪除")
+    else:
+        print(f"❌ 刪除失敗：{result.stderr.strip()}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -301,19 +374,24 @@ if __name__ == "__main__":
     args = sys.argv[2:]
 
     tools = {
-        "weather":      lambda: get_weather(args[0]),
-        "stock":        lambda: get_stock(args[0], args[1] if len(args) > 1 else "1mo"),
-        "image":        lambda: generate_image(args[0], args[1] if len(args) > 1 else ""),
-        "screenshot":   lambda: screenshot(),
-        "click":        lambda: click(*args),
-        "double_click": lambda: double_click(*args),
-        "right_click":  lambda: right_click(*args),
-        "move":         lambda: move(*args),
-        "type":         lambda: type_text(" ".join(args)),
-        "press":        lambda: press_key(args[0]),
-        "open":         lambda: open_app(" ".join(args)),
-        "scroll":       lambda: scroll(*args),
-        "pos":          lambda: pos(),
+        "weather":       lambda: get_weather(args[0]),
+        "stock":         lambda: get_stock(args[0], args[1] if len(args) > 1 else "1mo"),
+        "image":         lambda: generate_image(args[0], args[1] if len(args) > 1 else ""),
+        "screenshot":    lambda: screenshot(),
+        "click":         lambda: click(*args),
+        "double_click":  lambda: double_click(*args),
+        "right_click":   lambda: right_click(*args),
+        "move":          lambda: move(*args),
+        "type":          lambda: type_text(" ".join(args)),
+        "press":         lambda: press_key(args[0]),
+        "open":          lambda: open_app(" ".join(args)),
+        "scroll":        lambda: scroll(*args),
+        "pos":           lambda: pos(),
+        "bot_status":    lambda: bot_status(),
+        "bot_restart":   lambda: bot_restart(),
+        "schedule_list": lambda: schedule_list(),
+        "schedule_add":  lambda: schedule_add(args[0], args[1], args[2]),
+        "schedule_del":  lambda: schedule_del(args[0]),
     }
 
     if tool not in tools:
