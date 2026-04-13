@@ -2762,19 +2762,57 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
 
         elif action == "screenshot":
             from PIL import Image as _PIL_Image
-            if monitor:
-                # 指定螢幕：用 dxcam（DirectX，不受 DPI 縮放影響）
+            # 螢幕 mapping（由測試確認）：
+            # 螢幕1 → dxcam output 0
+            # 螢幕2 → 獨立顯示輸出，用 DPI-unaware GDI BitBlt
+            # 螢幕3 → dxcam output 1
+            _DXCAM_MAP = {1: 0, 3: 1}  # Windows 螢幕編號 → dxcam output_idx
+
+            if monitor and monitor in _DXCAM_MAP:
                 try:
                     import dxcam as _dxcam
-                    _cam = _dxcam.create(output_idx=monitor - 1)
+                    _cam = _dxcam.create(output_idx=_DXCAM_MAP[monitor])
                     _frame = _cam.grab()
                     del _cam
                     if _frame is None:
-                        raise RuntimeError("grab() 回傳 None，請確認螢幕有畫面輸出")
+                        raise RuntimeError("grab() 回傳 None")
                     img = _PIL_Image.fromarray(_frame)
                     label = f"螢幕{monitor}"
                 except Exception as _e:
                     return {"ok": False, "message": f"截圖失敗：{_e}", "screenshot": None}
+
+            elif monitor == 2:
+                # 螢幕2 接在不同輸出，用 DPI-unaware GDI BitBlt
+                try:
+                    import ctypes as _ct, win32gui as _w32g, win32ui as _w32u, win32con as _w32c, mss as _mss
+                    with _mss.mss() as sct:
+                        _m2 = sct.monitors[2]  # mss monitors[2] = left=3840
+                    _left, _top = _m2["left"], _m2["top"]
+                    _w, _h = _m2["width"], _m2["height"]
+                    _user32 = _ct.windll.user32
+                    _old_ctx = _user32.SetThreadDpiAwarenessContext(_ct.c_void_p(-1))  # DPI_AWARENESS_CONTEXT_UNAWARE
+                    try:
+                        _hdesk = _w32g.GetDesktopWindow()
+                        _hwdc = _w32g.GetWindowDC(_hdesk)
+                        _mdc = _w32u.CreateDCFromHandle(_hwdc)
+                        _sdc = _mdc.CreateCompatibleDC()
+                        _bmp = _w32u.CreateBitmap()
+                        _bmp.CreateCompatibleBitmap(_mdc, _w, _h)
+                        _sdc.SelectObject(_bmp)
+                        _sdc.BitBlt((0, 0), (_w, _h), _mdc, (_left, _top), _w32c.SRCCOPY)
+                        _info = _bmp.GetInfo()
+                        _bits = _bmp.GetBitmapBits(True)
+                        img = _PIL_Image.frombuffer("RGB", (_info["bmWidth"], _info["bmHeight"]), _bits, "raw", "BGRX", 0, 1)
+                        _w32g.DeleteObject(_bmp.GetHandle())
+                        _sdc.DeleteDC()
+                        _mdc.DeleteDC()
+                        _w32g.ReleaseDC(_hdesk, _hwdc)
+                    finally:
+                        _user32.SetThreadDpiAwarenessContext(_old_ctx)
+                    label = "螢幕2"
+                except Exception as _e:
+                    return {"ok": False, "message": f"螢幕2截圖失敗：{_e}", "screenshot": None}
+
             else:
                 # 全螢幕：用 mss
                 import mss as _mss
@@ -2782,6 +2820,7 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
                     sct_img = sct.grab(sct.monitors[0])
                 img = _PIL_Image.frombytes("RGB", sct_img.size, sct_img.rgb)
                 label = "全螢幕"
+
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             screenshot_bytes = buf.getvalue()
