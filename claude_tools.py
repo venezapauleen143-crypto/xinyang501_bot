@@ -2633,15 +2633,15 @@ def video_gen(mode: str = "slideshow", output: str = "", **kwargs):
         return ImageFont.load_default()
 
     def _tts_sync(text: str, voice: str, out_path: str):
-        import sys
-        script = (
-            f"import asyncio, edge_tts\n"
-            f"asyncio.run(edge_tts.Communicate({repr(text)}, {repr(voice)}).save({repr(out_path)}))\n"
-        )
-        r = subprocess.run([sys.executable, "-c", script],
-                           capture_output=True, text=True, timeout=60)
+        import asyncio, edge_tts
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(edge_tts.Communicate(text, voice).save(out_path))
+        finally:
+            loop.close()
         if not Path(out_path).exists():
-            raise RuntimeError(f"TTS 失敗：{r.stderr[-200:]}")
+            raise RuntimeError("TTS 語音檔案未生成")
 
     def _get_audio_dur(audio_path: str) -> float:
         r = subprocess.run([ffmpeg_exe, "-i", audio_path],

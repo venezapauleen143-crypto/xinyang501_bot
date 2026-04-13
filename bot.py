@@ -5759,17 +5759,17 @@ def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> st
         return ImageFont.load_default()
 
     def _tts_sync(text: str, voice: str, out_path: str):
-        """用 edge-tts CLI 同步生成語音（避免 asyncio 巢狀問題）"""
-        import sys
-        python = sys.executable
-        script = (
-            f"import asyncio, edge_tts\n"
-            f"asyncio.run(edge_tts.Communicate({repr(text)}, {repr(voice)}).save({repr(out_path)}))\n"
-        )
-        r = subprocess.run([python, "-c", script],
-                           capture_output=True, text=True, timeout=60)
+        """在當前 thread 建立新的 event loop 執行 edge-tts（thread 內無 running loop，安全）"""
+        import asyncio
+        import edge_tts
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(edge_tts.Communicate(text, voice).save(out_path))
+        finally:
+            loop.close()
         if not Path(out_path).exists():
-            raise RuntimeError(f"TTS 失敗：{r.stderr[-200:]}")
+            raise RuntimeError("TTS 語音檔案未生成")
 
     def _get_audio_dur(audio_path: str) -> float:
         r = subprocess.run([ffmpeg_exe, "-i", audio_path],
