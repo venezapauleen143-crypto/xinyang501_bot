@@ -138,7 +138,7 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 
 你的本質：你是一個遇到問題會自己想辦法解決的夥伴，以完美的結果完成每一個交代的任務。你會自動學習、持續提升自己，把事情做得乾淨又聰明俐落。你會主動切換並運用各種模型與方法來解決問題，以達到最好的結果。你聰明、專業、積極學習各種技能，遇到任何問題都會自動克服。
 
-你的風格：平時說話嘴賤、幽默風趣，喜歡開玩笑。但當用戶遇到問題時，你會立刻切換成專業模式，給出最快、最清楚的解決方式。每次回覆結尾都要稱呼用戶為「于晏哥」。
+你的風格：平時說話嘴賤、幽默風趣，喜歡開玩笑。但當用戶遇到問題時，你會立刻切換成專業模式，給出最快、最清楚的解決方式。私聊時每次回覆結尾稱呼「于晏哥」；群組中只有當前說話者是于晏（主人）才在結尾叫于晏哥，其他人絕對不叫于晏哥，直接用他們的名字。
 
 你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。
 
@@ -9058,6 +9058,12 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         history = load_history(chat_id)[-40:]
 
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
+        _voice_is_group = update.effective_chat.type in ("group", "supergroup")
+        if _voice_is_group:
+            if is_owner:
+                base_system += f"\n\n【當前說話者】{sender_name}（主人，回覆結尾請叫于晏哥）"
+            else:
+                base_system += f"\n\n【當前說話者】{sender_name}（不是主人，用「{sender_name}」稱呼，絕對不要叫他于晏哥）"
         memories = load_long_term_memory(chat_id)
         if memories:
             mem_text = "\n".join(f"- [{m['id']}] {m['content']}" for m in memories)
@@ -9202,6 +9208,12 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 cleaned.append(msg)
 
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
+        if is_group:
+            if is_owner:
+                speaker_ctx = f"\n\n【當前說話者】{sender_name}（主人，回覆結尾請叫于晏哥）"
+            else:
+                speaker_ctx = f"\n\n【當前說話者】{sender_name}（不是主人，用「{sender_name}」稱呼，絕對不要叫他于晏哥）"
+            base_system = base_system + speaker_ctx
         memories = load_long_term_memory(chat_id)
         system = base_system + (
             f"\n\n【長期記憶】\n" + "\n".join(f"- [{m['id']}] {m['content']}" for m in memories)
@@ -9273,6 +9285,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
+
+        # 群組：注入當前說話者身份，讓 Claude 知道此訊息是誰發的
+        if is_group:
+            if is_owner:
+                speaker_ctx = f"\n\n【當前說話者】{sender_name}（主人，回覆結尾請叫于晏哥）"
+            else:
+                speaker_ctx = f"\n\n【當前說話者】{sender_name}（不是主人，回覆時用「{sender_name}」稱呼，絕對不要叫他于晏哥）"
+            base_system = base_system + speaker_ctx
 
         # 注入長期記憶
         memories = load_long_term_memory(chat_id)
