@@ -9094,12 +9094,22 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         is_group = update.effective_chat.type in ("group", "supergroup")
         caption = update.message.caption or ""
 
-        # 群組內只回應有 @ 提及 bot 的訊息
+        # 群組內：用 caption_entities 偵測 @mention（比字串比對更準確）
         if is_group:
-            bot_username = context.bot.username
-            if f"@{bot_username}" not in caption:
+            bot_username = (context.bot.username or "").lower()
+            caption_entities = update.message.caption_entities or []
+            mentioned = any(
+                e.type == "mention" and caption[e.offset:e.offset + e.length].lstrip("@").lower() == bot_username
+                for e in caption_entities
+            )
+            if not mentioned:
                 return
-            caption = caption.replace(f"@{bot_username}", "").strip()
+            # 去除 @mention 文字
+            clean_caption = caption
+            for e in sorted(caption_entities, key=lambda x: x.offset, reverse=True):
+                if e.type == "mention":
+                    clean_caption = clean_caption[:e.offset] + clean_caption[e.offset + e.length:]
+            caption = clean_caption.strip()
 
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
@@ -9108,32 +9118,37 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         photo_file = await context.bot.get_file(photo.file_id)
         photo_bytes = await photo_file.download_as_bytearray()
 
-        # 轉成 base64
         import base64
         img_b64 = base64.b64encode(bytes(photo_bytes)).decode("utf-8")
 
-        # 判斷格式（Telegram 預設是 JPEG）
-        media_type = "image/jpeg"
-
-        # 組裝帶圖片的 user message
-        question = caption if caption else "請描述這張圖片的內容，並說明你觀察到什麼。"
+        question = caption if caption else "請描述這張圖片的內容，有什麼特別的地方？"
         user_content = [
-            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_b64}},
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
             {"type": "text", "text": question}
         ]
 
-        # 儲存文字部分到歷史
-        saved_text = f"[{sender_name}]: [傳送了一張圖片] {caption}" if caption else f"[{sender_name}]: [傳送了一張圖片，請描述內容]"
+        # 儲存純文字版到 DB（不存 base64，避免 DB 爆炸）
+        saved_text = f"[圖片] {caption}" if caption else "[圖片] 請描述"
         if is_group:
-            saved_text = f"[{sender_name}]: [圖片] {caption}"
-        save_message(chat_id, "user", saved_text if is_group else (f"[圖片] {caption}" if caption else "[圖片] 請描述"))
+            saved_text = f"[{sender_name}]: [圖片] {caption}" if caption else f"[{sender_name}]: [圖片] 請描述"
+        save_message(chat_id, "user", saved_text)
 
-        # 取歷史（不含最後這則，因為帶圖片要特別處理）
-        history = load_history(chat_id)
-        # 把最後那則（剛存的）拿出來換成帶圖片的版本
+        # 從 DB 取歷史，把剛存的最後一則換成帶圖片的版本
+        history = load_history(chat_id)[-40:]
+        # 確保最後一則是剛存的 user 訊息，替換成多模態版本
         if history and history[-1]["role"] == "user":
-            history = history[:-1]
-        history.append({"role": "user", "content": user_content})
+            history[-1] = {"role": "user", "content": user_content}
+        else:
+            history.append({"role": "user", "content": user_content})
+
+        # 確保不會有連續相同 role（Anthropic API 規定要交替）
+        cleaned_history = []
+        for msg in history:
+            if cleaned_history and cleaned_history[-1]["role"] == msg["role"]:
+                # 同 role 就略過前一則（保留最新的）
+                cleaned_history[-1] = msg
+            else:
+                cleaned_history.append(msg)
 
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
         memories = load_long_term_memory(chat_id)
@@ -9147,16 +9162,28 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
             model="claude-sonnet-4-6",
             max_tokens=1024,
             system=system,
-            messages=history[-40:]
+            messages=cleaned_history
         )
 
-        reply = response.content[0].text if response.content else "（無回應）"
+        # 安全取回文字（避免 tool_use block 炸掉）
+        reply = ""
+        for block in response.content:
+            if hasattr(block, "text"):
+                reply = block.text
+                break
+        if not reply:
+            reply = "（無法解析回應）"
+
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬[圖]", chat_id, reply)
         await _send_reply(update, reply)
 
     except Exception as e:
-        await update.message.reply_text(f"❌ 圖片分析失敗：{e}")
+        logging.error(f"handle_photo_message error: {e}", exc_info=True)
+        try:
+            await update.message.reply_text(f"❌ 圖片分析失敗：{e}")
+        except Exception:
+            pass
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
