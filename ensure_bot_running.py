@@ -15,7 +15,8 @@ def is_bot_running():
 
 def start_bot():
     subprocess.Popen(
-        ["pythonw", r"C:\Users\blue_\claude-telegram-bot\bot.py"],
+        [r"C:\Users\blue_\AppData\Local\Python\bin\pythonw.exe",
+         r"C:\Users\blue_\claude-telegram-bot\bot.py"],
         cwd=r"C:\Users\blue_\claude-telegram-bot"
     )
     print("Bot 已啟動")

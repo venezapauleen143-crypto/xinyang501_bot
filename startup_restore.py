@@ -11,6 +11,7 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
+PYTHONW = r"C:\Users\blue_\AppData\Local\Python\bin\pythonw.exe"
 BOT_SCRIPT = r"C:\Users\blue_\claude-telegram-bot\bot.py"
 BOT_DIR = r"C:\Users\blue_\claude-telegram-bot"
 REPO_PATH = r"C:\Users\blue_\xinyang501_bot"
@@ -51,16 +52,11 @@ def get_existing_tasks():
     return tasks
 
 def create_task(name, time_hhmm, script):
-    subprocess.run([SCHTASKS, "/Create", "/TN", name,
-                    "/TR", f"pythonw {script}",
-                    "/SC", "DAILY", "/ST", time_hhmm, "/F"],
-                   capture_output=True)
     ps = (
-        f"$t = Get-ScheduledTask -TaskName '{name}';"
-        f"$t.Settings.WakeToRun = $true;"
-        f"$t.Settings.DisallowStartIfOnBatteries = $false;"
-        f"$t.Settings.StopIfGoingOnBatteries = $false;"
-        f"Set-ScheduledTask -TaskName '{name}' -Settings $t.Settings | Out-Null"
+        f"$action = New-ScheduledTaskAction -Execute '{PYTHONW}' -Argument '{script}';"
+        f"$trigger = New-ScheduledTaskTrigger -Daily -At '{time_hhmm}';"
+        f"$settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;"
+        f"Register-ScheduledTask -TaskName '{name}' -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null"
     )
     subprocess.run(["powershell.exe", "-Command", ps], capture_output=True)
     log(f"✅ 排程 [{name}] 已建立（每天 {time_hhmm}，可喚醒）")
