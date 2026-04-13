@@ -9079,7 +9079,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         reply_text = response.content[0].text if response.content else "..."
-        if _voice_is_group and not is_owner:
+        if not is_owner:
             reply_text = _fix_group_reply(reply_text, sender_name)
         save_message(chat_id, "assistant", reply_text)
         log_message("<<", "小牛馬", chat_id, reply_text)
@@ -9253,7 +9253,7 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         reply = next((b.text for b in response.content if hasattr(b, "text")), "（無法解析回應）")
-        if is_group and not is_owner:
+        if not is_owner:
             reply = _fix_group_reply(reply, sender_name)
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬[圖]", chat_id, reply)
@@ -9283,7 +9283,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sender_name = "于晏" if is_owner else (update.effective_user.first_name or str(update.effective_user.id))
 
         async def _fr(text: str):
-            if is_group and not is_owner:
+            if not is_owner:
                 text = _fix_group_reply(text, sender_name)
             await _send_reply(update, text)
 
