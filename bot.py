@@ -1397,7 +1397,7 @@ TOOLS = [
             "properties": {
                 "action": {"type": "string", "enum": ["speak","list_voices"]},
                 "text": {"type": "string"},
-                "voice": {"type": "string", "description": "語音名稱，如 zh-CN-YunjianNeural（女）或 zh-CN-YunjianNeural（男）"}
+                "voice": {"type": "string", "description": "語音名稱，如 zh-TW-HsiaoChenNeural（女）或 zh-TW-HsiaoChenNeural（男）"}
             },
             "required": ["action"]
         }
@@ -1409,7 +1409,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "要轉換成語音的文字內容"},
-                "voice": {"type": "string", "description": "語音名稱，預設 zh-CN-YunjianNeural（女聲）。男聲用 zh-CN-YunjianNeural"}
+                "voice": {"type": "string", "description": "語音名稱，預設 zh-TW-HsiaoChenNeural（女聲）。男聲用 zh-TW-HsiaoChenNeural"}
             },
             "required": ["text"]
         }
@@ -1929,7 +1929,7 @@ TOOLS = [
                 "image": {"type": "string", "description": "背景圖片路徑（tts_video使用，選填）"},
                 "duration": {"type": "number", "description": "時長秒數（text_video/screen_record）或每張停留秒數（slideshow）"},
                 "fps": {"type": "number", "description": "幀率（選填，預設24）"},
-                "voice": {"type": "string", "description": "TTS聲音（tts_video，預設zh-CN-YunjianNeural）"},
+                "voice": {"type": "string", "description": "TTS聲音（tts_video，預設zh-TW-HsiaoChenNeural）"},
                 "bg_color": {"type": "array", "description": "背景顏色RGB（text_video）"},
                 "font_color": {"type": "array", "description": "字體顏色RGB（text_video）"},
                 "font_size": {"type": "number", "description": "字體大小（text_video）"},
@@ -3233,7 +3233,19 @@ def clean_for_tts(text: str) -> str:
     return text
 
 
-def generate_voice_ogg(text: str, voice: str = "zh-CN-YunjianNeural") -> bytes:
+def _wrap_ssml(text: str, voice: str, rate: str = "-5%", pitch: str = "-2Hz") -> str:
+    """包裝 SSML 讓語音更自然（稍慢語速、略低音調）"""
+    import html
+    safe = html.escape(text)
+    return (
+        f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-TW">'
+        f'<voice name="{voice}">'
+        f'<prosody rate="{rate}" pitch="{pitch}">{safe}</prosody>'
+        f'</voice></speak>'
+    )
+
+
+def generate_voice_ogg(text: str, voice: str = "zh-TW-HsiaoChenNeural") -> bytes:
     """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）"""
     text = clean_for_tts(text)
     import edge_tts, asyncio, tempfile, subprocess as sp
@@ -3245,9 +3257,11 @@ def generate_voice_ogg(text: str, voice: str = "zh-CN-YunjianNeural") -> bytes:
     tmp_ogg = tempfile.NamedTemporaryFile(suffix=".ogg", delete=False)
     tmp_ogg.close()
 
-    # 生成 MP3
+    # 生成 MP3（用 SSML 讓語調更自然）
     async def _gen():
-        await edge_tts.Communicate(text, voice).save(tmp_mp3.name)
+        ssml = _wrap_ssml(text, voice)
+        comm = edge_tts.Communicate(ssml, voice, rate="-5%", pitch="-2Hz")
+        await comm.save(tmp_mp3.name)
     asyncio.run(_gen())
 
     # 轉換成 OGG OPUS（Telegram voice 格式）
@@ -3263,14 +3277,15 @@ def generate_voice_ogg(text: str, voice: str = "zh-CN-YunjianNeural") -> bytes:
     return data
 
 
-def execute_tts_advanced(action, text="", voice="zh-CN-YunjianNeural"):
+def execute_tts_advanced(action, text="", voice="zh-TW-HsiaoChenNeural"):
     try:
         import edge_tts, asyncio
         if action == "speak":
             out = str(Path.home() / "Desktop" / f"tts_{datetime.now().strftime('%H%M%S')}.mp3")
             _clean = clean_for_tts(text)
             async def _gen():
-                await edge_tts.Communicate(_clean, voice).save(out)
+                comm = edge_tts.Communicate(_clean, voice, rate="-5%", pitch="-2Hz")
+                await comm.save(out)
             asyncio.run(_gen())
             subprocess.Popen(["powershell.exe","-Command",f"Start-Process '{out}'"])
             return f"✅ Edge TTS 語音已播放：{voice}"
@@ -6221,7 +6236,8 @@ def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> st
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(edge_tts.Communicate(text, voice).save(out_path))
+            comm = edge_tts.Communicate(text, voice, rate="-5%", pitch="-2Hz")
+            loop.run_until_complete(comm.save(out_path))
         finally:
             loop.close()
         if not Path(out_path).exists():
@@ -6298,7 +6314,7 @@ def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> st
         elif mode == "tts_video":
             text      = kwargs.get("text", "")
             img_path  = kwargs.get("image", "")
-            voice     = kwargs.get("voice", "zh-CN-YunjianNeural")
+            voice     = kwargs.get("voice", "zh-TW-HsiaoChenNeural")
             subtitle  = kwargs.get("subtitle", True)
             if not text:
                 return "❌ 請提供 text 參數"
@@ -7671,7 +7687,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         import asyncio, io as _io
         loop = asyncio.get_running_loop()
         try:
-            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-CN-YunjianNeural")
+            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-TW-HsiaoChenNeural")
             await update.message.reply_voice(voice=_io.BytesIO(ogg_data))
         except Exception:
             await update.message.reply_text(reply_text)
@@ -8060,7 +8076,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["action"], **{k:v for k,v in tool_use.input.items() if k!="action"}),
                 "tts_advanced": lambda: execute_tts_advanced(
                     tool_use.input["action"], tool_use.input.get("text",""),
-                    tool_use.input.get("voice","zh-CN-YunjianNeural")),
+                    tool_use.input.get("voice","zh-TW-HsiaoChenNeural")),
                 "todo_list": lambda: execute_todo(
                     tool_use.input["action"], tool_use.input.get("task",""),
                     tool_use.input.get("id",0)),
@@ -8292,7 +8308,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     image=tool_use.input.get("image",""),
                     duration=tool_use.input.get("duration",5),
                     fps=tool_use.input.get("fps",24),
-                    voice=tool_use.input.get("voice","zh-CN-YunjianNeural"),
+                    voice=tool_use.input.get("voice","zh-TW-HsiaoChenNeural"),
                     bg_color=tool_use.input.get("bg_color",[30,30,40]),
                     font_color=tool_use.input.get("font_color",[255,255,255]),
                     font_size=tool_use.input.get("font_size",60),
@@ -8303,7 +8319,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 import asyncio
                 loop = asyncio.get_running_loop()
                 text = tool_use.input["text"]
-                voice = tool_use.input.get("voice", "zh-CN-YunjianNeural")
+                voice = tool_use.input.get("voice", "zh-TW-HsiaoChenNeural")
                 await update.message.reply_chat_action("record_voice")
                 try:
                     ogg_data = await loop.run_in_executor(None, generate_voice_ogg, text, voice)
@@ -8366,7 +8382,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     image=tool_use.input.get("image", ""),
                     duration=tool_use.input.get("duration", 5),
                     fps=tool_use.input.get("fps", 24),
-                    voice=tool_use.input.get("voice", "zh-CN-YunjianNeural"),
+                    voice=tool_use.input.get("voice", "zh-TW-HsiaoChenNeural"),
                     bg_color=tool_use.input.get("bg_color", [30, 30, 40]),
                     font_color=tool_use.input.get("font_color", [255, 255, 255]),
                     font_size=tool_use.input.get("font_size", 60),
