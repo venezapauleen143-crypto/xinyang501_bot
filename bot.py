@@ -611,7 +611,7 @@ TOOLS = [
             "properties": {
                 "action": {"type": "string", "enum": ["speak","list_voices"]},
                 "text": {"type": "string"},
-                "voice": {"type": "string", "description": "語音名稱，如 zh-TW-HsiaoChenNeural（女）或 zh-TW-YunJheNeural（男）"}
+                "voice": {"type": "string", "description": "語音名稱，如 zh-TW-YunJheNeural（女）或 zh-TW-YunJheNeural（男）"}
             },
             "required": ["action"]
         }
@@ -623,7 +623,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "要轉換成語音的文字內容"},
-                "voice": {"type": "string", "description": "語音名稱，預設 zh-TW-HsiaoChenNeural（女聲）。男聲用 zh-TW-YunJheNeural"}
+                "voice": {"type": "string", "description": "語音名稱，預設 zh-TW-YunJheNeural（女聲）。男聲用 zh-TW-YunJheNeural"}
             },
             "required": ["text"]
         }
@@ -2097,7 +2097,7 @@ def execute_system_tools(action, **kwargs):
         return f"❌ 失敗：{e}"
 
 
-def generate_voice_ogg(text: str, voice: str = "zh-TW-HsiaoChenNeural") -> bytes:
+def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
     """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）"""
     import edge_tts, asyncio, tempfile, subprocess as sp
     import imageio_ffmpeg
@@ -2126,7 +2126,7 @@ def generate_voice_ogg(text: str, voice: str = "zh-TW-HsiaoChenNeural") -> bytes
     return data
 
 
-def execute_tts_advanced(action, text="", voice="zh-TW-HsiaoChenNeural"):
+def execute_tts_advanced(action, text="", voice="zh-TW-YunJheNeural"):
     try:
         import edge_tts, asyncio
         if action == "speak":
@@ -3416,7 +3416,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["action"], **{k:v for k,v in tool_use.input.items() if k!="action"}),
                 "tts_advanced": lambda: execute_tts_advanced(
                     tool_use.input["action"], tool_use.input.get("text",""),
-                    tool_use.input.get("voice","zh-TW-HsiaoChenNeural")),
+                    tool_use.input.get("voice","zh-TW-YunJheNeural")),
                 "todo_list": lambda: execute_todo(
                     tool_use.input["action"], tool_use.input.get("task",""),
                     tool_use.input.get("id",0)),
@@ -3432,7 +3432,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 import asyncio
                 loop = asyncio.get_running_loop()
                 text = tool_use.input["text"]
-                voice = tool_use.input.get("voice", "zh-TW-HsiaoChenNeural")
+                voice = tool_use.input.get("voice", "zh-TW-YunJheNeural")
                 await update.message.reply_chat_action("record_voice")
                 try:
                     ogg_data = await loop.run_in_executor(None, generate_voice_ogg, text, voice)
