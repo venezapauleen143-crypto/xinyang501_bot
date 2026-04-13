@@ -92,6 +92,35 @@ tools:
   clipboard_watch <秒數>        監控剪貼簿變化
   qr_gen <內容> [路徑]          生成 QR Code
   qr_scan [圖片路徑]            掃描 QR Code（截圖或指定圖片）
+  screen_record [秒數] [輸出路徑]  螢幕錄影存 mp4
+  webcam [輸出路徑]             攝影機拍照
+  translate <文字> [目標語言] [來源語言]  翻譯（目標預設 zh-TW）
+  chart <類型> <資料JSON> [標題] [輸出路徑]  生成圖表（line/bar/pie）
+  pptx_read <路徑>              讀取 PowerPoint
+  pptx_create <路徑> <slides_json>  建立 PowerPoint
+  api_call <方法> <URL> [headers_json] [body_json]  呼叫 REST API
+  watchdog <程序名> <腳本路徑> [秒數]  守護程序，崩潰自動重啟
+  ssh_run <host> <user> <password> <指令>  SSH 執行遠端指令
+  sftp_upload <host> <user> <pass> <local> <remote>  SFTP 上傳
+  sftp_download <host> <user> <pass> <remote> <local>  SFTP 下載
+  net_ping <host> [次數]        Ping 網路主機
+  net_traceroute <host>         路由追蹤
+  net_portscan <host> [ports]   Port 掃描
+  win_service <list|start|stop> [服務名]  Windows 服務管理
+  pdf_merge <paths_json> <輸出路徑>  合併 PDF
+  pdf_split <路徑> <輸出資料夾>  分割 PDF 每頁
+  pdf_watermark <路徑> <文字> [輸出路徑]  PDF 加浮水印
+  audio_convert <輸入> <輸出>   音訊格式轉換
+  audio_trim <輸入> <起始ms> <結束ms> [輸出]  音訊剪輯
+  discord_notify <webhook_url> <訊息>  Discord 推播
+  line_notify <token> <訊息>    LINE Notify 推播
+  disk_clean <list|clean>       磁碟暫存清理
+  backup <來源> <目標資料夾>    備份壓縮
+  registry_read <key_path> [value_name]  讀取登錄檔
+  registry_write <key_path> <value_name> <value>  寫入登錄檔
+  video_screenshot <路徑> [秒數] [輸出]  影片截取畫面
+  video_trim <路徑> <起始秒> <結束秒> [輸出]  影片剪輯
+  monitor_list                  列出所有螢幕資訊
 """
 
 import sys
@@ -1544,6 +1573,438 @@ def qr_scan(image_path: str = ""):
         print(f"❌ 掃描失敗：{e}")
 
 
+# ── 螢幕錄影 ────────────────────────────────────────
+
+def screen_record(duration: float = 10.0, output: str = ""):
+    try:
+        import mss, cv2, numpy as np, time as t
+        out_path = output or str(Path.home() / "Desktop" / f"record_{datetime.now().strftime('%H%M%S')}.mp4")
+        with mss.mss() as sct:
+            mon = sct.monitors[1]
+            w, h = mon["width"], mon["height"]
+            fps = 10
+            writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+            end = t.time() + duration
+            while t.time() < end:
+                frame = np.array(sct.grab(mon))
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                writer.write(frame)
+                t.sleep(1 / fps)
+            writer.release()
+        print(f"✅ 錄影完成：{out_path}")
+    except Exception as e:
+        print(f"❌ 錄影失敗：{e}")
+
+
+def webcam_capture(output: str = ""):
+    try:
+        import cv2
+        out_path = output or str(Path.home() / "Desktop" / f"webcam_{datetime.now().strftime('%H%M%S')}.jpg")
+        cap = cv2.VideoCapture(0)
+        ret, frame = cap.read()
+        cap.release()
+        if ret:
+            cv2.imwrite(out_path, frame)
+            print(f"✅ 已拍照：{out_path}")
+        else:
+            print("❌ 無法存取攝影機")
+    except Exception as e:
+        print(f"❌ 攝影機失敗：{e}")
+
+
+# ── 翻譯 ────────────────────────────────────────────
+
+def translate(text: str, target: str = "zh-TW", source: str = "auto"):
+    try:
+        from deep_translator import GoogleTranslator
+        result = GoogleTranslator(source=source, target=target).translate(text)
+        print(result)
+    except Exception as e:
+        print(f"❌ 翻譯失敗：{e}")
+
+
+# ── 資料視覺化 ───────────────────────────────────────
+
+def chart(chart_type: str, data_json: str, title: str = "", output: str = ""):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import json
+        data = json.loads(data_json)
+        out_path = output or str(Path.home() / "Desktop" / f"chart_{datetime.now().strftime('%H%M%S')}.png")
+        fig, ax = plt.subplots()
+        if chart_type == "line":
+            for label, values in data.items():
+                ax.plot(values, label=label)
+            ax.legend()
+        elif chart_type == "bar":
+            ax.bar(list(data.keys()), list(data.values()))
+        elif chart_type == "pie":
+            ax.pie(list(data.values()), labels=list(data.keys()), autopct="%1.1f%%")
+        if title:
+            ax.set_title(title)
+        plt.tight_layout()
+        plt.savefig(out_path)
+        plt.close()
+        print(f"✅ 圖表已存：{out_path}")
+    except Exception as e:
+        print(f"❌ 圖表生成失敗：{e}")
+
+
+# ── PowerPoint ───────────────────────────────────────
+
+def pptx_read(path: str):
+    try:
+        from pptx import Presentation
+        prs = Presentation(path)
+        for i, slide in enumerate(prs.slides, 1):
+            texts = [sh.text for sh in slide.shapes if sh.has_text_frame]
+            print(f"[投影片 {i}] " + " | ".join(t for t in texts if t.strip()))
+    except Exception as e:
+        print(f"❌ 讀取失敗：{e}")
+
+def pptx_create(path: str, slides_json: str):
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches, Pt
+        import json
+        slides = json.loads(slides_json)
+        prs = Presentation()
+        for s in slides:
+            layout = prs.slide_layouts[1]
+            slide = prs.slides.add_slide(layout)
+            if "title" in s:
+                slide.shapes.title.text = s["title"]
+            if "body" in s and slide.placeholders[1]:
+                slide.placeholders[1].text = s["body"]
+        prs.save(path)
+        print(f"✅ 已建立簡報：{path}")
+    except Exception as e:
+        print(f"❌ 建立失敗：{e}")
+
+
+# ── REST API ─────────────────────────────────────────
+
+def api_call(method: str, url: str, headers_json: str = "{}", body_json: str = "{}"):
+    try:
+        import json
+        headers = json.loads(headers_json)
+        body = json.loads(body_json)
+        resp = requests.request(method.upper(), url, headers=headers, json=body if body else None, timeout=30)
+        try:
+            print(json.dumps(resp.json(), ensure_ascii=False, indent=2)[:3000])
+        except Exception:
+            print(resp.text[:3000])
+    except Exception as e:
+        print(f"❌ API 呼叫失敗：{e}")
+
+
+# ── 程序守護 ─────────────────────────────────────────
+
+def watchdog(process_name: str, script: str, duration: float = 60.0):
+    try:
+        import psutil, time as t
+        print(f"🐕 開始監控 [{process_name}]，持續 {duration} 秒...")
+        end = t.time() + duration
+        restarts = 0
+        while t.time() < end:
+            running = any(p.name().lower() == process_name.lower() for p in psutil.process_iter())
+            if not running:
+                subprocess.Popen(["pythonw" if script.endswith(".py") else script, script] if script.endswith(".py") else [script])
+                restarts += 1
+                print(f"⚠️ [{process_name}] 已重啟（第 {restarts} 次）")
+            t.sleep(5)
+        print(f"✅ 守護結束，共重啟 {restarts} 次")
+    except Exception as e:
+        print(f"❌ 守護失敗：{e}")
+
+
+# ── SSH ──────────────────────────────────────────────
+
+def ssh_run(host: str, user: str, password: str, command: str, port: int = 22):
+    try:
+        import paramiko
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(host, port=port, username=user, password=password, timeout=15)
+        _, stdout, stderr = client.exec_command(command)
+        out = stdout.read().decode(errors="replace")
+        err = stderr.read().decode(errors="replace")
+        client.close()
+        print((out + err).strip() or "（執行完畢，無輸出）")
+    except Exception as e:
+        print(f"❌ SSH 失敗：{e}")
+
+def sftp_upload(host: str, user: str, password: str, local: str, remote: str, port: int = 22):
+    try:
+        import paramiko
+        t = paramiko.Transport((host, port))
+        t.connect(username=user, password=password)
+        sftp = paramiko.SFTPClient.from_transport(t)
+        sftp.put(local, remote)
+        sftp.close(); t.close()
+        print(f"✅ 已上傳：{local} → {remote}")
+    except Exception as e:
+        print(f"❌ SFTP 上傳失敗：{e}")
+
+def sftp_download(host: str, user: str, password: str, remote: str, local: str, port: int = 22):
+    try:
+        import paramiko
+        t = paramiko.Transport((host, port))
+        t.connect(username=user, password=password)
+        sftp = paramiko.SFTPClient.from_transport(t)
+        sftp.get(remote, local)
+        sftp.close(); t.close()
+        print(f"✅ 已下載：{remote} → {local}")
+    except Exception as e:
+        print(f"❌ SFTP 下載失敗：{e}")
+
+
+# ── 網路診斷 ─────────────────────────────────────────
+
+def net_ping(host: str, count: int = 4):
+    result = subprocess.run(["ping", "-n", str(count), host], capture_output=True, text=True, encoding="cp950", errors="replace")
+    print(result.stdout.strip())
+
+def net_traceroute(host: str):
+    result = subprocess.run(["tracert", host], capture_output=True, text=True, encoding="cp950", errors="replace", timeout=60)
+    print(result.stdout[:3000])
+
+def net_portscan(host: str, ports: str = "22,80,443,3306,3389,8080"):
+    import socket
+    results = []
+    for p in [int(x) for x in ports.split(",")]:
+        try:
+            s = socket.socket()
+            s.settimeout(1)
+            r = s.connect_ex((host, p))
+            results.append(f"Port {p}: {'開放 ✅' if r == 0 else '關閉 ❌'}")
+            s.close()
+        except Exception:
+            results.append(f"Port {p}: 錯誤")
+    print("\n".join(results))
+
+
+# ── Windows 服務 ─────────────────────────────────────
+
+def win_service(action: str, name: str = ""):
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Get-Service | Select-Object Name,Status | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout[:3000])
+        elif action in ("start", "stop"):
+            cmd = f"{'Start' if action=='start' else 'Stop'}-Service -Name '{name}' -Force"
+            r = subprocess.run(["powershell.exe", "-Command", cmd],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout or r.stderr or f"✅ {action} {name}")
+    except Exception as e:
+        print(f"❌ 服務操作失敗：{e}")
+
+
+# ── PDF 編輯 ─────────────────────────────────────────
+
+def pdf_merge(paths_json: str, output: str):
+    try:
+        import fitz, json
+        paths = json.loads(paths_json)
+        writer = fitz.open()
+        for p in paths:
+            writer.insert_pdf(fitz.open(p))
+        writer.save(output)
+        print(f"✅ 已合併 {len(paths)} 個 PDF：{output}")
+    except Exception as e:
+        print(f"❌ 合併失敗：{e}")
+
+def pdf_split(path: str, output_dir: str):
+    try:
+        import fitz
+        doc = fitz.open(path)
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        for i, page in enumerate(doc):
+            out = fitz.open()
+            out.insert_pdf(doc, from_page=i, to_page=i)
+            out.save(str(Path(output_dir) / f"page_{i+1}.pdf"))
+        print(f"✅ 已分割 {len(doc)} 頁到：{output_dir}")
+    except Exception as e:
+        print(f"❌ 分割失敗：{e}")
+
+def pdf_watermark(path: str, text: str, output: str = ""):
+    try:
+        import fitz
+        doc = fitz.open(path)
+        out_path = output or path.replace(".pdf", "_wm.pdf")
+        for page in doc:
+            page.insert_text((page.rect.width/2 - 50, page.rect.height/2),
+                text, fontsize=40, color=(0.8, 0.8, 0.8), rotate=45)
+        doc.save(out_path)
+        print(f"✅ 已加浮水印：{out_path}")
+    except Exception as e:
+        print(f"❌ 浮水印失敗：{e}")
+
+
+# ── 音訊處理 ─────────────────────────────────────────
+
+def audio_convert(input_path: str, output_path: str):
+    try:
+        from pydub import AudioSegment
+        fmt = Path(output_path).suffix.lstrip(".")
+        AudioSegment.from_file(input_path).export(output_path, format=fmt)
+        print(f"✅ 已轉換：{output_path}")
+    except Exception as e:
+        print(f"❌ 音訊轉換失敗：{e}")
+
+def audio_trim(input_path: str, start_ms: int, end_ms: int, output_path: str = ""):
+    try:
+        from pydub import AudioSegment
+        audio = AudioSegment.from_file(input_path)[start_ms:end_ms]
+        out = output_path or input_path.replace(".", "_trim.")
+        audio.export(out, format=Path(out).suffix.lstrip("."))
+        print(f"✅ 已剪輯：{out}")
+    except Exception as e:
+        print(f"❌ 音訊剪輯失敗：{e}")
+
+
+# ── 推播通知 ─────────────────────────────────────────
+
+def discord_notify(webhook_url: str, message: str):
+    try:
+        resp = requests.post(webhook_url, json={"content": message}, timeout=10)
+        print(f"✅ Discord 已發送（{resp.status_code}）")
+    except Exception as e:
+        print(f"❌ Discord 發送失敗：{e}")
+
+def line_notify(token: str, message: str):
+    try:
+        resp = requests.post(
+            "https://notify-api.line.me/api/notify",
+            headers={"Authorization": f"Bearer {token}"},
+            data={"message": message}, timeout=10
+        )
+        print(f"✅ LINE 已發送（{resp.status_code}）")
+    except Exception as e:
+        print(f"❌ LINE 發送失敗：{e}")
+
+
+# ── 磁碟清理 ─────────────────────────────────────────
+
+def disk_clean(action: str = "list"):
+    try:
+        import tempfile, shutil
+        tmp = Path(tempfile.gettempdir())
+        if action == "list":
+            files = list(tmp.rglob("*"))
+            total = sum(f.stat().st_size for f in files if f.is_file())
+            print(f"暫存資料夾：{tmp}\n檔案數：{len(files)}\n佔用空間：{total/1024/1024:.1f} MB")
+        elif action == "clean":
+            count = 0
+            for f in tmp.iterdir():
+                try:
+                    if f.is_file():
+                        f.unlink(); count += 1
+                    elif f.is_dir():
+                        shutil.rmtree(f, ignore_errors=True); count += 1
+                except Exception:
+                    pass
+            print(f"✅ 已清理 {count} 個暫存項目")
+    except Exception as e:
+        print(f"❌ 磁碟清理失敗：{e}")
+
+def backup(src: str, dest: str):
+    try:
+        import shutil
+        out = Path(dest) / f"{Path(src).name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        shutil.make_archive(str(out).replace(".zip",""), "zip", src)
+        print(f"✅ 備份完成：{out}")
+    except Exception as e:
+        print(f"❌ 備份失敗：{e}")
+
+
+# ── Windows 登錄檔 ────────────────────────────────────
+
+def registry_read(key_path: str, value_name: str = ""):
+    try:
+        import winreg
+        parts = key_path.split("\\", 1)
+        roots = {"HKEY_LOCAL_MACHINE": winreg.HKEY_LOCAL_MACHINE,
+                 "HKEY_CURRENT_USER": winreg.HKEY_CURRENT_USER,
+                 "HKLM": winreg.HKEY_LOCAL_MACHINE, "HKCU": winreg.HKEY_CURRENT_USER}
+        root = roots[parts[0]]
+        with winreg.OpenKey(root, parts[1]) as k:
+            if value_name:
+                val, _ = winreg.QueryValueEx(k, value_name)
+                print(f"{value_name} = {val}")
+            else:
+                i = 0
+                while True:
+                    try:
+                        n, v, _ = winreg.EnumValue(k, i)
+                        print(f"{n} = {v}")
+                        i += 1
+                    except OSError:
+                        break
+    except Exception as e:
+        print(f"❌ 讀取登錄檔失敗：{e}")
+
+def registry_write(key_path: str, value_name: str, value: str):
+    try:
+        import winreg
+        parts = key_path.split("\\", 1)
+        roots = {"HKEY_LOCAL_MACHINE": winreg.HKEY_LOCAL_MACHINE,
+                 "HKEY_CURRENT_USER": winreg.HKEY_CURRENT_USER,
+                 "HKLM": winreg.HKEY_LOCAL_MACHINE, "HKCU": winreg.HKEY_CURRENT_USER}
+        root = roots[parts[0]]
+        with winreg.OpenKey(root, parts[1], 0, winreg.KEY_SET_VALUE) as k:
+            winreg.SetValueEx(k, value_name, 0, winreg.REG_SZ, value)
+        print(f"✅ 已寫入：{value_name} = {value}")
+    except Exception as e:
+        print(f"❌ 寫入登錄檔失敗：{e}")
+
+
+# ── 影片處理 ─────────────────────────────────────────
+
+def video_screenshot(path: str, second: float = 0, output: str = ""):
+    try:
+        import cv2
+        cap = cv2.VideoCapture(path)
+        cap.set(cv2.CAP_PROP_POS_MSEC, second * 1000)
+        ret, frame = cap.read()
+        cap.release()
+        out = output or path.replace(".mp4", f"_frame{int(second)}s.jpg")
+        if ret:
+            cv2.imwrite(out, frame)
+            print(f"✅ 已擷取畫面：{out}")
+        else:
+            print("❌ 無法讀取影片")
+    except Exception as e:
+        print(f"❌ 影片截圖失敗：{e}")
+
+def video_trim(path: str, start_sec: float, end_sec: float, output: str = ""):
+    try:
+        out = output or path.replace(".mp4", f"_trim.mp4")
+        subprocess.run([
+            "ffmpeg", "-y", "-i", path,
+            "-ss", str(start_sec), "-to", str(end_sec),
+            "-c", "copy", out
+        ], capture_output=True)
+        print(f"✅ 已剪輯：{out}")
+    except Exception as e:
+        print(f"❌ 影片剪輯失敗：{e}")
+
+
+# ── 多螢幕管理 ───────────────────────────────────────
+
+def monitor_list():
+    try:
+        from screeninfo import get_monitors
+        for m in get_monitors():
+            print(f"{'主螢幕 ' if m.is_primary else '副螢幕 '}{m.width}x{m.height} @({m.x},{m.y}) name={m.name}")
+    except Exception as e:
+        print(f"❌ 取得螢幕資訊失敗：{e}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -1644,6 +2105,35 @@ if __name__ == "__main__":
         "clipboard_watch": lambda: clipboard_watch(float(args[0]) if args else 30.0),
         "qr_gen":          lambda: qr_gen(args[0], args[1] if len(args)>1 else ""),
         "qr_scan":         lambda: qr_scan(args[0] if args else ""),
+        "screen_record":   lambda: screen_record(float(args[0]) if args else 10.0, args[1] if len(args)>1 else ""),
+        "webcam":          lambda: webcam_capture(args[0] if args else ""),
+        "translate":       lambda: translate(" ".join(args[:1] if len(args)==1 else [args[0]]), args[1] if len(args)>1 else "zh-TW", args[2] if len(args)>2 else "auto"),
+        "chart":           lambda: chart(args[0], args[1], args[2] if len(args)>2 else "", args[3] if len(args)>3 else ""),
+        "pptx_read":       lambda: pptx_read(args[0]),
+        "pptx_create":     lambda: pptx_create(args[0], " ".join(args[1:])),
+        "api_call":        lambda: api_call(args[0], args[1], args[2] if len(args)>2 else "{}", args[3] if len(args)>3 else "{}"),
+        "watchdog":        lambda: watchdog(args[0], args[1], float(args[2]) if len(args)>2 else 60.0),
+        "ssh_run":         lambda: ssh_run(args[0], args[1], args[2], " ".join(args[3:])),
+        "sftp_upload":     lambda: sftp_upload(args[0], args[1], args[2], args[3], args[4]),
+        "sftp_download":   lambda: sftp_download(args[0], args[1], args[2], args[3], args[4]),
+        "net_ping":        lambda: net_ping(args[0], int(args[1]) if len(args)>1 else 4),
+        "net_traceroute":  lambda: net_traceroute(args[0]),
+        "net_portscan":    lambda: net_portscan(args[0], args[1] if len(args)>1 else "22,80,443,3306,3389,8080"),
+        "win_service":     lambda: win_service(args[0], args[1] if len(args)>1 else ""),
+        "pdf_merge":       lambda: pdf_merge(args[0], args[1]),
+        "pdf_split":       lambda: pdf_split(args[0], args[1]),
+        "pdf_watermark":   lambda: pdf_watermark(args[0], args[1], args[2] if len(args)>2 else ""),
+        "audio_convert":   lambda: audio_convert(args[0], args[1]),
+        "audio_trim":      lambda: audio_trim(args[0], int(args[1]), int(args[2]), args[3] if len(args)>3 else ""),
+        "discord_notify":  lambda: discord_notify(args[0], " ".join(args[1:])),
+        "line_notify":     lambda: line_notify(args[0], " ".join(args[1:])),
+        "disk_clean":      lambda: disk_clean(args[0] if args else "list"),
+        "backup":          lambda: backup(args[0], args[1]),
+        "registry_read":   lambda: registry_read(args[0], args[1] if len(args)>1 else ""),
+        "registry_write":  lambda: registry_write(args[0], args[1], " ".join(args[2:])),
+        "video_screenshot":lambda: video_screenshot(args[0], float(args[1]) if len(args)>1 else 0, args[2] if len(args)>2 else ""),
+        "video_trim":      lambda: video_trim(args[0], float(args[1]), float(args[2]), args[3] if len(args)>3 else ""),
+        "monitor_list":    lambda: monitor_list(),
     }
 
     if tool not in tools:

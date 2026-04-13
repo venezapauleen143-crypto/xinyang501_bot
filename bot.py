@@ -508,6 +508,219 @@ TOOLS = [
         }
     },
     {
+        "name": "screen_record",
+        "description": "螢幕錄影或攝影機拍照。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["record","webcam"]},
+                "duration": {"type": "number", "description": "錄影秒數（record 使用）"},
+                "output": {"type": "string", "description": "輸出檔案路徑（選填）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "translate",
+        "description": "翻譯文字，支援中英日韓等多語言。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string"},
+                "target": {"type": "string", "description": "目標語言代碼，如 zh-TW, en, ja, ko，預設 zh-TW"},
+                "source": {"type": "string", "description": "來源語言，預設 auto 自動偵測"}
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "chart",
+        "description": "根據數據生成折線圖、長條圖、圓餅圖並存成圖片。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["line","bar","pie"]},
+                "data": {"type": "string", "description": "JSON 格式資料，如 {\"A\": [1,2,3]} 或 {\"A\": 30, \"B\": 70}"},
+                "title": {"type": "string", "description": "圖表標題（選填）"},
+                "output": {"type": "string", "description": "輸出路徑（選填）"}
+            },
+            "required": ["type", "data"]
+        }
+    },
+    {
+        "name": "pptx_control",
+        "description": "讀取或建立 PowerPoint 簡報。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["read","create"]},
+                "path": {"type": "string"},
+                "slides": {"type": "string", "description": "JSON 格式投影片，如 [{\"title\":\"標題\",\"body\":\"內容\"}]（create 使用）"}
+            },
+            "required": ["action", "path"]
+        }
+    },
+    {
+        "name": "api_call",
+        "description": "呼叫任意外部 HTTP REST API。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "method": {"type": "string", "enum": ["GET","POST","PUT","DELETE","PATCH"]},
+                "url": {"type": "string"},
+                "headers": {"type": "string", "description": "JSON 格式 headers（選填）"},
+                "body": {"type": "string", "description": "JSON 格式 body（選填）"}
+            },
+            "required": ["method", "url"]
+        }
+    },
+    {
+        "name": "watchdog",
+        "description": "守護指定程序，若崩潰則自動重啟。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "process": {"type": "string", "description": "程序名稱，如 pythonw.exe"},
+                "script": {"type": "string", "description": "崩潰時要執行的腳本路徑"},
+                "duration": {"type": "number", "description": "守護秒數，預設 60"}
+            },
+            "required": ["process", "script"]
+        }
+    },
+    {
+        "name": "ssh_sftp",
+        "description": "SSH 遠端執行指令，或 SFTP 上傳/下載檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["ssh_run","sftp_upload","sftp_download"]},
+                "host": {"type": "string"},
+                "user": {"type": "string"},
+                "password": {"type": "string"},
+                "command": {"type": "string", "description": "SSH 指令（ssh_run 使用）"},
+                "local": {"type": "string", "description": "本地路徑"},
+                "remote": {"type": "string", "description": "遠端路徑"}
+            },
+            "required": ["action", "host", "user", "password"]
+        }
+    },
+    {
+        "name": "network_diag",
+        "description": "網路診斷：Ping、路由追蹤、Port 掃描。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["ping","traceroute","portscan"]},
+                "host": {"type": "string"},
+                "ports": {"type": "string", "description": "要掃描的 port 列表，如 22,80,443（portscan 使用）"}
+            },
+            "required": ["action", "host"]
+        }
+    },
+    {
+        "name": "win_service",
+        "description": "管理 Windows 系統服務：列出、啟動、停止。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","start","stop"]},
+                "name": {"type": "string", "description": "服務名稱（start/stop 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "pdf_edit",
+        "description": "PDF 進階編輯：合併、分割、加浮水印。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["merge","split","watermark"]},
+                "path": {"type": "string", "description": "PDF 路徑"},
+                "output": {"type": "string", "description": "輸出路徑"},
+                "paths": {"type": "string", "description": "JSON 格式多個 PDF 路徑（merge 使用）"},
+                "text": {"type": "string", "description": "浮水印文字（watermark 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "audio_process",
+        "description": "音訊處理：格式轉換、剪輯。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["convert","trim"]},
+                "input": {"type": "string", "description": "輸入檔案路徑"},
+                "output": {"type": "string", "description": "輸出檔案路徑"},
+                "start_ms": {"type": "integer", "description": "起始毫秒（trim 使用）"},
+                "end_ms": {"type": "integer", "description": "結束毫秒（trim 使用）"}
+            },
+            "required": ["action", "input"]
+        }
+    },
+    {
+        "name": "push_notify",
+        "description": "發送推播通知到 Discord 或 LINE。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "platform": {"type": "string", "enum": ["discord","line"]},
+                "message": {"type": "string"},
+                "webhook_or_token": {"type": "string", "description": "Discord Webhook URL 或 LINE Notify Token"}
+            },
+            "required": ["platform", "message", "webhook_or_token"]
+        }
+    },
+    {
+        "name": "disk_backup",
+        "description": "磁碟暫存清理或資料夾備份。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list_temp","clean_temp","backup"]},
+                "src": {"type": "string", "description": "備份來源路徑（backup 使用）"},
+                "dest": {"type": "string", "description": "備份目標資料夾（backup 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "registry",
+        "description": "讀取或寫入 Windows 登錄檔。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["read","write"]},
+                "key": {"type": "string", "description": "登錄檔路徑，如 HKCU\\Software\\MyApp"},
+                "value_name": {"type": "string", "description": "值名稱"},
+                "value": {"type": "string", "description": "要寫入的值（write 使用）"}
+            },
+            "required": ["action", "key"]
+        }
+    },
+    {
+        "name": "video_process",
+        "description": "影片處理：截取指定秒數畫面、剪輯片段。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["screenshot","trim"]},
+                "path": {"type": "string"},
+                "second": {"type": "number", "description": "截取的秒數（screenshot 使用）"},
+                "start": {"type": "number", "description": "起始秒（trim 使用）"},
+                "end": {"type": "number", "description": "結束秒（trim 使用）"},
+                "output": {"type": "string", "description": "輸出路徑（選填）"}
+            },
+            "required": ["action", "path"]
+        }
+    },
+    {
+        "name": "monitor_config",
+        "description": "列出所有螢幕顯示器的資訊（解析度、位置、主副螢幕）。",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
         "name": "run_code",
         "description": "直接執行 Python 程式碼或 PowerShell 指令。",
         "input_schema": {
@@ -1302,6 +1515,335 @@ def execute_manage_schedule(action: str, name: str = "", time: str = "", script:
         return f"執行失敗：{str(e)}"
 
 
+def execute_screen_record(action, duration=10.0, output=""):
+    try:
+        if action == "record":
+            import mss, cv2, numpy as np, time as t
+            out_path = output or str(Path.home() / "Desktop" / f"record_{datetime.now().strftime('%H%M%S')}.mp4")
+            with mss.mss() as sct:
+                mon = sct.monitors[1]
+                w, h = mon["width"], mon["height"]
+                writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), 10, (w, h))
+                end = t.time() + duration
+                while t.time() < end:
+                    frame = np.array(sct.grab(mon))
+                    writer.write(cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR))
+                    t.sleep(0.1)
+                writer.release()
+            return f"✅ 錄影完成：{out_path}"
+        elif action == "webcam":
+            import cv2
+            out_path = output or str(Path.home() / "Desktop" / f"webcam_{datetime.now().strftime('%H%M%S')}.jpg")
+            cap = cv2.VideoCapture(0)
+            ret, frame = cap.read()
+            cap.release()
+            if ret:
+                cv2.imwrite(out_path, frame)
+                return f"✅ 已拍照：{out_path}"
+            return "❌ 無法存取攝影機"
+    except Exception as e:
+        return f"❌ 失敗：{e}"
+
+
+def execute_translate(text, target="zh-TW", source="auto"):
+    try:
+        from deep_translator import GoogleTranslator
+        return GoogleTranslator(source=source, target=target).translate(text)
+    except Exception as e:
+        return f"❌ 翻譯失敗：{e}"
+
+
+def execute_chart(chart_type, data_json, title="", output=""):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt, json
+        data = json.loads(data_json)
+        out_path = output or str(Path.home() / "Desktop" / f"chart_{datetime.now().strftime('%H%M%S')}.png")
+        fig, ax = plt.subplots()
+        if chart_type == "line":
+            for label, values in data.items():
+                ax.plot(values, label=label)
+            ax.legend()
+        elif chart_type == "bar":
+            ax.bar(list(data.keys()), list(data.values()))
+        elif chart_type == "pie":
+            ax.pie(list(data.values()), labels=list(data.keys()), autopct="%1.1f%%")
+        if title:
+            ax.set_title(title)
+        plt.tight_layout()
+        plt.savefig(out_path)
+        plt.close()
+        return out_path
+    except Exception as e:
+        return f"❌ 圖表生成失敗：{e}"
+
+
+def execute_pptx(action, path, slides=""):
+    try:
+        from pptx import Presentation
+        if action == "read":
+            prs = Presentation(path)
+            lines = []
+            for i, slide in enumerate(prs.slides, 1):
+                texts = [sh.text for sh in slide.shapes if sh.has_text_frame]
+                lines.append(f"[投影片 {i}] " + " | ".join(t for t in texts if t.strip()))
+            return "\n".join(lines) or "（簡報為空）"
+        elif action == "create":
+            import json
+            from pptx.util import Pt
+            data = json.loads(slides)
+            prs = Presentation()
+            for s in data:
+                sl = prs.slides.add_slide(prs.slide_layouts[1])
+                if "title" in s:
+                    sl.shapes.title.text = s["title"]
+                if "body" in s:
+                    sl.placeholders[1].text = s["body"]
+            prs.save(path)
+            return f"✅ 已建立簡報：{path}"
+    except Exception as e:
+        return f"❌ PPT 操作失敗：{e}"
+
+
+def execute_api_call(method, url, headers="{}", body="{}"):
+    try:
+        import json
+        h = json.loads(headers) if headers else {}
+        b = json.loads(body) if body else None
+        resp = requests.request(method.upper(), url, headers=h, json=b, timeout=30)
+        try:
+            return json.dumps(resp.json(), ensure_ascii=False, indent=2)[:2000]
+        except Exception:
+            return resp.text[:2000]
+    except Exception as e:
+        return f"❌ API 呼叫失敗：{e}"
+
+
+def execute_watchdog(process, script, duration=60.0):
+    import psutil, time as t
+    restarts = 0
+    end = t.time() + duration
+    while t.time() < end:
+        running = any(p.name().lower() == process.lower() for p in psutil.process_iter())
+        if not running:
+            subprocess.Popen(["pythonw", script] if script.endswith(".py") else [script])
+            restarts += 1
+        t.sleep(5)
+    return f"守護結束，共重啟 {restarts} 次"
+
+
+def execute_ssh_sftp(action, host, user, password, command="", local="", remote="", port=22):
+    try:
+        import paramiko
+        if action == "ssh_run":
+            c = paramiko.SSHClient()
+            c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            c.connect(host, port=port, username=user, password=password, timeout=15)
+            _, stdout, stderr = c.exec_command(command)
+            out = stdout.read().decode(errors="replace") + stderr.read().decode(errors="replace")
+            c.close()
+            return out.strip() or "（執行完畢，無輸出）"
+        else:
+            t = paramiko.Transport((host, port))
+            t.connect(username=user, password=password)
+            sftp = paramiko.SFTPClient.from_transport(t)
+            if action == "sftp_upload":
+                sftp.put(local, remote)
+                result = f"✅ 已上傳：{local} → {remote}"
+            else:
+                sftp.get(remote, local)
+                result = f"✅ 已下載：{remote} → {local}"
+            sftp.close(); t.close()
+            return result
+    except Exception as e:
+        return f"❌ SSH/SFTP 失敗：{e}"
+
+
+def execute_network_diag(action, host, ports="22,80,443,3306,3389,8080"):
+    try:
+        if action == "ping":
+            r = subprocess.run(["ping", "-n", "4", host], capture_output=True, text=True, encoding="cp950", errors="replace", timeout=20)
+            return r.stdout.strip()
+        elif action == "traceroute":
+            r = subprocess.run(["tracert", host], capture_output=True, text=True, encoding="cp950", errors="replace", timeout=60)
+            return r.stdout[:2000]
+        elif action == "portscan":
+            import socket
+            results = []
+            for p in [int(x) for x in ports.split(",")]:
+                s = socket.socket(); s.settimeout(1)
+                r = s.connect_ex((host, p))
+                results.append(f"Port {p}: {'開放 ✅' if r == 0 else '關閉 ❌'}")
+                s.close()
+            return "\n".join(results)
+    except Exception as e:
+        return f"❌ 網路診斷失敗：{e}"
+
+
+def execute_win_service(action, name=""):
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Get-Service | Select-Object Name,Status | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout[:2000]
+        else:
+            cmd = f"{'Start' if action=='start' else 'Stop'}-Service -Name '{name}' -Force"
+            r = subprocess.run(["powershell.exe", "-Command", cmd],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or r.stderr or f"✅ {action} {name}"
+    except Exception as e:
+        return f"❌ 服務操作失敗：{e}"
+
+
+def execute_pdf_edit(action, path="", output="", paths="", text=""):
+    try:
+        import fitz, json
+        if action == "merge":
+            pdf_list = json.loads(paths)
+            writer = fitz.open()
+            for p in pdf_list:
+                writer.insert_pdf(fitz.open(p))
+            writer.save(output)
+            return f"✅ 已合併 {len(pdf_list)} 個 PDF：{output}"
+        elif action == "split":
+            doc = fitz.open(path)
+            out_dir = Path(output)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            for i, _ in enumerate(doc):
+                out = fitz.open()
+                out.insert_pdf(doc, from_page=i, to_page=i)
+                out.save(str(out_dir / f"page_{i+1}.pdf"))
+            return f"✅ 已分割 {len(doc)} 頁到：{output}"
+        elif action == "watermark":
+            doc = fitz.open(path)
+            out_path = output or path.replace(".pdf", "_wm.pdf")
+            for page in doc:
+                page.insert_text((page.rect.width/2-50, page.rect.height/2),
+                    text, fontsize=40, color=(0.8,0.8,0.8), rotate=45)
+            doc.save(out_path)
+            return f"✅ 已加浮水印：{out_path}"
+    except Exception as e:
+        return f"❌ PDF 編輯失敗：{e}"
+
+
+def execute_audio_process(action, input_path, output="", start_ms=0, end_ms=0):
+    try:
+        from pydub import AudioSegment
+        if action == "convert":
+            fmt = Path(output).suffix.lstrip(".")
+            AudioSegment.from_file(input_path).export(output, format=fmt)
+            return f"✅ 已轉換：{output}"
+        elif action == "trim":
+            audio = AudioSegment.from_file(input_path)[start_ms:end_ms]
+            out = output or input_path.replace(".", "_trim.")
+            audio.export(out, format=Path(out).suffix.lstrip("."))
+            return f"✅ 已剪輯：{out}"
+    except Exception as e:
+        return f"❌ 音訊處理失敗：{e}"
+
+
+def execute_push_notify(platform, message, webhook_or_token):
+    try:
+        if platform == "discord":
+            resp = requests.post(webhook_or_token, json={"content": message}, timeout=10)
+            return f"✅ Discord 已發送（{resp.status_code}）"
+        elif platform == "line":
+            resp = requests.post(
+                "https://notify-api.line.me/api/notify",
+                headers={"Authorization": f"Bearer {webhook_or_token}"},
+                data={"message": message}, timeout=10
+            )
+            return f"✅ LINE 已發送（{resp.status_code}）"
+    except Exception as e:
+        return f"❌ 推播失敗：{e}"
+
+
+def execute_disk_backup(action, src="", dest=""):
+    try:
+        import tempfile, shutil
+        tmp = Path(tempfile.gettempdir())
+        if action == "list_temp":
+            files = list(tmp.rglob("*"))
+            total = sum(f.stat().st_size for f in files if f.is_file())
+            return f"暫存資料夾：{tmp}\n檔案數：{len(files)}\n佔用空間：{total/1024/1024:.1f} MB"
+        elif action == "clean_temp":
+            count = 0
+            for f in tmp.iterdir():
+                try:
+                    if f.is_file(): f.unlink(); count += 1
+                    elif f.is_dir(): shutil.rmtree(f, ignore_errors=True); count += 1
+                except Exception: pass
+            return f"✅ 已清理 {count} 個暫存項目"
+        elif action == "backup":
+            out = Path(dest) / f"{Path(src).name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            shutil.make_archive(str(out), "zip", src)
+            return f"✅ 備份完成：{out}.zip"
+    except Exception as e:
+        return f"❌ 磁碟操作失敗：{e}"
+
+
+def execute_registry(action, key, value_name="", value=""):
+    try:
+        import winreg
+        parts = key.split("\\", 1)
+        roots = {"HKEY_LOCAL_MACHINE": winreg.HKEY_LOCAL_MACHINE,
+                 "HKEY_CURRENT_USER": winreg.HKEY_CURRENT_USER,
+                 "HKLM": winreg.HKEY_LOCAL_MACHINE, "HKCU": winreg.HKEY_CURRENT_USER}
+        root = roots[parts[0]]
+        if action == "read":
+            with winreg.OpenKey(root, parts[1]) as k:
+                if value_name:
+                    val, _ = winreg.QueryValueEx(k, value_name)
+                    return f"{value_name} = {val}"
+                lines = []
+                i = 0
+                while True:
+                    try:
+                        n, v, _ = winreg.EnumValue(k, i); lines.append(f"{n} = {v}"); i += 1
+                    except OSError: break
+                return "\n".join(lines[:20])
+        elif action == "write":
+            with winreg.OpenKey(root, parts[1], 0, winreg.KEY_SET_VALUE) as k:
+                winreg.SetValueEx(k, value_name, 0, winreg.REG_SZ, value)
+            return f"✅ 已寫入：{value_name} = {value}"
+    except Exception as e:
+        return f"❌ 登錄檔操作失敗：{e}"
+
+
+def execute_video_process(action, path, second=0, start=0, end=0, output=""):
+    try:
+        import cv2
+        if action == "screenshot":
+            cap = cv2.VideoCapture(path)
+            cap.set(cv2.CAP_PROP_POS_MSEC, second * 1000)
+            ret, frame = cap.read()
+            cap.release()
+            out = output or path.replace(".mp4", f"_frame{int(second)}s.jpg")
+            if ret:
+                cv2.imwrite(out, frame)
+                return f"✅ 已擷取畫面：{out}"
+            return "❌ 無法讀取影片"
+        elif action == "trim":
+            out = output or path.replace(".mp4", "_trim.mp4")
+            subprocess.run(["ffmpeg", "-y", "-i", path, "-ss", str(start), "-to", str(end), "-c", "copy", out], capture_output=True)
+            return f"✅ 已剪輯：{out}"
+    except Exception as e:
+        return f"❌ 影片處理失敗：{e}"
+
+
+def execute_monitor_config():
+    try:
+        from screeninfo import get_monitors
+        return "\n".join(
+            f"{'主螢幕' if m.is_primary else '副螢幕'} {m.width}x{m.height} @({m.x},{m.y}) {m.name}"
+            for m in get_monitors()
+        )
+    except Exception as e:
+        return f"❌ 取得螢幕資訊失敗：{e}"
+
+
 def execute_run_code(type_, code):
     try:
         if type_ == "python":
@@ -1687,9 +2229,96 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("content",""),
                     tool_use.input.get("path",""),
                     tool_use.input.get("duration", 30.0)),
+                "screen_record": lambda: execute_screen_record(
+                    tool_use.input["action"],
+                    tool_use.input.get("duration", 10.0),
+                    tool_use.input.get("output","")),
+                "translate": lambda: execute_translate(
+                    tool_use.input["text"],
+                    tool_use.input.get("target","zh-TW"),
+                    tool_use.input.get("source","auto")),
+                "pptx_control": lambda: execute_pptx(
+                    tool_use.input["action"],
+                    tool_use.input["path"],
+                    tool_use.input.get("slides","")),
+                "api_call": lambda: execute_api_call(
+                    tool_use.input["method"],
+                    tool_use.input["url"],
+                    tool_use.input.get("headers","{}"),
+                    tool_use.input.get("body","{}")),
+                "watchdog": lambda: execute_watchdog(
+                    tool_use.input["process"],
+                    tool_use.input["script"],
+                    tool_use.input.get("duration", 60.0)),
+                "ssh_sftp": lambda: execute_ssh_sftp(
+                    tool_use.input["action"],
+                    tool_use.input["host"],
+                    tool_use.input["user"],
+                    tool_use.input["password"],
+                    tool_use.input.get("command",""),
+                    tool_use.input.get("local",""),
+                    tool_use.input.get("remote","")),
+                "network_diag": lambda: execute_network_diag(
+                    tool_use.input["action"],
+                    tool_use.input["host"],
+                    tool_use.input.get("ports","22,80,443,3306,3389,8080")),
+                "win_service": lambda: execute_win_service(
+                    tool_use.input["action"],
+                    tool_use.input.get("name","")),
+                "pdf_edit": lambda: execute_pdf_edit(
+                    tool_use.input["action"],
+                    tool_use.input.get("path",""),
+                    tool_use.input.get("output",""),
+                    tool_use.input.get("paths",""),
+                    tool_use.input.get("text","")),
+                "audio_process": lambda: execute_audio_process(
+                    tool_use.input["action"],
+                    tool_use.input["input"],
+                    tool_use.input.get("output",""),
+                    tool_use.input.get("start_ms",0),
+                    tool_use.input.get("end_ms",0)),
+                "push_notify": lambda: execute_push_notify(
+                    tool_use.input["platform"],
+                    tool_use.input["message"],
+                    tool_use.input["webhook_or_token"]),
+                "disk_backup": lambda: execute_disk_backup(
+                    tool_use.input["action"],
+                    tool_use.input.get("src",""),
+                    tool_use.input.get("dest","")),
+                "registry": lambda: execute_registry(
+                    tool_use.input["action"],
+                    tool_use.input["key"],
+                    tool_use.input.get("value_name",""),
+                    tool_use.input.get("value","")),
+                "video_process": lambda: execute_video_process(
+                    tool_use.input["action"],
+                    tool_use.input["path"],
+                    tool_use.input.get("second",0),
+                    tool_use.input.get("start",0),
+                    tool_use.input.get("end",0),
+                    tool_use.input.get("output","")),
+                "monitor_config": lambda: execute_monitor_config(),
             }
 
-            if tool_use.name == "screen_stream":
+            if tool_use.name == "chart":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                out_path = await loop.run_in_executor(None, execute_chart,
+                    tool_use.input["type"],
+                    tool_use.input["data"],
+                    tool_use.input.get("title",""),
+                    tool_use.input.get("output",""))
+                if out_path and Path(out_path).exists():
+                    with open(out_path, "rb") as f:
+                        await update.message.reply_photo(photo=f, caption=tool_use.input.get("title","圖表"))
+                    reply = f"圖表已生成：{out_path}"
+                else:
+                    reply = out_path
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "screen_stream":
                 duration = tool_use.input.get("duration", 10)
                 interval = tool_use.input.get("interval", 2)
                 import asyncio
