@@ -3572,10 +3572,15 @@ def clean_for_tts(text: str, max_chars: int = 200) -> str:
     return text
 
 
-def generate_voice_ogg(text: str, voice: str = "zh-CN-YunjianNeural") -> bytes:
-    """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）"""
+def generate_voice_ogg(text: str, voice: str = "zh-CN-YunxiNeural") -> bytes:
+    """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）
+    風格：俏皮嘴賤 + 低沉低音炮
+    - YunxiNeural chat style = 俏皮、有個性
+    - pitch -35Hz + ffmpeg 低頻增強 = 低音炮效果
+    """
     text = clean_for_tts(text)
     import edge_tts, asyncio, tempfile, subprocess as sp
+    import xml.sax.saxutils as sax
     import imageio_ffmpeg
 
     ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
@@ -3584,16 +3589,28 @@ def generate_voice_ogg(text: str, voice: str = "zh-CN-YunjianNeural") -> bytes:
     tmp_ogg = tempfile.NamedTemporaryFile(suffix=".ogg", delete=False)
     tmp_ogg.close()
 
-    # 生成 MP3（低沉低音炮：YunjianNeural 天生深沉，再壓 pitch + 稍慢語速）
+    # SSML：chat style（俏皮）+ pitch 壓低（低沉）+ 語速微快（活潑感）
+    escaped = sax.escape(text)
+    ssml = (
+        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
+        "xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='zh-CN'>"
+        f"<voice name='{voice}'>"
+        "<mstts:express-as style='chat'>"
+        f"<prosody pitch='-35Hz' rate='+5%'>{escaped}</prosody>"
+        "</mstts:express-as>"
+        "</voice></speak>"
+    )
+
     async def _gen():
-        comm = edge_tts.Communicate(text, voice, rate="-10%", pitch="-20Hz")
+        comm = edge_tts.Communicate(ssml, voice)
         await comm.save(tmp_mp3.name)
     asyncio.run(_gen())
 
-    # 轉換成 OGG OPUS（Telegram voice 格式）
+    # ffmpeg：低頻 EQ 增強（bass boost）+ 轉 OGG OPUS
     sp.run([
         ffmpeg_exe, "-y", "-i", tmp_mp3.name,
-        "-c:a", "libopus", "-b:a", "64k",
+        "-af", "equalizer=f=80:width_type=o:width=2:g=6,equalizer=f=150:width_type=o:width=2:g=4",
+        "-c:a", "libopus", "-b:a", "96k",
         tmp_ogg.name
     ], capture_output=True)
 
@@ -9089,7 +9106,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         import asyncio, io as _io
         loop = asyncio.get_running_loop()
         try:
-            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-CN-YunjianNeural")
+            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-CN-YunxiNeural")
             await update.message.reply_voice(voice=_io.BytesIO(ogg_data))
         except Exception:
             await update.message.reply_text(reply_text)
