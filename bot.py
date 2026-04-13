@@ -2885,16 +2885,23 @@ def execute_system_tools(action, **kwargs):
 
 def clean_for_tts(text: str) -> str:
     """清理文字讓 TTS 更口語自然：去除 emoji、Markdown、特殊符號、多餘標點"""
-    import re, unicodedata
+    import re
 
-    # 移除 emoji（Unicode 表情符號範圍）
+    # 移除 emoji（精確範圍，不影響中文字）
     emoji_pattern = re.compile(
-        "[\U00010000-\U0010FFFF"   # 輔助平面（大多數 emoji）
-        "\U0001F300-\U0001F9FF"
-        "\U00002702-\U000027B0"
-        "\U000024C2-\U0001F251"
-        "\u2600-\u26FF\u2700-\u27BF"
-        "\uFE00-\uFE0F"            # 變體選擇符
+        "["
+        "\U0001F600-\U0001F64F"   # 表情符號
+        "\U0001F300-\U0001F5FF"   # 符號與圖形
+        "\U0001F680-\U0001F6FF"   # 交通與地圖
+        "\U0001F700-\U0001F9FF"   # 其他補充符號
+        "\U0001FA00-\U0001FAFF"   # 西洋棋、擴展符號
+        "\u2600-\u26FF"           # 雜項符號
+        "\u2700-\u27BF"           # 裝飾符號
+        "\u2300-\u23FF"           # 技術符號
+        "\u25A0-\u25FF"           # 幾何形狀
+        "\u2B00-\u2BFF"           # 補充箭頭
+        "\uFE00-\uFE0F"           # 變體選擇符
+        "\u200B-\u200D\uFEFF"     # 零寬字符
         "]+", flags=re.UNICODE
     )
     text = emoji_pattern.sub("", text)
