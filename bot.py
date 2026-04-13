@@ -5864,15 +5864,17 @@ def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> st
                 await comm.save(audio)
             asyncio.run(_tts())
 
-            # 取得音訊時長
-            probe = subprocess.run([
-                ffmpeg_exe.replace("ffmpeg", "ffprobe").replace("ffmpeg.exe", "ffprobe.exe"),
-                "-v", "quiet", "-print_format", "json", "-show_streams", audio
-            ], capture_output=True, text=True)
-            try:
-                dur = float(_json.loads(probe.stdout)["streams"][0]["duration"])
-            except Exception:
-                dur = 10.0
+            # 取得音訊時長（用 ffmpeg stderr 解析，不依賴 ffprobe）
+            probe = subprocess.run(
+                [ffmpeg_exe, "-i", audio],
+                capture_output=True, text=True, errors="replace"
+            )
+            import re as _re
+            m = _re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", probe.stderr)
+            if m:
+                dur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+            else:
+                dur = max(3.0, len(text) * 0.18)  # fallback：中文約每字 0.18 秒
 
             # 準備背景圖
             if image_path and Path(image_path).exists():
