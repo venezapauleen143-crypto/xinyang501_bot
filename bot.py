@@ -2761,18 +2761,18 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
             return {"ok": True, "message": "\n".join(lines), "screenshot": None}
 
         elif action == "screenshot":
-            from PIL import ImageGrab as _IG
             import mss as _mss
+            from PIL import Image as _PIL_Image
             with _mss.mss() as sct:
-                mons = sct.monitors[1:]  # 跳過 index 0 全域
-            if monitor and 1 <= monitor <= len(mons):
-                m = mons[monitor - 1]
-                bbox = (m["left"], m["top"], m["left"] + m["width"], m["top"] + m["height"])
-                img = _IG.grab(bbox=bbox, all_screens=True)
-                label = f"螢幕{monitor}"
-            else:
-                img = _IG.grab(all_screens=True)
-                label = "全螢幕"
+                if monitor and 1 <= monitor <= len(sct.monitors) - 1:
+                    region = sct.monitors[monitor]  # mss 用實體像素，index 1~ 對應螢幕 1~
+                    label = f"螢幕{monitor}"
+                else:
+                    region = sct.monitors[0]        # index 0 = 全部螢幕合併
+                    label = "全螢幕"
+                sct_img = sct.grab(region)
+            # 用 .rgb（3 bytes/px，無 stride 問題）直接轉 PIL
+            img = _PIL_Image.frombytes("RGB", sct_img.size, sct_img.rgb)
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             screenshot_bytes = buf.getvalue()
