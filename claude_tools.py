@@ -798,11 +798,39 @@ def notify(title, message):
 
 # ── 語音合成 TTS ──────────────────────────────────────
 
+def clean_for_tts(text: str) -> str:
+    """清理文字讓 TTS 更口語：去除 emoji、Markdown、特殊符號"""
+    import re
+    # 移除 emoji
+    emoji_pattern = re.compile(
+        "[\U00010000-\U0010FFFF\U0001F300-\U0001F9FF"
+        "\U00002702-\U000027B0\U000024C2-\U0001F251"
+        "\u2600-\u26FF\u2700-\u27BF\uFE00-\uFE0F]+",
+        flags=re.UNICODE)
+    text = emoji_pattern.sub("", text)
+    # 移除 Markdown
+    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text)
+    text = re.sub(r"_{1,2}(.*?)_{1,2}", r"\1", text)
+    text = re.sub(r"`{1,3}.*?`{1,3}", "", text, flags=re.DOTALL)
+    text = re.sub(r"~~(.*?)~~", r"\1", text)
+    text = re.sub(r"#{1,6}\s*", "", text)
+    text = re.sub(r">\s*", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    # 移除特殊符號
+    text = re.sub(r"[|\\/<>{}=+\[\]~^@#$%&*_]", "", text)
+    text = re.sub(r"^\s*[-•·]\s+", "", text, flags=re.MULTILINE)
+    # 整理標點
+    text = re.sub(r"\.{3,}", "，", text)
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    text = "，".join(lines)
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
+
 def tts(text):
     import pyttsx3
     engine = pyttsx3.init()
     engine.setProperty("rate", 180)
-    engine.say(text)
+    engine.say(clean_for_tts(text))
     engine.runAndWait()
     print(f"✅ 已朗讀：{text}")
 
@@ -2853,8 +2881,9 @@ def tts_edge(text: str, voice: str = "zh-TW-HsiaoChenNeural", output: str = ""):
     try:
         import edge_tts, asyncio
         out = output or str(Path.home() / "Desktop" / f"tts_{datetime.now().strftime('%H%M%S')}.mp3")
+        _clean = clean_for_tts(text)
         async def _gen():
-            communicate = edge_tts.Communicate(text, voice)
+            communicate = edge_tts.Communicate(_clean, voice)
             await communicate.save(out)
         asyncio.run(_gen())
         subprocess.Popen(["powershell.exe", "-Command", f"Start-Process '{out}'"])

@@ -2349,7 +2349,7 @@ def execute_tts(text):
     import pyttsx3
     engine = pyttsx3.init()
     engine.setProperty("rate", 180)
-    engine.say(text)
+    engine.say(clean_for_tts(text))
     engine.runAndWait()
     return f"已朗讀完畢"
 
@@ -2883,8 +2883,59 @@ def execute_system_tools(action, **kwargs):
         return f"❌ 失敗：{e}"
 
 
+def clean_for_tts(text: str) -> str:
+    """清理文字讓 TTS 更口語自然：去除 emoji、Markdown、特殊符號、多餘標點"""
+    import re, unicodedata
+
+    # 移除 emoji（Unicode 表情符號範圍）
+    emoji_pattern = re.compile(
+        "[\U00010000-\U0010FFFF"   # 輔助平面（大多數 emoji）
+        "\U0001F300-\U0001F9FF"
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\u2600-\u26FF\u2700-\u27BF"
+        "\uFE00-\uFE0F"            # 變體選擇符
+        "]+", flags=re.UNICODE
+    )
+    text = emoji_pattern.sub("", text)
+
+    # 移除 Markdown 格式符號
+    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text)   # **粗體** *斜體*
+    text = re.sub(r"_{1,2}(.*?)_{1,2}", r"\1", text)       # __底線__
+    text = re.sub(r"`{1,3}.*?`{1,3}", "", text, flags=re.DOTALL)  # `程式碼`
+    text = re.sub(r"~~(.*?)~~", r"\1", text)               # ~~刪除線~~
+    text = re.sub(r"#{1,6}\s*", "", text)                  # ## 標題
+    text = re.sub(r">\s*", "", text)                       # > 引用
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text) # [連結](url)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)            # ![圖片](url)
+
+    # 移除特殊 ASCII 符號（保留中英數字和常用標點）
+    text = re.sub(r"[|\\/<>{}=+\[\]~^@#$%&*_]", "", text)
+
+    # 將數字列表符號「1. 2. 」→ 保留，但移除前綴破折號「- 」
+    text = re.sub(r"^\s*[-•·]\s+", "", text, flags=re.MULTILINE)
+
+    # 多個連續標點只保留一個
+    text = re.sub(r"[!！]{2,}", "！", text)
+    text = re.sub(r"[?？]{2,}", "？", text)
+    text = re.sub(r"[,，]{2,}", "，", text)
+    text = re.sub(r"[.。]{2,}", "。", text)
+    text = re.sub(r"\.{3,}", "，", text)  # ... → 停頓
+
+    # 移除行首行尾多餘空白，合併多個空行
+    lines = [line.strip() for line in text.splitlines()]
+    lines = [l for l in lines if l]
+    text = "，".join(lines) if lines else text
+
+    # 移除殘留的多餘空白
+    text = re.sub(r"\s{2,}", " ", text).strip()
+
+    return text
+
+
 def generate_voice_ogg(text: str, voice: str = "zh-CN-YunjianNeural") -> bytes:
     """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）"""
+    text = clean_for_tts(text)
     import edge_tts, asyncio, tempfile, subprocess as sp
     import imageio_ffmpeg
 
@@ -2917,8 +2968,9 @@ def execute_tts_advanced(action, text="", voice="zh-CN-YunjianNeural"):
         import edge_tts, asyncio
         if action == "speak":
             out = str(Path.home() / "Desktop" / f"tts_{datetime.now().strftime('%H%M%S')}.mp3")
+            _clean = clean_for_tts(text)
             async def _gen():
-                await edge_tts.Communicate(text, voice).save(out)
+                await edge_tts.Communicate(_clean, voice).save(out)
             asyncio.run(_gen())
             subprocess.Popen(["powershell.exe","-Command",f"Start-Process '{out}'"])
             return f"✅ Edge TTS 語音已播放：{voice}"
