@@ -3662,38 +3662,108 @@ def clean_for_tts(text: str, max_chars: int = 200) -> str:
     return text
 
 
+_XTTS_PORT = 5678
+_xtts_server_proc = None
+
+def _ensure_xtts_server():
+    """確保 XTTS 伺服器在跑，若沒在跑就啟動它"""
+    global _xtts_server_proc
+    import urllib.request
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{_XTTS_PORT}/health", timeout=1)
+        return True  # 已在跑
+    except Exception:
+        pass
+    # 啟動 xtts_server.py
+    xtts_script = str(Path(__file__).parent / "xtts_server.py")
+    if not Path(xtts_script).exists():
+        return False
+    try:
+        _xtts_server_proc = subprocess.Popen(
+            [r"C:\Python311\python.exe", xtts_script],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        # 等待啟動（模型載入需要 20-30 秒）
+        for _ in range(60):
+            import time as _t
+            _t.sleep(1)
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{_XTTS_PORT}/health", timeout=1)
+                return True
+            except Exception:
+                pass
+    except Exception as e:
+        logging.error(f"XTTS 伺服器啟動失敗：{e}")
+    return False
+
+
+def _xtts_generate_wav(text: str) -> bytes | None:
+    """向 XTTS 伺服器請求語音，回傳 WAV bytes；失敗回傳 None"""
+    import json as _json, urllib.request as _req
+    payload = _json.dumps({"text": text}).encode("utf-8")
+    try:
+        req = _req.Request(
+            f"http://127.0.0.1:{_XTTS_PORT}/tts",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with _req.urlopen(req, timeout=60) as resp:
+            return resp.read()
+    except Exception as e:
+        logging.warning(f"XTTS 請求失敗：{e}")
+        return None
+
+
 def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
     """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）
-    風格：俏皮嘴賤 + 低沉低音炮
-    - YunxiNeural chat style = 俏皮、有個性
-    - pitch -35Hz + ffmpeg 低頻增強 = 低音炮效果
+    優先使用 XTTS v2（更自然人聲），失敗自動 fallback 到 edge_tts
     """
     text = clean_for_tts(text)
-    import edge_tts, asyncio, tempfile, subprocess as sp
+    import tempfile, subprocess as sp
     import imageio_ffmpeg
 
     ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-    tmp_mp3 = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-    tmp_mp3.close()
     tmp_ogg = tempfile.NamedTemporaryFile(suffix=".ogg", delete=False)
     tmp_ogg.close()
 
-    # 台灣腔男聲：YunJheNeural 原音自然低沉，微調即可，不過度處理保留人聲質感
-    async def _gen():
-        comm = edge_tts.Communicate(text, voice, rate="-8%", pitch="-5Hz")
-        await comm.save(tmp_mp3.name)
-    asyncio.run(_gen())
+    # ── 嘗試 XTTS v2 ──────────────────────────────────────
+    wav_bytes = None
+    if _ensure_xtts_server():
+        wav_bytes = _xtts_generate_wav(text)
 
-    # ffmpeg：低頻 EQ 增強（bass boost）+ 轉 OGG OPUS
-    sp.run([
-        ffmpeg_exe, "-y", "-i", tmp_mp3.name,
-        "-af", "equalizer=f=80:width_type=o:width=2:g=6,equalizer=f=150:width_type=o:width=2:g=4",
-        "-c:a", "libopus", "-b:a", "96k",
-        tmp_ogg.name
-    ], capture_output=True)
+    if wav_bytes:
+        # WAV → OGG OPUS
+        tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp_wav.write(wav_bytes)
+        tmp_wav.close()
+        sp.run([
+            ffmpeg_exe, "-y", "-i", tmp_wav.name,
+            "-c:a", "libopus", "-b:a", "96k",
+            tmp_ogg.name
+        ], capture_output=True)
+        Path(tmp_wav.name).unlink(missing_ok=True)
+    else:
+        # ── Fallback：edge_tts ────────────────────────────
+        import edge_tts, asyncio
+        tmp_mp3 = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+        tmp_mp3.close()
+
+        async def _gen():
+            comm = edge_tts.Communicate(text, voice, rate="-8%", pitch="-5Hz")
+            await comm.save(tmp_mp3.name)
+        asyncio.run(_gen())
+
+        sp.run([
+            ffmpeg_exe, "-y", "-i", tmp_mp3.name,
+            "-af", "equalizer=f=80:width_type=o:width=2:g=6,equalizer=f=150:width_type=o:width=2:g=4",
+            "-c:a", "libopus", "-b:a", "96k",
+            tmp_ogg.name
+        ], capture_output=True)
+        Path(tmp_mp3.name).unlink(missing_ok=True)
 
     data = Path(tmp_ogg.name).read_bytes()
-    Path(tmp_mp3.name).unlink(missing_ok=True)
     Path(tmp_ogg.name).unlink(missing_ok=True)
     return data
 
