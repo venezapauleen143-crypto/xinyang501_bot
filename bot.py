@@ -2761,16 +2761,18 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
             return {"ok": True, "message": "\n".join(lines), "screenshot": None}
 
         elif action == "screenshot":
-            import mss
-            with mss.mss() as sct:
-                if monitor and 1 <= monitor <= len(sct.monitors) - 1:
-                    img_data = sct.grab(sct.monitors[monitor])
-                    label = f"螢幕{monitor}"
-                else:
-                    img_data = sct.grab(sct.monitors[0])
-                    label = "全螢幕"
-            from PIL import Image as _PIL_Image
-            img = _PIL_Image.frombytes("RGB", img_data.size, img_data.bgra, "raw", "BGRX")
+            from PIL import ImageGrab as _IG
+            import mss as _mss
+            with _mss.mss() as sct:
+                mons = sct.monitors[1:]  # 跳過 index 0 全域
+            if monitor and 1 <= monitor <= len(mons):
+                m = mons[monitor - 1]
+                bbox = (m["left"], m["top"], m["left"] + m["width"], m["top"] + m["height"])
+                img = _IG.grab(bbox=bbox, all_screens=True)
+                label = f"螢幕{monitor}"
+            else:
+                img = _IG.grab(all_screens=True)
+                label = "全螢幕"
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             screenshot_bytes = buf.getvalue()
