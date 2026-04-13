@@ -3572,7 +3572,7 @@ def clean_for_tts(text: str, max_chars: int = 200) -> str:
     return text
 
 
-def generate_voice_ogg(text: str, voice: str = "zh-CN-YunxiNeural") -> bytes:
+def generate_voice_ogg(text: str, voice: str = "zh-CN-YunjianNeural") -> bytes:
     """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）"""
     text = clean_for_tts(text)
     import edge_tts, asyncio, tempfile, subprocess as sp
@@ -3584,9 +3584,9 @@ def generate_voice_ogg(text: str, voice: str = "zh-CN-YunxiNeural") -> bytes:
     tmp_ogg = tempfile.NamedTemporaryFile(suffix=".ogg", delete=False)
     tmp_ogg.close()
 
-    # 生成 MP3（rate 稍慢、pitch 稍低，更有磁性）
+    # 生成 MP3（低沉低音炮：YunjianNeural 天生深沉，再壓 pitch + 稍慢語速）
     async def _gen():
-        comm = edge_tts.Communicate(text, voice, rate="-5%", pitch="-5Hz")
+        comm = edge_tts.Communicate(text, voice, rate="-10%", pitch="-20Hz")
         await comm.save(tmp_mp3.name)
     asyncio.run(_gen())
 
@@ -9089,7 +9089,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         import asyncio, io as _io
         loop = asyncio.get_running_loop()
         try:
-            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-CN-YunxiNeural")
+            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-CN-YunjianNeural")
             await update.message.reply_voice(voice=_io.BytesIO(ogg_data))
         except Exception:
             await update.message.reply_text(reply_text)
