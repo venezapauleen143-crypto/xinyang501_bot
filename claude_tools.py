@@ -3711,6 +3711,240 @@ def window_screenshot(title_keyword: str, output: str = ""):
         print(f"❌ 視窗截圖失敗：{e}")
 
 
+# ── Wave 13：檔案監聽/像素監控/AI物件偵測/滑鼠錄製/ADB/WiFi熱點/OneDrive/FTP/WSL/Hyper-V/檔案diff/螢幕串流 ──
+
+def file_watcher(path: str, events: str = "all", command: str = "", duration: float = 3600.0):
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+    import time
+    class _H(FileSystemEventHandler):
+        def _h(self, e, t):
+            if events != "all" and t not in events: return
+            print(f"📁 {t}：{e.src_path}")
+            if command: import subprocess; subprocess.Popen(command.replace("{path}", e.src_path), shell=True)
+        def on_created(self, e): self._h(e, "created")
+        def on_modified(self, e): self._h(e, "modified")
+        def on_deleted(self, e): self._h(e, "deleted")
+    obs = Observer(); obs.schedule(_H(), path, recursive=True); obs.start()
+    print(f"👁️ 監聽 {path} 中（{duration}s）...")
+    try: time.sleep(duration)
+    except KeyboardInterrupt: pass
+    finally: obs.stop(); obs.join()
+
+def pixel_watch(x: int, y: int, tolerance: int = 10, interval: float = 1.0, duration: float = 60.0, command: str = ""):
+    import pyautogui, time, subprocess
+    sc = pyautogui.screenshot(); r0,g0,b0 = sc.getpixel((x,y))[:3]
+    print(f"🎨 開始監控({x},{y}) 初始顏色：#{r0:02X}{g0:02X}{b0:02X}")
+    end = time.time() + duration
+    while time.time() < end:
+        sc = pyautogui.screenshot(); r,g,b = sc.getpixel((x,y))[:3]
+        if abs(r-r0)+abs(g-g0)+abs(b-b0) > tolerance*3:
+            print(f"🔔 顏色變化！#{r:02X}{g:02X}{b:02X}")
+            if command: subprocess.Popen(command, shell=True)
+            r0,g0,b0 = r,g,b
+        time.sleep(interval)
+
+def object_detect(target: str, action: str = "find", region: str = ""):
+    import pyautogui, anthropic, base64, io as _io, json, re, os
+    reg = None
+    if region:
+        parts = [int(v) for v in region.split(",")]
+        if len(parts) == 4: reg = tuple(parts)
+    sc = pyautogui.screenshot(region=reg)
+    buf = _io.BytesIO(); sc.save(buf, format="PNG")
+    img_b64 = base64.standard_b64encode(buf.getvalue()).decode()
+    ox = reg[0] if reg else 0; oy = reg[1] if reg else 0
+    cl = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    resp = cl.messages.create(model="claude-sonnet-4-6", max_tokens=256, messages=[{"role":"user","content":[
+        {"type":"image","source":{"type":"base64","media_type":"image/png","data":img_b64}},
+        {"type":"text","text":f"找「{target}」位置，回 JSON：{{\"found\":bool,\"x\":int,\"y\":int,\"description\":\"\"}}"}
+    ]}])
+    m = re.search(r'\{.*\}', resp.content[0].text, re.DOTALL)
+    if not m: print("⚠️ 無法解析"); return
+    res = json.loads(m.group())
+    if not res.get("found"): print(f"⚠️ 未找到：{target}"); return
+    ax, ay = res["x"]+ox, res["y"]+oy
+    if action == "click": pyautogui.click(ax, ay); print(f"✅ 已點擊「{target}」({ax},{ay})")
+    elif action == "double_click": pyautogui.doubleClick(ax, ay); print(f"✅ 已雙擊({ax},{ay})")
+    else: print(f"✅ 找到「{target}」：({ax},{ay}) {res.get('description','')}")
+
+def mouse_record(action: str, name: str = "", duration: float = 10.0, repeat: int = 1, speed: float = 1.0):
+    import json, time
+    f = Path.home() / ".claude_mouse_macros.json"
+    store = json.loads(f.read_text()) if f.exists() else {}
+    if action == "list":
+        print("\n".join(f"- {k}（{len(v)}事件）" for k,v in store.items()) if store else "⚠️ 無已儲存巨集")
+    elif action == "delete":
+        if name in store: del store[name]; f.write_text(json.dumps(store)); print(f"✅ 已刪除：{name}")
+        else: print(f"⚠️ 找不到：{name}")
+    elif action == "start":
+        from pynput import mouse as m
+        events = []; t0 = time.time()
+        def on_move(x,y): events.append({"t":time.time()-t0,"type":"move","x":x,"y":y})
+        def on_click(x,y,btn,pressed): events.append({"t":time.time()-t0,"type":"click","x":x,"y":y,"btn":str(btn),"pressed":pressed})
+        def on_scroll(x,y,dx,dy): events.append({"t":time.time()-t0,"type":"scroll","x":x,"y":y,"dx":dx,"dy":dy})
+        lis = m.Listener(on_move=on_move,on_click=on_click,on_scroll=on_scroll)
+        lis.start(); time.sleep(duration); lis.stop()
+        store[name] = events; f.write_text(json.dumps(store))
+        print(f"✅ 已錄製 '{name}'（{len(events)}事件）")
+    elif action == "play":
+        if name not in store: print(f"⚠️ 找不到：{name}"); return
+        from pynput import mouse as m
+        ctrl = m.Controller(); evts = store[name]
+        for _ in range(repeat):
+            prev = 0.0
+            for e in evts:
+                d = (e["t"]-prev)/speed; time.sleep(min(max(d,0),0.5)); prev=e["t"]
+                if e["type"]=="move": ctrl.position=(e["x"],e["y"])
+                elif e["type"]=="click":
+                    btn=m.Button.left if "left" in e["btn"] else m.Button.right
+                    ctrl.press(btn) if e["pressed"] else ctrl.release(btn)
+                elif e["type"]=="scroll": ctrl.scroll(e["dx"],e["dy"])
+        print(f"✅ '{name}' 回放 {repeat} 次完成")
+
+def adb(action: str, x: int=0, y: int=0, x2: int=0, y2: int=0, text: str="", path: str="", remote: str="", package: str="", command: str="", device: str=""):
+    import subprocess
+    p = ["adb"] + (["-s",device] if device else [])
+    try:
+        if action == "devices":
+            r = subprocess.run(["adb","devices","-l"],capture_output=True,text=True); print(r.stdout.strip())
+        elif action == "screenshot":
+            out = path or str(Path.home()/"Desktop"/f"adb_{datetime.now().strftime('%H%M%S')}.png")
+            subprocess.run(p+["shell","screencap","-p","/sdcard/screen.png"],capture_output=True)
+            subprocess.run(p+["pull","/sdcard/screen.png",out],capture_output=True); print(f"✅ 截圖：{out}")
+        elif action == "tap":
+            subprocess.run(p+["shell","input","tap",str(x),str(y)],capture_output=True); print(f"✅ 點擊({x},{y})")
+        elif action == "swipe":
+            subprocess.run(p+["shell","input","swipe",str(x),str(y),str(x2),str(y2),"300"],capture_output=True); print(f"✅ 滑動")
+        elif action == "type":
+            subprocess.run(p+["shell","input","text",text.replace(" ","%s")],capture_output=True); print(f"✅ 輸入：{text}")
+        elif action == "key":
+            subprocess.run(p+["shell","input","keyevent",text],capture_output=True); print(f"✅ 按鍵：{text}")
+        elif action == "install":
+            r=subprocess.run(p+["install","-r",path],capture_output=True,text=True); print(r.stdout.strip())
+        elif action == "push":
+            r=subprocess.run(p+["push",path,remote or "/sdcard/"],capture_output=True,text=True); print(r.stdout.strip())
+        elif action == "pull":
+            out=path or str(Path.home()/"Desktop"/Path(remote).name)
+            r=subprocess.run(p+["pull",remote,out],capture_output=True,text=True); print(r.stdout.strip())
+        elif action == "shell":
+            r=subprocess.run(p+["shell",command],capture_output=True,text=True); print(r.stdout.strip())
+        elif action == "start_app":
+            subprocess.run(p+["shell","monkey","-p",package,"-c","android.intent.category.LAUNCHER","1"],capture_output=True); print(f"✅ 啟動：{package}")
+        elif action == "stop_app":
+            subprocess.run(p+["shell","am","force-stop",package],capture_output=True); print(f"✅ 停止：{package}")
+    except Exception as e: print(f"❌ ADB失敗：{e}")
+
+def wifi_hotspot(action: str, ssid: str="", password: str=""):
+    import subprocess
+    try:
+        if action == "set":
+            r=subprocess.run(["netsh","wlan","set","hostednetwork",f"mode=allow",f"ssid={ssid}",f"key={password}"],capture_output=True,text=True,encoding="utf-8",errors="replace"); print(r.stdout.strip())
+        elif action == "start":
+            r=subprocess.run(["netsh","wlan","start","hostednetwork"],capture_output=True,text=True,encoding="utf-8",errors="replace"); print(r.stdout.strip())
+        elif action == "stop":
+            r=subprocess.run(["netsh","wlan","stop","hostednetwork"],capture_output=True,text=True,encoding="utf-8",errors="replace"); print(r.stdout.strip())
+        elif action == "status":
+            r=subprocess.run(["netsh","wlan","show","hostednetwork"],capture_output=True,text=True,encoding="utf-8",errors="replace"); print(r.stdout.strip())
+    except Exception as e: print(f"❌ 熱點失敗：{e}")
+
+def onedrive(action: str, path: str="", remote: str=""):
+    import os, shutil
+    od = os.path.expandvars(r"%USERPROFILE%\OneDrive")
+    if not Path(od).exists(): od = str(Path.home()/"OneDrive")
+    try:
+        if action == "list":
+            target = Path(od)/(remote or "")
+            for p in sorted(target.iterdir()): print(f"{'📁' if p.is_dir() else '📄'} {p.name}")
+        elif action == "upload":
+            dest = Path(od)/(remote or Path(path).name); shutil.copy2(path, dest); print(f"✅ 已上傳：{dest}")
+        elif action == "download":
+            src = Path(od)/remote; out = path or str(Path.home()/"Desktop"/src.name); shutil.copy2(src, out); print(f"✅ 已下載：{out}")
+        elif action == "status":
+            size = sum(f.stat().st_size for f in Path(od).rglob("*") if f.is_file())/1024/1024/1024; print(f"OneDrive路徑：{od}\n使用：{size:.2f}GB")
+        elif action == "open":
+            os.startfile(od); print(f"✅ 已開啟：{od}")
+    except Exception as e: print(f"❌ OneDrive失敗：{e}")
+
+def ftp(action: str, host: str="", user: str="", password: str="", local: str="", remote: str="", port: int=21):
+    from ftplib import FTP
+    try:
+        f = FTP(); f.connect(host, port, timeout=30); f.login(user, password)
+        if action == "list":
+            for item in f.nlst(remote or "."): print(item)
+        elif action == "upload":
+            with open(local,"rb") as fp: f.storbinary(f"STOR {remote or Path(local).name}", fp)
+            print(f"✅ 已上傳：{local}")
+        elif action == "download":
+            out = local or str(Path.home()/"Desktop"/Path(remote).name)
+            with open(out,"wb") as fp: f.retrbinary(f"RETR {remote}", fp.write)
+            print(f"✅ 已下載：{out}")
+        elif action == "delete":
+            f.delete(remote); print(f"✅ 已刪除：{remote}")
+        elif action == "mkdir":
+            f.mkd(remote); print(f"✅ 已建立目錄：{remote}")
+        f.quit()
+    except Exception as e: print(f"❌ FTP失敗：{e}")
+
+def wsl(action: str, distro: str="", command: str=""):
+    import subprocess
+    try:
+        if action == "list":
+            r=subprocess.run(["wsl","--list","--verbose"],capture_output=True,text=True,encoding="utf-16-le",errors="replace"); print(r.stdout.strip())
+        elif action == "run":
+            cmd=["wsl"]+(["-d",distro] if distro else [])+["--","bash","-c",command]
+            r=subprocess.run(cmd,capture_output=True,text=True,encoding="utf-8",errors="replace"); print(r.stdout.strip())
+        elif action == "start":
+            subprocess.Popen(["wsl"]+(["-d",distro] if distro else [])); print(f"✅ WSL 已啟動")
+        elif action == "stop":
+            cmd=["wsl","--terminate",distro] if distro else ["wsl","--shutdown"]
+            subprocess.run(cmd,capture_output=True); print(f"✅ WSL 已停止")
+        elif action == "status":
+            r=subprocess.run(["wsl","--status"],capture_output=True,text=True,encoding="utf-16-le",errors="replace"); print(r.stdout.strip())
+    except Exception as e: print(f"❌ WSL失敗：{e}")
+
+def hyperv(action: str, name: str="", snapshot: str=""):
+    import subprocess
+    def ps(cmd):
+        r=subprocess.run(["powershell","-Command",cmd],capture_output=True,text=True,encoding="utf-8",errors="replace"); return r.stdout.strip(),r.returncode
+    try:
+        if action == "list": out,_=ps("Get-VM | Select-Object Name,State | Format-Table -AutoSize"); print(out)
+        elif action == "start": ps(f"Start-VM -Name '{name}'"); print(f"✅ 已啟動：{name}")
+        elif action == "stop": ps(f"Stop-VM -Name '{name}' -Force"); print(f"✅ 已停止：{name}")
+        elif action == "pause": ps(f"Suspend-VM -Name '{name}'"); print(f"✅ 已暫停：{name}")
+        elif action == "resume": ps(f"Resume-VM -Name '{name}'"); print(f"✅ 已繼續：{name}")
+        elif action == "snapshot":
+            sn=snapshot or datetime.now().strftime("snap_%Y%m%d_%H%M%S")
+            ps(f"Checkpoint-VM -Name '{name}' -SnapshotName '{sn}'"); print(f"✅ 快照：{sn}")
+        elif action == "restore": ps(f"Restore-VMSnapshot -VMName '{name}' -Name '{snapshot}' -Confirm:$false"); print(f"✅ 還原：{snapshot}")
+        elif action == "status": out,_=ps(f"Get-VM -Name '{name}' | Format-List"); print(out)
+    except Exception as e: print(f"❌ Hyper-V失敗：{e}")
+
+def file_diff(file1: str, file2: str, output: str="", mode: str="unified"):
+    import difflib
+    try:
+        t1=Path(file1).read_text(encoding="utf-8",errors="replace").splitlines(keepends=True)
+        t2=Path(file2).read_text(encoding="utf-8",errors="replace").splitlines(keepends=True)
+        diff = list(difflib.unified_diff(t1,t2,fromfile=file1,tofile=file2) if mode=="unified" else difflib.context_diff(t1,t2,fromfile=file1,tofile=file2))
+        if not diff: print("✅ 兩個檔案完全相同"); return
+        result = "".join(diff)
+        if output: Path(output).write_text(result,encoding="utf-8"); print(f"✅ diff已存：{output}")
+        else: print(result[:3000])
+    except Exception as e: print(f"❌ diff失敗：{e}")
+
+def screen_live(fps: float=0.5, duration: float=60.0, quality: int=50):
+    import pyautogui, io as _io, time
+    interval = 1.0/max(fps,0.1); end=time.time()+duration; count=0
+    out_dir=Path.home()/"Desktop"/"screen_live"; out_dir.mkdir(exist_ok=True)
+    print(f"📹 開始串流（{fps}FPS，{duration}s）...")
+    while time.time()<end:
+        sc=pyautogui.screenshot()
+        out=str(out_dir/f"frame_{count:04d}.jpg")
+        sc.save(out,format="JPEG",quality=quality); count+=1
+        time.sleep(interval)
+    print(f"✅ 串流完成，{count}張截圖存於：{out_dir}")
+
+
 # ── Wave 12：AI視覺循環/監控告警/間隔排程/等待文字/瀏覽器進階/語音命令/通知攔截/資料處理/WOL/剪貼簿歷史 ──
 
 def vision_loop(goal: str, max_steps: int = 20, interval: float = 3.0, timeout: float = 120.0):
@@ -4485,6 +4719,18 @@ if __name__ == "__main__":
         "data_process":      lambda: data_process(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
         "wake_on_lan":       lambda: wake_on_lan(args[0], args[1] if len(args)>1 else "255.255.255.255", int(args[2]) if len(args)>2 else 9),
         "clipboard_history": lambda: clipboard_history(args[0] if args else "list", int(args[1]) if len(args)>1 else 0),
+        "file_watcher":      lambda: file_watcher(args[0], args[1] if len(args)>1 else "all", args[2] if len(args)>2 else "", float(args[3]) if len(args)>3 else 3600.0),
+        "pixel_watch":       lambda: pixel_watch(int(args[0]), int(args[1]), int(args[2]) if len(args)>2 else 10, float(args[3]) if len(args)>3 else 1.0, float(args[4]) if len(args)>4 else 60.0, args[5] if len(args)>5 else ""),
+        "object_detect":     lambda: object_detect(" ".join(args[:-1]) if len(args)>1 else args[0], args[-1] if len(args)>1 and args[-1] in ("click","double_click","find") else "find"),
+        "mouse_record":      lambda: mouse_record(args[0], args[1] if len(args)>1 else "", float(args[2]) if len(args)>2 else 10.0, int(args[3]) if len(args)>3 else 1, float(args[4]) if len(args)>4 else 1.0),
+        "adb":               lambda: adb(args[0], int(args[1]) if len(args)>1 and args[1].isdigit() else 0, int(args[2]) if len(args)>2 and args[2].isdigit() else 0, 0, 0, " ".join(args[3:]) if len(args)>3 else ""),
+        "wifi_hotspot":      lambda: wifi_hotspot(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "onedrive":          lambda: onedrive(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "ftp":               lambda: ftp(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "", args[5] if len(args)>5 else ""),
+        "wsl":               lambda: wsl(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else ""),
+        "hyperv":            lambda: hyperv(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "file_diff":         lambda: file_diff(args[0], args[1], args[2] if len(args)>2 else "", args[3] if len(args)>3 else "unified"),
+        "screen_live":       lambda: screen_live(float(args[0]) if args else 0.5, float(args[1]) if len(args)>1 else 60.0, int(args[2]) if len(args)>2 else 50),
     }
 
     if tool not in tools:

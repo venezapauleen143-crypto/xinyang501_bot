@@ -1001,6 +1001,182 @@ TOOLS = [
         }
     },
     {
+        "name": "file_watcher",
+        "description": "監聽資料夾檔案系統事件（新增/修改/刪除），觸發時執行命令或發送 Telegram 通知。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","list"]},
+                "name": {"type": "string", "description": "監聽器名稱"},
+                "path": {"type": "string", "description": "監聽的資料夾路徑"},
+                "events": {"type": "string", "description": "監聽事件類型：created/modified/deleted/all，預設 all"},
+                "command": {"type": "string", "description": "觸發時執行的指令（選填）"},
+                "notify": {"type": "boolean", "description": "觸發時是否發 Telegram 通知，預設 true"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "pixel_watch",
+        "description": "監控螢幕指定座標的像素顏色，顏色變化時觸發動作或通知。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","get","list"]},
+                "name": {"type": "string", "description": "監控器名稱"},
+                "x": {"type": "integer"}, "y": {"type": "integer"},
+                "command": {"type": "string", "description": "顏色變化時執行的指令"},
+                "interval": {"type": "number", "description": "檢查間隔秒數，預設 1"},
+                "tolerance": {"type": "integer", "description": "顏色容差 0-255，預設 10"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "object_detect",
+        "description": "AI 物件偵測：用 Claude Vision 識別螢幕上按鈕/圖示/文字區塊的精確位置，自動點擊或回傳座標。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "要找的物件描述，例如「確定按鈕」「搜尋框」「關閉X」"},
+                "action": {"type": "string", "enum": ["find","click","double_click"], "description": "找到後要做什麼"},
+                "region": {"type": "string", "description": "搜尋區域 x,y,w,h（選填，預設全螢幕）"}
+            },
+            "required": ["target"]
+        }
+    },
+    {
+        "name": "mouse_record",
+        "description": "滑鼠軌跡錄製與回放：錄製滑鼠移動+點擊+鍵盤完整操作，儲存後重複回放。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","play","list","delete"]},
+                "name": {"type": "string", "description": "錄製名稱"},
+                "duration": {"type": "number", "description": "錄製秒數（start 使用）"},
+                "repeat": {"type": "integer", "description": "回放次數，預設 1"},
+                "speed": {"type": "number", "description": "回放速度倍率，預設 1.0"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "adb",
+        "description": "Android 手機控制（ADB）：截圖、點擊、輸入文字、安裝 App、傳送檔案、執行 Shell 命令。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["devices","screenshot","tap","swipe","type","key","install","push","pull","shell","start_app","stop_app"]},
+                "x": {"type": "integer"}, "y": {"type": "integer"},
+                "x2": {"type": "integer"}, "y2": {"type": "integer"},
+                "text": {"type": "string"},
+                "path": {"type": "string", "description": "本機檔案路徑"},
+                "remote": {"type": "string", "description": "手機路徑"},
+                "package": {"type": "string", "description": "App 套件名稱"},
+                "command": {"type": "string", "description": "Shell 命令（shell 使用）"},
+                "device": {"type": "string", "description": "裝置序號（多裝置時使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "wifi_hotspot",
+        "description": "控制 Windows 行動熱點：開啟、關閉、設定 SSID 和密碼、查看連線裝置。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","status","set"]},
+                "ssid": {"type": "string", "description": "熱點名稱（set 使用）"},
+                "password": {"type": "string", "description": "熱點密碼（set 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "onedrive",
+        "description": "OneDrive 檔案同步：列出檔案、上傳、下載、取得分享連結。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","upload","download","sync","status","open"]},
+                "path": {"type": "string", "description": "本機檔案路徑"},
+                "remote": {"type": "string", "description": "OneDrive 路徑（相對）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "ftp",
+        "description": "FTP 客戶端：連線 FTP 伺服器，列出目錄、上傳、下載檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","upload","download","delete","mkdir","rename"]},
+                "host": {"type": "string"},
+                "user": {"type": "string"},
+                "password": {"type": "string"},
+                "local": {"type": "string", "description": "本機檔案路徑"},
+                "remote": {"type": "string", "description": "FTP 路徑"},
+                "port": {"type": "integer", "description": "FTP 埠，預設 21"}
+            },
+            "required": ["action","host"]
+        }
+    },
+    {
+        "name": "wsl",
+        "description": "WSL（Windows Subsystem for Linux）管理：列出發行版、執行 Linux 命令、啟動/停止。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","run","start","stop","status","install"]},
+                "distro": {"type": "string", "description": "發行版名稱，例如 Ubuntu"},
+                "command": {"type": "string", "description": "要執行的 Linux 命令（run 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "hyperv",
+        "description": "Hyper-V 虛擬機管理：列出、啟動、停止、暫停、建立快照、還原快照。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","start","stop","pause","resume","snapshot","restore","delete_snapshot","status"]},
+                "name": {"type": "string", "description": "虛擬機名稱"},
+                "snapshot": {"type": "string", "description": "快照名稱（snapshot/restore 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "file_diff",
+        "description": "比較兩個文字檔的差異，輸出 diff 結果，可儲存為 patch 檔。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file1": {"type": "string", "description": "第一個檔案路徑"},
+                "file2": {"type": "string", "description": "第二個檔案路徑"},
+                "output": {"type": "string", "description": "輸出 patch 檔路徑（選填）"},
+                "mode": {"type": "string", "enum": ["unified","context","simple"], "description": "diff 格式，預設 unified"}
+            },
+            "required": ["file1","file2"]
+        }
+    },
+    {
+        "name": "screen_live",
+        "description": "即時螢幕串流到 Telegram：持續截圖並發送，用於遠端監控電腦畫面。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop"]},
+                "fps": {"type": "number", "description": "每秒幾張，預設 0.5（2秒一張）"},
+                "duration": {"type": "number", "description": "串流秒數，預設 60"},
+                "quality": {"type": "integer", "description": "JPEG 畫質 1-95，預設 50"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "download_file",
         "description": "下載網路檔案到本機指定路徑。",
         "input_schema": {
@@ -3684,6 +3860,465 @@ def execute_clipboard_history(action, index=0):
         return f"❌ 剪貼簿歷史失敗：{e}"
 
 
+_file_watchers = {}
+_pixel_watchers = {}
+_mouse_recordings = {}
+_screen_live_running = False
+
+def execute_file_watcher(action, name="", path="", events="all", command="", notify=True, _bot_send=None, _chat_id=None):
+    global _file_watchers
+    try:
+        import threading
+        if action == "list":
+            if not _file_watchers:
+                return "⚠️ 無執行中的監聽器"
+            return "📁 檔案監聽器：\n" + "\n".join(f"- {k}: {v['path']}" for k,v in _file_watchers.items())
+        elif action == "stop":
+            if name in _file_watchers:
+                _file_watchers[name]["observer"].stop()
+                del _file_watchers[name]
+                return f"✅ 已停止監聽：{name}"
+            return f"⚠️ 找不到：{name}"
+        elif action == "start":
+            from watchdog.observers import Observer
+            from watchdog.events import FileSystemEventHandler
+            class _Handler(FileSystemEventHandler):
+                def _handle(self, event, etype):
+                    if events != "all" and etype not in events: return
+                    msg = f"📁 [{name}] {etype}：{event.src_path}"
+                    if command:
+                        import subprocess; subprocess.Popen(command.replace("{path}", event.src_path), shell=True)
+                    if notify and _bot_send and _chat_id:
+                        import asyncio
+                        asyncio.run_coroutine_threadsafe(_bot_send(_chat_id, msg), asyncio.get_event_loop())
+                def on_created(self, e): self._handle(e, "created")
+                def on_modified(self, e): self._handle(e, "modified")
+                def on_deleted(self, e): self._handle(e, "deleted")
+            observer = Observer()
+            observer.schedule(_Handler(), path, recursive=True)
+            observer.start()
+            _file_watchers[name] = {"path": path, "observer": observer}
+            return f"✅ 已開始監聽：{name} → {path}（事件：{events}）"
+    except Exception as e:
+        return f"❌ 檔案監聽失敗：{e}"
+
+
+def execute_pixel_watch(action, name="", x=0, y=0, command="", interval=1.0, tolerance=10, _bot_send=None, _chat_id=None):
+    global _pixel_watchers
+    try:
+        import threading, time
+        if action == "get":
+            import pyautogui
+            screenshot = pyautogui.screenshot()
+            r, g, b = screenshot.getpixel((int(x), int(y)))[:3]
+            return f"🎨 座標({x},{y}) 目前顏色：RGB({r},{g},{b}) #{r:02X}{g:02X}{b:02X}"
+        elif action == "list":
+            if not _pixel_watchers:
+                return "⚠️ 無執行中的像素監控"
+            return "🎨 像素監控：\n" + "\n".join(f"- {k}: ({v['x']},{v['y']})" for k,v in _pixel_watchers.items())
+        elif action == "stop":
+            if name in _pixel_watchers:
+                _pixel_watchers[name]["running"] = False
+                del _pixel_watchers[name]
+                return f"✅ 已停止像素監控：{name}"
+            return f"⚠️ 找不到：{name}"
+        elif action == "start":
+            import pyautogui
+            screenshot = pyautogui.screenshot()
+            r0, g0, b0 = screenshot.getpixel((int(x), int(y)))[:3]
+            cfg = {"x": x, "y": y, "r": r0, "g": g0, "b": b0, "running": True}
+            _pixel_watchers[name] = cfg
+            def _watch():
+                import pyautogui, subprocess, time as t
+                while _pixel_watchers.get(name, {}).get("running"):
+                    try:
+                        sc = pyautogui.screenshot()
+                        r, g, b = sc.getpixel((int(x), int(y)))[:3]
+                        cfg = _pixel_watchers.get(name, {})
+                        diff = abs(r-cfg["r"]) + abs(g-cfg["g"]) + abs(b-cfg["b"])
+                        if diff > int(tolerance) * 3:
+                            msg = f"🎨 [{name}] 像素({x},{y})顏色變化！#{r:02X}{g:02X}{b:02X}"
+                            if command: subprocess.Popen(command, shell=True)
+                            if _bot_send and _chat_id:
+                                import asyncio
+                                asyncio.run_coroutine_threadsafe(_bot_send(_chat_id, msg), asyncio.get_event_loop())
+                            cfg["r"], cfg["g"], cfg["b"] = r, g, b
+                    except: pass
+                    t.sleep(float(interval))
+            threading.Thread(target=_watch, daemon=True).start()
+            return f"✅ 像素監控已啟動：{name} ({x},{y}) 容差={tolerance}"
+    except Exception as e:
+        return f"❌ 像素監控失敗：{e}"
+
+
+def execute_object_detect(target, action="find", region=""):
+    try:
+        import pyautogui, anthropic, base64, io as _io, json, re, os
+        reg = None
+        if region:
+            parts = [int(v) for v in region.split(",")]
+            if len(parts) == 4: reg = tuple(parts)
+        screenshot = pyautogui.screenshot(region=reg)
+        buf = _io.BytesIO(); screenshot.save(buf, format="PNG")
+        img_b64 = base64.standard_b64encode(buf.getvalue()).decode()
+        offset_x = reg[0] if reg else 0
+        offset_y = reg[1] if reg else 0
+        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        resp = _client.messages.create(
+            model="claude-sonnet-4-6", max_tokens=256,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text", "text": f"在圖片中找到「{target}」的位置。回答 JSON：{{\"found\": true/false, \"x\": 中心X座標, \"y\": 中心Y座標, \"description\": \"說明\"}}"}
+            ]}]
+        )
+        m = re.search(r'\{.*\}', resp.content[0].text, re.DOTALL)
+        if not m: return f"⚠️ AI 無法解析回應"
+        result = json.loads(m.group())
+        if not result.get("found"): return f"⚠️ 未找到：{target}"
+        ax = result["x"] + offset_x
+        ay = result["y"] + offset_y
+        if action == "click": pyautogui.click(ax, ay); return f"✅ 已點擊「{target}」({ax},{ay})"
+        elif action == "double_click": pyautogui.doubleClick(ax, ay); return f"✅ 已雙擊「{target}」({ax},{ay})"
+        return f"✅ 找到「{target}」：座標({ax},{ay}) — {result.get('description','')}"
+    except Exception as e:
+        return f"❌ 物件偵測失敗：{e}"
+
+
+def execute_mouse_record(action, name="", duration=10.0, repeat=1, speed=1.0):
+    try:
+        import json, time
+        from pathlib import Path as _Path
+        record_file = _Path.home() / ".claude_mouse_macros.json"
+        store = json.loads(record_file.read_text()) if record_file.exists() else {}
+        if action == "list":
+            if not store: return "⚠️ 無已儲存的滑鼠巨集"
+            return "🖱️ 滑鼠巨集：\n" + "\n".join(f"- {k}（{len(v)} 個事件）" for k,v in store.items())
+        elif action == "delete":
+            if name in store:
+                del store[name]; record_file.write_text(json.dumps(store))
+                return f"✅ 已刪除：{name}"
+            return f"⚠️ 找不到：{name}"
+        elif action == "start":
+            from pynput import mouse, keyboard as kb
+            events = []
+            start_time = time.time()
+            def on_move(x, y): events.append({"t": time.time()-start_time, "type":"move", "x":x, "y":y})
+            def on_click(x, y, btn, pressed): events.append({"t": time.time()-start_time, "type":"click", "x":x, "y":y, "btn":str(btn), "pressed":pressed})
+            def on_scroll(x, y, dx, dy): events.append({"t": time.time()-start_time, "type":"scroll", "x":x, "y":y, "dx":dx, "dy":dy})
+            m_listener = mouse.Listener(on_move=on_move, on_click=on_click, on_scroll=on_scroll)
+            m_listener.start()
+            time.sleep(float(duration))
+            m_listener.stop()
+            store[name] = events
+            record_file.write_text(json.dumps(store))
+            return f"✅ 滑鼠巨集 '{name}' 錄製完成（{len(events)} 個事件，{duration}s）"
+        elif action == "play":
+            if name not in store: return f"⚠️ 找不到：{name}"
+            from pynput import mouse as m
+            controller = m.Controller()
+            events = store[name]
+            spd = float(speed)
+            for _ in range(int(repeat)):
+                prev_t = 0.0
+                for e in events:
+                    delay = (e["t"] - prev_t) / spd
+                    if delay > 0: time.sleep(min(delay, 0.5))
+                    prev_t = e["t"]
+                    if e["type"] == "move":
+                        controller.position = (e["x"], e["y"])
+                    elif e["type"] == "click":
+                        btn = m.Button.left if "left" in e["btn"] else m.Button.right
+                        if e["pressed"]: controller.press(btn)
+                        else: controller.release(btn)
+                    elif e["type"] == "scroll":
+                        controller.scroll(e["dx"], e["dy"])
+            return f"✅ 滑鼠巨集 '{name}' 回放 {repeat} 次完成"
+    except Exception as e:
+        return f"❌ 滑鼠巨集失敗：{e}"
+
+
+def execute_adb(action, x=0, y=0, x2=0, y2=0, text="", path="", remote="", package="", command="", device=""):
+    try:
+        import subprocess
+        prefix = ["adb"]
+        if device: prefix += ["-s", device]
+        if action == "devices":
+            r = subprocess.run(["adb", "devices", "-l"], capture_output=True, text=True)
+            return f"📱 ADB 裝置：\n{r.stdout.strip()}"
+        elif action == "screenshot":
+            out = path or str(Path.home() / "Desktop" / f"adb_{datetime.now().strftime('%H%M%S')}.png")
+            subprocess.run(prefix + ["shell", "screencap", "-p", "/sdcard/screen.png"], capture_output=True)
+            subprocess.run(prefix + ["pull", "/sdcard/screen.png", out], capture_output=True)
+            return f"✅ 手機截圖已存：{out}"
+        elif action == "tap":
+            subprocess.run(prefix + ["shell", "input", "tap", str(x), str(y)], capture_output=True)
+            return f"✅ 已點擊手機 ({x},{y})"
+        elif action == "swipe":
+            subprocess.run(prefix + ["shell", "input", "swipe", str(x), str(y), str(x2), str(y2), "300"], capture_output=True)
+            return f"✅ 已滑動 ({x},{y})→({x2},{y2})"
+        elif action == "type":
+            t = text.replace(" ", "%s")
+            subprocess.run(prefix + ["shell", "input", "text", t], capture_output=True)
+            return f"✅ 已輸入文字：{text}"
+        elif action == "key":
+            subprocess.run(prefix + ["shell", "input", "keyevent", text], capture_output=True)
+            return f"✅ 已按鍵：{text}"
+        elif action == "install":
+            r = subprocess.run(prefix + ["install", "-r", path], capture_output=True, text=True)
+            return f"✅ 已安裝：{path}\n{r.stdout.strip()}" if r.returncode == 0 else f"❌ 安裝失敗：{r.stderr}"
+        elif action == "push":
+            r = subprocess.run(prefix + ["push", path, remote or "/sdcard/"], capture_output=True, text=True)
+            return f"✅ 已上傳：{path} → {remote}" if r.returncode == 0 else f"❌ 失敗：{r.stderr}"
+        elif action == "pull":
+            out = path or str(Path.home() / "Desktop" / Path(remote).name)
+            r = subprocess.run(prefix + ["pull", remote, out], capture_output=True, text=True)
+            return f"✅ 已下載：{remote} → {out}" if r.returncode == 0 else f"❌ 失敗：{r.stderr}"
+        elif action == "shell":
+            r = subprocess.run(prefix + ["shell", command], capture_output=True, text=True)
+            return f"📱 ADB Shell：\n{r.stdout.strip()}"
+        elif action == "start_app":
+            r = subprocess.run(prefix + ["shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"], capture_output=True, text=True)
+            return f"✅ 已啟動 App：{package}"
+        elif action == "stop_app":
+            subprocess.run(prefix + ["shell", "am", "force-stop", package], capture_output=True)
+            return f"✅ 已停止 App：{package}"
+    except Exception as e:
+        return f"❌ ADB 操作失敗：{e}（請確認已安裝 ADB 並開啟 USB 偵錯）"
+
+
+def execute_wifi_hotspot(action, ssid="", password=""):
+    try:
+        import subprocess
+        if action == "status":
+            r = subprocess.run(["powershell", "-Command",
+                "Get-NetConnectionProfile | Select-Object Name,NetworkCategory | Format-Table; netsh wlan show hostednetwork"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"📡 熱點狀態：\n{r.stdout.strip()}"
+        elif action == "set":
+            r = subprocess.run(["netsh", "wlan", "set", "hostednetwork",
+                f"mode=allow", f"ssid={ssid}", f"key={password}"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ 熱點設定完成：SSID={ssid}\n{r.stdout.strip()}"
+        elif action == "start":
+            r = subprocess.run(["netsh", "wlan", "start", "hostednetwork"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ 熱點已啟動\n{r.stdout.strip()}"
+        elif action == "stop":
+            r = subprocess.run(["netsh", "wlan", "stop", "hostednetwork"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ 熱點已停止\n{r.stdout.strip()}"
+    except Exception as e:
+        return f"❌ WiFi 熱點失敗：{e}"
+
+
+def execute_onedrive(action, path="", remote=""):
+    try:
+        import subprocess, os
+        onedrive_path = os.path.expandvars(r"%USERPROFILE%\OneDrive")
+        if not Path(onedrive_path).exists():
+            onedrive_path = os.path.expandvars(r"%OneDrive%") or str(Path.home() / "OneDrive")
+        if action == "status":
+            r = subprocess.run(["powershell", "-Command",
+                "Get-Process OneDrive -ErrorAction SilentlyContinue | Select-Object Name,CPU,WorkingSet"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            size = sum(f.stat().st_size for f in Path(onedrive_path).rglob("*") if f.is_file()) / 1024 / 1024 / 1024
+            return f"☁️ OneDrive 路徑：{onedrive_path}\n使用空間：{size:.2f} GB\n程序狀態：\n{r.stdout.strip()}"
+        elif action == "list":
+            target = Path(onedrive_path) / (remote or "")
+            if not target.exists(): return f"⚠️ 路徑不存在：{target}"
+            items = list(target.iterdir())
+            lines = [f"{'📁' if p.is_dir() else '📄'} {p.name}" for p in sorted(items)]
+            return f"☁️ OneDrive/{remote or ''}：\n" + "\n".join(lines[:30])
+        elif action == "upload":
+            import shutil
+            dest = Path(onedrive_path) / (remote or Path(path).name)
+            shutil.copy2(path, dest)
+            return f"✅ 已上傳至 OneDrive：{dest}"
+        elif action == "download":
+            import shutil
+            src = Path(onedrive_path) / remote
+            if not src.exists(): return f"⚠️ 找不到：{src}"
+            dest = path or str(Path.home() / "Desktop" / src.name)
+            shutil.copy2(src, dest)
+            return f"✅ 已從 OneDrive 下載：{dest}"
+        elif action == "sync":
+            subprocess.Popen(["powershell", "-Command",
+                'Start-Process "$env:LOCALAPPDATA\\Microsoft\\OneDrive\\OneDrive.exe"'])
+            return "✅ OneDrive 同步已觸發"
+        elif action == "open":
+            import os; os.startfile(onedrive_path)
+            return f"✅ 已開啟 OneDrive 資料夾：{onedrive_path}"
+    except Exception as e:
+        return f"❌ OneDrive 操作失敗：{e}"
+
+
+def execute_ftp(action, host="", user="", password="", local="", remote="", port=21):
+    try:
+        from ftplib import FTP
+        ftp = FTP()
+        ftp.connect(host, int(port), timeout=30)
+        ftp.login(user, password)
+        if action == "list":
+            items = ftp.nlst(remote or ".")
+            ftp.quit()
+            return f"📂 FTP {host}{remote or '/'}：\n" + "\n".join(items[:50])
+        elif action == "upload":
+            with open(local, "rb") as f:
+                ftp.storbinary(f"STOR {remote or Path(local).name}", f)
+            ftp.quit()
+            return f"✅ 已上傳：{local} → {host}/{remote}"
+        elif action == "download":
+            out = local or str(Path.home() / "Desktop" / Path(remote).name)
+            with open(out, "wb") as f:
+                ftp.retrbinary(f"RETR {remote}", f.write)
+            ftp.quit()
+            return f"✅ 已下載：{host}/{remote} → {out}"
+        elif action == "delete":
+            ftp.delete(remote); ftp.quit()
+            return f"✅ 已刪除：{remote}"
+        elif action == "mkdir":
+            ftp.mkd(remote); ftp.quit()
+            return f"✅ 已建立目錄：{remote}"
+        elif action == "rename":
+            ftp.rename(remote, local); ftp.quit()
+            return f"✅ 已重新命名：{remote} → {local}"
+    except Exception as e:
+        return f"❌ FTP 操作失敗：{e}"
+
+
+def execute_wsl(action, distro="", command=""):
+    try:
+        import subprocess
+        if action == "list":
+            r = subprocess.run(["wsl", "--list", "--verbose"],
+                capture_output=True, text=True, encoding="utf-16-le", errors="replace")
+            return f"🐧 WSL 發行版：\n{r.stdout.strip()}"
+        elif action == "status":
+            r = subprocess.run(["wsl", "--status"],
+                capture_output=True, text=True, encoding="utf-16-le", errors="replace")
+            return f"🐧 WSL 狀態：\n{r.stdout.strip()}"
+        elif action == "run":
+            cmd = ["wsl"]
+            if distro: cmd += ["-d", distro]
+            cmd += ["--", "bash", "-c", command]
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"🐧 WSL 輸出：\n{r.stdout.strip()}" + (f"\n錯誤：{r.stderr.strip()}" if r.stderr.strip() else "")
+        elif action == "start":
+            subprocess.Popen(["wsl"] + (["-d", distro] if distro else []))
+            return f"✅ WSL 已啟動：{distro or '預設'}"
+        elif action == "stop":
+            cmd = ["wsl", "--terminate", distro] if distro else ["wsl", "--shutdown"]
+            subprocess.run(cmd, capture_output=True)
+            return f"✅ WSL 已停止：{distro or '全部'}"
+        elif action == "install":
+            r = subprocess.run(["wsl", "--install", "-d", distro],
+                capture_output=True, text=True)
+            return f"✅ 正在安裝 {distro}（需要網路）"
+    except Exception as e:
+        return f"❌ WSL 操作失敗：{e}（請確認已啟用 WSL）"
+
+
+def execute_hyperv(action, name="", snapshot=""):
+    try:
+        import subprocess
+        def ps(cmd):
+            r = subprocess.run(["powershell", "-Command", cmd],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout.strip(), r.returncode
+        if action == "list":
+            out, _ = ps("Get-VM | Select-Object Name,State,CPUUsage,MemoryAssigned | Format-Table -AutoSize")
+            return f"💻 虛擬機清單：\n{out}" if out else "⚠️ 未找到虛擬機（請確認已啟用 Hyper-V）"
+        elif action == "status":
+            out, _ = ps(f"Get-VM -Name '{name}' | Select-Object * | Format-List")
+            return f"💻 {name} 狀態：\n{out}"
+        elif action == "start":
+            out, rc = ps(f"Start-VM -Name '{name}'")
+            return f"✅ 已啟動：{name}" if rc == 0 else f"❌ 啟動失敗：{out}"
+        elif action == "stop":
+            out, rc = ps(f"Stop-VM -Name '{name}' -Force")
+            return f"✅ 已停止：{name}" if rc == 0 else f"❌ 停止失敗：{out}"
+        elif action == "pause":
+            ps(f"Suspend-VM -Name '{name}'")
+            return f"✅ 已暫停：{name}"
+        elif action == "resume":
+            ps(f"Resume-VM -Name '{name}'")
+            return f"✅ 已繼續：{name}"
+        elif action == "snapshot":
+            sname = snapshot or datetime.now().strftime("snap_%Y%m%d_%H%M%S")
+            out, rc = ps(f"Checkpoint-VM -Name '{name}' -SnapshotName '{sname}'")
+            return f"✅ 快照已建立：{sname}" if rc == 0 else f"❌ 失敗：{out}"
+        elif action == "restore":
+            out, rc = ps(f"Restore-VMSnapshot -Name '{name}' -VMName '{name}' -Confirm:$false")
+            return f"✅ 已還原快照：{snapshot}" if rc == 0 else f"❌ 失敗：{out}"
+        elif action == "delete_snapshot":
+            ps(f"Remove-VMSnapshot -VMName '{name}' -Name '{snapshot}' -Confirm:$false")
+            return f"✅ 已刪除快照：{snapshot}"
+    except Exception as e:
+        return f"❌ Hyper-V 操作失敗：{e}"
+
+
+def execute_file_diff(file1, file2, output="", mode="unified"):
+    try:
+        import difflib
+        text1 = Path(file1).read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+        text2 = Path(file2).read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+        if mode == "unified":
+            diff = list(difflib.unified_diff(text1, text2, fromfile=file1, tofile=file2))
+        elif mode == "context":
+            diff = list(difflib.context_diff(text1, text2, fromfile=file1, tofile=file2))
+        else:
+            diff = [f"{'+ ' if a != b else '  '}{a}" for a, b in zip(text1, text2)]
+        if not diff:
+            return "✅ 兩個檔案內容完全相同"
+        result = "".join(diff)
+        if output:
+            Path(output).write_text(result, encoding="utf-8")
+            return f"✅ diff 已儲存：{output}\n（共 {len(diff)} 行差異）"
+        return f"📄 檔案差異（{len(diff)} 行）：\n{result[:2000]}"
+    except Exception as e:
+        return f"❌ 檔案比較失敗：{e}"
+
+
+def execute_screen_live(action, fps=0.5, duration=60.0, quality=50, _bot_send=None, _chat_id=None):
+    global _screen_live_running
+    try:
+        import threading
+        if action == "stop":
+            _screen_live_running = False
+            return "✅ 螢幕串流已停止"
+        elif action == "start":
+            if _screen_live_running:
+                return "⚠️ 螢幕串流已在執行中"
+            _screen_live_running = True
+            def _stream():
+                global _screen_live_running
+                import pyautogui, io as _io, time as t, asyncio
+                interval = 1.0 / max(float(fps), 0.1)
+                end = t.time() + float(duration)
+                loop = asyncio.get_event_loop()
+                count = 0
+                while _screen_live_running and t.time() < end:
+                    try:
+                        screenshot = pyautogui.screenshot()
+                        buf = _io.BytesIO()
+                        screenshot.save(buf, format="JPEG", quality=int(quality))
+                        buf.seek(0)
+                        if _bot_send and _chat_id:
+                            import telegram
+                            asyncio.run_coroutine_threadsafe(
+                                _bot_send(_chat_id, photo=buf),
+                                loop)
+                        count += 1
+                    except Exception:
+                        pass
+                    t.sleep(interval)
+                _screen_live_running = False
+            threading.Thread(target=_stream, daemon=True).start()
+            return f"✅ 螢幕串流已啟動（{fps} FPS，{duration}s，畫質 {quality}）"
+    except Exception as e:
+        return f"❌ 螢幕串流失敗：{e}"
+
+
 def execute_download_file(url, save_path=""):
     try:
         import requests
@@ -5696,6 +6331,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "clipboard_history": lambda: execute_clipboard_history(
                     tool_use.input["action"],
                     tool_use.input.get("index",0)),
+                "file_watcher": lambda: execute_file_watcher(
+                    tool_use.input["action"], tool_use.input.get("name",""),
+                    tool_use.input.get("path",""), tool_use.input.get("events","all"),
+                    tool_use.input.get("command",""), tool_use.input.get("notify",True),
+                    _bot_send=context.bot.send_message, _chat_id=chat_id),
+                "pixel_watch": lambda: execute_pixel_watch(
+                    tool_use.input["action"], tool_use.input.get("name",""),
+                    tool_use.input.get("x",0), tool_use.input.get("y",0),
+                    tool_use.input.get("command",""), tool_use.input.get("interval",1.0),
+                    tool_use.input.get("tolerance",10),
+                    _bot_send=context.bot.send_message, _chat_id=chat_id),
+                "object_detect": lambda: execute_object_detect(
+                    tool_use.input["target"], tool_use.input.get("action","find"),
+                    tool_use.input.get("region","")),
+                "mouse_record": lambda: execute_mouse_record(
+                    tool_use.input["action"], tool_use.input.get("name",""),
+                    tool_use.input.get("duration",10.0), tool_use.input.get("repeat",1),
+                    tool_use.input.get("speed",1.0)),
+                "adb": lambda: execute_adb(
+                    tool_use.input["action"],
+                    tool_use.input.get("x",0), tool_use.input.get("y",0),
+                    tool_use.input.get("x2",0), tool_use.input.get("y2",0),
+                    tool_use.input.get("text",""), tool_use.input.get("path",""),
+                    tool_use.input.get("remote",""), tool_use.input.get("package",""),
+                    tool_use.input.get("command",""), tool_use.input.get("device","")),
+                "wifi_hotspot": lambda: execute_wifi_hotspot(
+                    tool_use.input["action"], tool_use.input.get("ssid",""),
+                    tool_use.input.get("password","")),
+                "onedrive": lambda: execute_onedrive(
+                    tool_use.input["action"], tool_use.input.get("path",""),
+                    tool_use.input.get("remote","")),
+                "ftp": lambda: execute_ftp(
+                    tool_use.input["action"], tool_use.input.get("host",""),
+                    tool_use.input.get("user",""), tool_use.input.get("password",""),
+                    tool_use.input.get("local",""), tool_use.input.get("remote",""),
+                    tool_use.input.get("port",21)),
+                "wsl": lambda: execute_wsl(
+                    tool_use.input["action"], tool_use.input.get("distro",""),
+                    tool_use.input.get("command","")),
+                "hyperv": lambda: execute_hyperv(
+                    tool_use.input["action"], tool_use.input.get("name",""),
+                    tool_use.input.get("snapshot","")),
+                "file_diff": lambda: execute_file_diff(
+                    tool_use.input["file1"], tool_use.input["file2"],
+                    tool_use.input.get("output",""), tool_use.input.get("mode","unified")),
+                "screen_live": lambda: execute_screen_live(
+                    tool_use.input["action"], tool_use.input.get("fps",0.5),
+                    tool_use.input.get("duration",60.0), tool_use.input.get("quality",50),
+                    _bot_send=context.bot.send_photo, _chat_id=chat_id),
             }
 
             if tool_use.name == "send_voice":
