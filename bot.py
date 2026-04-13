@@ -9139,11 +9139,16 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         # 縮圖 + base64（在 executor 執行，不阻塞 event loop）
         def _prepare(raw: bytearray) -> str:
             img = Image.open(_io.BytesIO(bytes(raw))).convert("RGB")
-            if max(img.width, img.height) > 1024:
-                r = 1024 / max(img.width, img.height)
+            # 保留較高解析度以利精準辨識，上限 2048px
+            if max(img.width, img.height) > 2048:
+                r = 2048 / max(img.width, img.height)
                 img = img.resize((int(img.width * r), int(img.height * r)), Image.LANCZOS)
             buf = _io.BytesIO()
-            img.save(buf, format="JPEG", quality=80)
+            img.save(buf, format="JPEG", quality=92)
+            # 若超過 4MB 則降品質重試
+            if buf.tell() > 4 * 1024 * 1024:
+                buf = _io.BytesIO()
+                img.save(buf, format="JPEG", quality=80)
             return base64.b64encode(buf.getvalue()).decode("utf-8")
 
         img_b64 = await asyncio.wait_for(
@@ -9153,9 +9158,26 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         del photo_bytes  # 盡早釋放記憶體
 
         question = caption if caption else "請描述這張圖片的內容，有什麼特別的地方？"
+
+        # 辨識強化：偵測是否為品種／種類類問題，附加專業分析指示
+        _id_keywords = ["什麼", "哪種", "品種", "種類", "是啥", "這是", "辨識", "分析",
+                        "what", "which", "breed", "species", "identify", "fruit", "flower",
+                        "水果", "植物", "動物", "貓", "狗", "鳥", "花"]
+        _is_id_question = any(kw in question.lower() for kw in _id_keywords) or not caption
+
+        if _is_id_question:
+            vision_hint = (
+                "\n\n【圖片分析模式】請切換為專業視覺分析師角色。"
+                "辨識時請：1) 列出最可能的品種／種類（前3名）及信心度 "
+                "2) 說明判斷依據（毛色、體型、花紋、形狀、顏色等具體特徵）"
+                "3) 排除易混淆的相似品種並說明差異。回答要精確，不要因為人設而講錯答案。"
+            )
+        else:
+            vision_hint = ""
+
         user_content = [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
-            {"type": "text", "text": question}
+            {"type": "text", "text": question + vision_hint}
         ]
 
         # 儲存純文字版到 DB（不存 base64）
@@ -9187,6 +9209,8 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         # Claude API（同步阻塞）→ executor，加 timeout
+        # 辨識類問題給更多 token，確保分析完整
+        _max_tokens = 2048 if _is_id_question else 1024
         _sys, _hist = system, list(cleaned)
         del img_b64  # 丟進 lambda 後就可以釋放外部引用
         response = await asyncio.wait_for(
@@ -9194,7 +9218,7 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 None,
                 lambda: client.messages.create(
                     model="claude-sonnet-4-6",
-                    max_tokens=1024,
+                    max_tokens=_max_tokens,
                     system=_sys,
                     messages=_hist
                 )
