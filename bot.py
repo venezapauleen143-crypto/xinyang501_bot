@@ -9113,13 +9113,18 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-        # 下載最高解析度圖片
+        import asyncio, base64
+        loop = asyncio.get_running_loop()
+
+        # 下載最高解析度圖片（async，不阻塞）
         photo = update.message.photo[-1]
         photo_file = await context.bot.get_file(photo.file_id)
         photo_bytes = await photo_file.download_as_bytearray()
 
-        import base64
-        img_b64 = base64.b64encode(bytes(photo_bytes)).decode("utf-8")
+        # base64 轉換（CPU-bound，丟到 executor 不阻塞 event loop）
+        img_b64 = await loop.run_in_executor(
+            None, lambda: base64.b64encode(bytes(photo_bytes)).decode("utf-8")
+        )
 
         question = caption if caption else "請描述這張圖片的內容，有什麼特別的地方？"
         user_content = [
@@ -9128,24 +9133,22 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         ]
 
         # 儲存純文字版到 DB（不存 base64，避免 DB 爆炸）
-        saved_text = f"[圖片] {caption}" if caption else "[圖片] 請描述"
-        if is_group:
-            saved_text = f"[{sender_name}]: [圖片] {caption}" if caption else f"[{sender_name}]: [圖片] 請描述"
+        saved_text = f"[{sender_name}]: [圖片] {caption}" if (is_group and caption) else (
+            f"[{sender_name}]: [圖片]" if is_group else (f"[圖片] {caption}" if caption else "[圖片]")
+        )
         save_message(chat_id, "user", saved_text)
 
         # 從 DB 取歷史，把剛存的最後一則換成帶圖片的版本
         history = load_history(chat_id)[-40:]
-        # 確保最後一則是剛存的 user 訊息，替換成多模態版本
         if history and history[-1]["role"] == "user":
             history[-1] = {"role": "user", "content": user_content}
         else:
             history.append({"role": "user", "content": user_content})
 
-        # 確保不會有連續相同 role（Anthropic API 規定要交替）
+        # 確保不會有連續相同 role
         cleaned_history = []
         for msg in history:
             if cleaned_history and cleaned_history[-1]["role"] == msg["role"]:
-                # 同 role 就略過前一則（保留最新的）
                 cleaned_history[-1] = msg
             else:
                 cleaned_history.append(msg)
@@ -9158,11 +9161,15 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             system = base_system
 
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            system=system,
-            messages=cleaned_history
+        # Claude API 呼叫是同步阻塞，必須丟到 executor，否則會凍結整個 event loop
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1024,
+                system=system,
+                messages=cleaned_history
+            )
         )
 
         # 安全取回文字（避免 tool_use block 炸掉）
