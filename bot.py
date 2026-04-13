@@ -2066,6 +2066,253 @@ TOOLS = [
             },
             "required": ["action"]
         }
+    },
+    # ── 缺口1：觸發驅動 ───────────────────────────────────────────
+    {
+        "name": "email_trigger",
+        "description": "監控 Email 收件箱，當收到符合條件的郵件時自動回傳內容或觸發動作。支援 Gmail/IMAP。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["check","watch","send"], "description": "check=立即檢查, watch=持續監控N秒, send=發送郵件"},
+                "host": {"type": "string", "description": "IMAP 伺服器，如 imap.gmail.com"},
+                "user": {"type": "string", "description": "Email 帳號"},
+                "password": {"type": "string", "description": "Email 密碼或應用程式密碼"},
+                "filter_from": {"type": "string", "description": "過濾寄件人（選填）"},
+                "filter_subject": {"type": "string", "description": "過濾主旨關鍵字（選填）"},
+                "duration": {"type": "number", "description": "監控秒數（watch 使用，預設 300）"},
+                "to": {"type": "string", "description": "收件人（send 使用）"},
+                "subject": {"type": "string", "description": "郵件主旨（send 使用）"},
+                "body": {"type": "string", "description": "郵件內容（send 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "file_trigger",
+        "description": "監控資料夾，當有新增/修改/刪除檔案時自動執行指定動作（複製、通知、執行程式）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "folder": {"type": "string", "description": "監控的資料夾路徑"},
+                "event": {"type": "string", "enum": ["created","modified","deleted","any"], "description": "觸發事件類型"},
+                "pattern": {"type": "string", "description": "檔案名稱 glob 過濾，如 *.pdf（選填）"},
+                "action": {"type": "string", "enum": ["notify","copy","run","list"], "description": "觸發後動作"},
+                "target": {"type": "string", "description": "複製目標資料夾 或 要執行的程式路徑（選填）"},
+                "duration": {"type": "number", "description": "監控秒數（預設 60）"}
+            },
+            "required": ["folder","event","action"]
+        }
+    },
+    {
+        "name": "webhook_server",
+        "description": "在本機啟動或停止 Webhook HTTP 伺服器，外部服務可推送事件觸發動作；也可作為遠端手機控制入口。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","status","test"], "description": "start=啟動, stop=停止, status=狀態, test=發測試請求"},
+                "port": {"type": "number", "description": "監聽 port（預設 8765）"},
+                "secret": {"type": "string", "description": "驗證 token（選填）"}
+            },
+            "required": ["action"]
+        }
+    },
+    # ── 缺口2：應用程式深度控制 ────────────────────────────────────
+    {
+        "name": "com_auto",
+        "description": "透過 Windows COM 介面深度控制 Excel/Word/Outlook，執行巨集、讀寫儲存格、寄信、建立文件等。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "app": {"type": "string", "enum": ["excel","word","outlook","powerpoint"], "description": "目標應用程式"},
+                "action": {"type": "string", "description": "excel: read_cell/write_cell/run_macro/save/open/close/list_sheets\nword: read/write/save/open/close\noutlook: send/list_inbox/read_mail"},
+                "path": {"type": "string", "description": "檔案路徑（選填）"},
+                "sheet": {"type": "string", "description": "工作表名稱（Excel 選填）"},
+                "cell": {"type": "string", "description": "儲存格，如 A1（Excel 選填）"},
+                "value": {"type": "string", "description": "寫入值或郵件內容（選填）"},
+                "macro": {"type": "string", "description": "巨集名稱（run_macro 使用）"},
+                "to": {"type": "string", "description": "收件人（Outlook send 使用）"},
+                "subject": {"type": "string", "description": "主旨（Outlook send 使用）"}
+            },
+            "required": ["app","action"]
+        }
+    },
+    {
+        "name": "dialog_auto",
+        "description": "自動偵測並處理系統對話框（UAC、MessageBox、確認視窗），自動點擊指定按鈕。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["find_and_click","list_dialogs","wait_and_click"], "description": "find_and_click=找到並點擊, list_dialogs=列出所有對話框, wait_and_click=等待出現後點擊"},
+                "button_text": {"type": "string", "description": "要點擊的按鈕文字，如 確定/OK/是/Yes（選填，預設自動選確認）"},
+                "window_title": {"type": "string", "description": "目標視窗標題關鍵字（選填）"},
+                "timeout": {"type": "number", "description": "等待秒數（wait_and_click 使用，預設 30）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "ime_switch",
+        "description": "切換輸入法（中文/英文），或查詢目前輸入法狀態。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["switch_en","switch_zh","toggle","status"], "description": "switch_en=切英文, switch_zh=切中文, toggle=切換, status=查詢目前狀態"}
+            },
+            "required": ["action"]
+        }
+    },
+    # ── 缺口3：感知能力 ────────────────────────────────────────────
+    {
+        "name": "wake_word",
+        "description": "持續監聽麥克風，偵測到喚醒詞後回傳觸發事件，或持續錄音轉文字。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["listen_once","transcribe_stream","detect_keyword"], "description": "listen_once=錄一句話轉文字, transcribe_stream=持續轉錄N秒, detect_keyword=偵測關鍵字觸發"},
+                "keyword": {"type": "string", "description": "偵測關鍵字（detect_keyword 使用）"},
+                "duration": {"type": "number", "description": "錄音/監聽秒數（預設 5）"},
+                "language": {"type": "string", "description": "語言代碼，如 zh-TW/en-US（預設 zh-TW）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "sound_detect",
+        "description": "分析麥克風或系統音訊，偵測音量超過閾值、特定頻率或環境音類型（靜音/說話/音樂）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["volume_level","detect_silence","detect_speech","record_until_silence"], "description": "volume_level=取得當前音量, detect_silence=偵測靜音, detect_speech=偵測說話, record_until_silence=錄音直到靜音"},
+                "threshold": {"type": "number", "description": "音量閾值 0-100（選填，預設 20）"},
+                "duration": {"type": "number", "description": "監聽秒數（選填，預設 5）"},
+                "output": {"type": "string", "description": "錄音儲存路徑（選填）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "face_recognize",
+        "description": "用攝影機拍照並辨識人臉，可訓練登記人臉或驗證是否為指定人物。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["detect","recognize","enroll","capture"], "description": "detect=偵測人臉數量, recognize=識別是誰, enroll=登記新人臉, capture=拍照儲存"},
+                "name": {"type": "string", "description": "人物名稱（enroll/recognize 使用）"},
+                "image_path": {"type": "string", "description": "使用現有圖片而非攝影機（選填）"},
+                "output": {"type": "string", "description": "儲存路徑（capture/enroll 使用，選填）"}
+            },
+            "required": ["action"]
+        }
+    },
+    # ── 缺口4：跨裝置控制 ──────────────────────────────────────────
+    {
+        "name": "http_server",
+        "description": "在本機啟動 HTTP 控制伺服器，手機/其他裝置可透過瀏覽器或 API 遠端發送指令控制電腦。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","status","get_url"], "description": "start=啟動, stop=停止, status=狀態, get_url=取得存取網址"},
+                "port": {"type": "number", "description": "監聽 port（預設 9876）"},
+                "password": {"type": "string", "description": "存取密碼（選填）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "lan_scan",
+        "description": "掃描本機區域網路，列出連線的裝置 IP、MAC 位址、主機名稱，或測試特定 port 是否開啟。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["scan","ping_sweep","port_check","get_local_ip"], "description": "scan=掃描區網, ping_sweep=ping 掃描, port_check=檢查特定 port, get_local_ip=取得本機 IP"},
+                "subnet": {"type": "string", "description": "要掃描的子網路，如 192.168.1.0/24（選填，自動偵測）"},
+                "host": {"type": "string", "description": "目標主機（port_check 使用）"},
+                "port": {"type": "number", "description": "要檢查的 port（port_check 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "serial_port",
+        "description": "透過 Serial/COM Port 與 Arduino、IoT 裝置、感測器通訊，發送/接收串列資料。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","open","close","send","read","send_read"], "description": "list=列出 COM port, send=發送資料, read=讀取資料, send_read=發送後讀取回應"},
+                "port": {"type": "string", "description": "COM port 名稱，如 COM3（除 list 外必填）"},
+                "baudrate": {"type": "number", "description": "鮑率（預設 9600）"},
+                "data": {"type": "string", "description": "要發送的資料（send/send_read 使用）"},
+                "timeout": {"type": "number", "description": "讀取逾時秒數（預設 2）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "mqtt",
+        "description": "MQTT 訊息發布/訂閱，用於智慧家庭、IoT 裝置控制（Node-RED、Home Assistant 等）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["publish","subscribe","test_connect"], "description": "publish=發布訊息, subscribe=訂閱主題, test_connect=測試連線"},
+                "broker": {"type": "string", "description": "MQTT broker 位址，如 192.168.1.1"},
+                "port": {"type": "number", "description": "broker port（預設 1883）"},
+                "topic": {"type": "string", "description": "MQTT 主題"},
+                "message": {"type": "string", "description": "要發布的訊息（publish 使用）"},
+                "duration": {"type": "number", "description": "訂閱持續秒數（subscribe 使用，預設 10）"},
+                "username": {"type": "string", "description": "帳號（選填）"},
+                "password": {"type": "string", "description": "密碼（選填）"}
+            },
+            "required": ["action","broker"]
+        }
+    },
+    # ── 缺口5：內容理解與處理 ──────────────────────────────────────
+    {
+        "name": "doc_ai",
+        "description": "用 AI 深度理解文件/圖片，自動提取發票金額、合約條款、報表數據、名片資訊等結構化資料。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["extract","summarize","classify","compare","qa"], "description": "extract=提取欄位, summarize=摘要, classify=分類, compare=比較兩份文件, qa=問答"},
+                "path": {"type": "string", "description": "文件或圖片路徑（PDF/Word/圖片）"},
+                "path2": {"type": "string", "description": "第二份文件（compare 使用）"},
+                "fields": {"type": "string", "description": "要提取的欄位，逗號分隔，如 金額,日期,供應商（extract 使用）"},
+                "question": {"type": "string", "description": "對文件提問（qa 使用）"},
+                "url": {"type": "string", "description": "文件 URL（選填，可代替 path）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "web_monitor",
+        "description": "定期監控網頁內容變化，偵測到變化時通知（適合監控商品價格、職缺、新聞、股票公告）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["check_once","watch","diff","get_price"], "description": "check_once=立即抓取內容, watch=持續監控N秒, diff=比較與上次差異, get_price=提取價格數字"},
+                "url": {"type": "string", "description": "要監控的網頁 URL"},
+                "selector": {"type": "string", "description": "CSS selector 選取特定區塊（選填，預設 body）"},
+                "interval": {"type": "number", "description": "檢查間隔秒數（watch 使用，預設 60）"},
+                "duration": {"type": "number", "description": "監控總時長秒數（watch 使用，預設 300）"},
+                "keyword": {"type": "string", "description": "偵測特定關鍵字出現/消失（選填）"}
+            },
+            "required": ["action","url"]
+        }
+    },
+    {
+        "name": "audio_transcribe",
+        "description": "即時轉錄系統播放的音訊或麥克風輸入，也可轉錄已有的音訊檔案（支援中英文）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["transcribe_file","transcribe_mic","transcribe_system"], "description": "transcribe_file=轉錄音訊檔, transcribe_mic=麥克風錄音轉錄, transcribe_system=轉錄系統播放音訊"},
+                "path": {"type": "string", "description": "音訊檔路徑（transcribe_file 使用）"},
+                "duration": {"type": "number", "description": "錄製秒數（transcribe_mic/system 使用，預設 30）"},
+                "language": {"type": "string", "description": "語言，如 zh/en（預設自動偵測）"},
+                "output": {"type": "string", "description": "轉錄文字儲存路徑（選填）"}
+            },
+            "required": ["action"]
+        }
     }
 ]
 
@@ -6375,6 +6622,945 @@ def execute_qr_code(action, content="", path="", duration=30.0):
         return f"操作失敗：{e}"
 
 
+# ── 缺口1：觸發驅動 ──────────────────────────────────────────────
+
+def execute_email_trigger(action, host="", user="", password="", filter_from="",
+                          filter_subject="", duration=300, to="", subject="", body=""):
+    try:
+        if action == "send":
+            import smtplib
+            from email.mime.text import MIMEText
+            smtp_host = host.replace("imap.", "smtp.") if host else "smtp.gmail.com"
+            msg = MIMEText(body, "plain", "utf-8")
+            msg["Subject"] = subject
+            msg["From"] = user
+            msg["To"] = to
+            with smtplib.SMTP_SSL(smtp_host, 465) as s:
+                s.login(user, password)
+                s.send_message(msg)
+            return f"✅ 郵件已發送至 {to}"
+
+        import imaplib, email as _email, time as _t
+        def _connect():
+            m = imaplib.IMAP4_SSL(host or "imap.gmail.com")
+            m.login(user, password)
+            m.select("INBOX")
+            return m
+
+        def _fetch_recent(m, n=5):
+            _, data = m.search(None, "ALL")
+            ids = data[0].split()[-n:]
+            mails = []
+            for mid in reversed(ids):
+                _, md = m.fetch(mid, "(RFC822)")
+                msg = _email.message_from_bytes(md[0][1])
+                sender = msg.get("From", "")
+                subj = msg.get("Subject", "")
+                if filter_from and filter_from.lower() not in sender.lower():
+                    continue
+                if filter_subject and filter_subject.lower() not in subj.lower():
+                    continue
+                body_text = ""
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/plain":
+                            body_text = part.get_payload(decode=True).decode("utf-8", errors="ignore")[:300]
+                            break
+                else:
+                    body_text = msg.get_payload(decode=True).decode("utf-8", errors="ignore")[:300]
+                mails.append(f"寄件人：{sender}\n主旨：{subj}\n內容：{body_text}")
+            return mails
+
+        if action == "check":
+            m = _connect()
+            mails = _fetch_recent(m, 5)
+            m.logout()
+            return "\n---\n".join(mails) if mails else "📭 收件箱無符合郵件"
+
+        elif action == "watch":
+            m = _connect()
+            seen = set()
+            _, data = m.search(None, "ALL")
+            for mid in data[0].split():
+                seen.add(mid)
+            results = []
+            start = _t.time()
+            while _t.time() - start < duration:
+                _t.sleep(10)
+                try:
+                    m.noop()
+                    _, data = m.search(None, "ALL")
+                    for mid in data[0].split():
+                        if mid not in seen:
+                            seen.add(mid)
+                            _, md = m.fetch(mid, "(RFC822)")
+                            msg = _email.message_from_bytes(md[0][1])
+                            results.append(f"📬 新郵件：{msg.get('From')} | {msg.get('Subject')}")
+                except Exception:
+                    m = _connect()
+            m.logout()
+            return "\n".join(results) if results else f"監控 {duration} 秒內無新郵件"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ email_trigger 失敗：{e}"
+
+
+def execute_file_trigger(folder, event, action, pattern="", target="", duration=60):
+    try:
+        import time as _t, fnmatch, shutil, subprocess as _sp
+        from pathlib import Path as _P
+        folder_path = _P(folder)
+        if not folder_path.exists():
+            return f"❌ 資料夾不存在：{folder}"
+
+        if action == "list":
+            files = list(folder_path.iterdir())
+            if pattern:
+                files = [f for f in files if fnmatch.fnmatch(f.name, pattern)]
+            return "\n".join(str(f) for f in files[:30]) or "資料夾為空"
+
+        before = set(str(f) for f in folder_path.rglob("*"))
+        triggered = []
+        start = _t.time()
+        while _t.time() - start < duration:
+            _t.sleep(2)
+            after = set(str(f) for f in folder_path.rglob("*"))
+            if event in ("created", "any"):
+                new_files = after - before
+                for f in new_files:
+                    if pattern and not fnmatch.fnmatch(_P(f).name, pattern):
+                        continue
+                    msg = f"[新增] {f}"
+                    if action == "copy" and target:
+                        shutil.copy2(f, target)
+                        msg += f" → 已複製到 {target}"
+                    elif action == "run" and target:
+                        _sp.Popen([target, f])
+                        msg += f" → 已執行 {target}"
+                    elif action == "notify":
+                        msg += " → 通知觸發"
+                    triggered.append(msg)
+            if event in ("deleted", "any"):
+                removed = before - after
+                for f in removed:
+                    triggered.append(f"[刪除] {f}")
+            before = after
+        return "\n".join(triggered) if triggered else f"監控 {duration} 秒內無 {event} 事件"
+    except Exception as e:
+        return f"❌ file_trigger 失敗：{e}"
+
+
+_webhook_server_proc = None
+
+def execute_webhook_server(action, port=8765, secret=""):
+    global _webhook_server_proc
+    try:
+        import socket, subprocess as _sp, sys, os as _os
+        if action == "start":
+            if _webhook_server_proc and _webhook_server_proc.poll() is None:
+                return f"✅ Webhook 伺服器已在運行（port {port}）"
+            script = f"""
+import http.server, json, threading, time
+log = []
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(length).decode('utf-8', errors='ignore')
+        secret = "{secret}"
+        if secret and self.headers.get('X-Secret','') != secret:
+            self.send_response(403); self.end_headers(); return
+        log.append(f"[{{time.strftime('%H:%M:%S')}}] {{self.path}}: {{body[:200]}}")
+        open(r'C:/Users/blue_/claude-telegram-bot/webhook_log.txt','a',encoding='utf-8').write(log[-1]+'\\n')
+        self.send_response(200); self.send_header('Content-Type','text/plain'); self.end_headers()
+        self.wfile.write(b'ok')
+    def log_message(self, *a): pass
+http.server.HTTPServer(('0.0.0.0', {port}), H).serve_forever()
+"""
+            _webhook_server_proc = _sp.Popen([sys.executable, "-c", script],
+                                              creationflags=0x00000008)
+            return f"✅ Webhook 伺服器已啟動 port {port}\n本機 IP：{socket.gethostbyname(socket.gethostname())}"
+        elif action == "stop":
+            if _webhook_server_proc:
+                _webhook_server_proc.terminate()
+                _webhook_server_proc = None
+            return "✅ Webhook 伺服器已停止"
+        elif action == "status":
+            running = _webhook_server_proc and _webhook_server_proc.poll() is None
+            log_path = r"C:/Users/blue_/claude-telegram-bot/webhook_log.txt"
+            log = ""
+            if _os.path.exists(log_path):
+                with open(log_path, encoding="utf-8") as f:
+                    log = "".join(f.readlines()[-5:])
+            return f"狀態：{'運行中' if running else '已停止'}\n最近事件：\n{log}"
+        elif action == "get_url":
+            import socket
+            ip = socket.gethostbyname(socket.gethostname())
+            return f"Webhook URL：http://{ip}:{port}/\n（需同一區域網路）"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ webhook_server 失敗：{e}"
+
+
+# ── 缺口2：應用程式深度控制 ──────────────────────────────────────
+
+def execute_com_auto(app, action, path="", sheet=None, cell="", value="",
+                     macro="", to="", subject=""):
+    try:
+        import win32com.client as _com
+        if app == "excel":
+            xl = _com.Dispatch("Excel.Application")
+            xl.Visible = False
+            wb = xl.Workbooks.Open(path) if path else (xl.Workbooks(1) if xl.Workbooks.Count > 0 else xl.Workbooks.Add())
+            ws = wb.Sheets(sheet) if sheet else wb.ActiveSheet
+            if action == "read_cell":
+                return f"{cell} = {ws.Range(cell).Value}"
+            elif action == "write_cell":
+                ws.Range(cell).Value = value
+                return f"✅ 已寫入 {cell} = {value}"
+            elif action == "run_macro":
+                xl.Run(macro)
+                return f"✅ 巨集 {macro} 已執行"
+            elif action == "save":
+                wb.Save()
+                return "✅ 已儲存"
+            elif action == "list_sheets":
+                return "\n".join(wb.Sheets(i+1).Name for i in range(wb.Sheets.Count))
+            elif action == "close":
+                wb.Close(SaveChanges=False)
+                return "✅ 已關閉"
+        elif app == "word":
+            wd = _com.Dispatch("Word.Application")
+            wd.Visible = False
+            doc = wd.Documents.Open(path) if path else wd.Documents.Add()
+            if action == "read":
+                return doc.Content.Text[:1000]
+            elif action == "write":
+                doc.Content.Text = value
+                return "✅ 已寫入"
+            elif action == "save":
+                doc.Save()
+                return "✅ 已儲存"
+            elif action == "close":
+                doc.Close(SaveChanges=False)
+                return "✅ 已關閉"
+        elif app == "outlook":
+            ol = _com.Dispatch("Outlook.Application")
+            if action == "send":
+                mail = ol.CreateItem(0)
+                mail.To = to
+                mail.Subject = subject
+                mail.Body = value
+                mail.Send()
+                return f"✅ 郵件已發送至 {to}"
+            elif action == "list_inbox":
+                inbox = ol.GetNamespace("MAPI").GetDefaultFolder(6)
+                items = inbox.Items
+                items.Sort("[ReceivedTime]", True)
+                result = []
+                for i, item in enumerate(items):
+                    if i >= 10:
+                        break
+                    result.append(f"寄件人：{item.SenderName} | 主旨：{item.Subject}")
+                return "\n".join(result)
+        return f"✅ {app} {action} 完成"
+    except Exception as e:
+        return f"❌ com_auto 失敗：{e}"
+
+
+def execute_dialog_auto(action, button_text="", window_title="", timeout=30):
+    try:
+        import win32gui, win32con, time as _t
+        def _find_dialogs():
+            dialogs = []
+            def cb(hwnd, _):
+                if win32gui.IsWindowVisible(hwnd):
+                    title = win32gui.GetWindowText(hwnd)
+                    cls = win32gui.GetClassName(hwnd)
+                    if cls in ("#32770", "TForm") or any(kw in title for kw in ["確認","警告","錯誤","提示","Dialog","Error","Warning","Confirm"]):
+                        dialogs.append((hwnd, title, cls))
+            win32gui.EnumWindows(cb, None)
+            return dialogs
+
+        def _click_button(hwnd, text):
+            import win32api
+            result = []
+            def cb(child, _):
+                t = win32gui.GetWindowText(child)
+                if text.lower() in t.lower() or not text:
+                    if win32gui.GetClassName(child) == "Button":
+                        win32gui.SetForegroundWindow(hwnd)
+                        win32api.SendMessage(child, win32con.BM_CLICK, 0, 0)
+                        result.append(t)
+            win32gui.EnumChildWindows(hwnd, cb, None)
+            return result
+
+        if action == "list_dialogs":
+            dialogs = _find_dialogs()
+            if not dialogs:
+                return "目前無對話框"
+            return "\n".join(f"HWND:{h} 標題:{t} 類別:{c}" for h, t, c in dialogs)
+
+        elif action in ("find_and_click", "wait_and_click"):
+            start = _t.time()
+            btn = button_text or "確定"
+            while True:
+                dialogs = _find_dialogs()
+                for hwnd, title, _ in dialogs:
+                    if window_title and window_title.lower() not in title.lower():
+                        continue
+                    clicked = _click_button(hwnd, btn)
+                    if clicked:
+                        return f"✅ 已點擊對話框「{title}」的「{clicked[0]}」按鈕"
+                if action == "find_and_click":
+                    return "❌ 未找到符合的對話框"
+                if _t.time() - start > timeout:
+                    return f"❌ 等待 {timeout} 秒仍未出現對話框"
+                _t.sleep(1)
+        return "未知動作"
+    except Exception as e:
+        return f"❌ dialog_auto 失敗：{e}"
+
+
+def execute_ime_switch(action):
+    try:
+        import ctypes, win32gui, win32api, win32con
+        LANG_ZH = 0x0804
+        LANG_EN = 0x0409
+
+        hwnd = win32gui.GetForegroundWindow()
+        if action == "status":
+            lid = ctypes.windll.user32.GetKeyboardLayout(0) & 0xFFFF
+            return f"目前輸入法 LCID：{hex(lid)} ({'中文' if lid in (0x0804,0x0404,0x0C04) else '英文' if lid == 0x0409 else '其他'})"
+        elif action == "switch_en":
+            hkl = win32api.LoadKeyboardLayout("00000409", 1)
+            win32api.PostMessage(hwnd, win32con.WM_INPUTLANGCHANGEREQUEST, 0, hkl)
+            return "✅ 已切換至英文輸入"
+        elif action == "switch_zh":
+            hkl = win32api.LoadKeyboardLayout("00000804", 1)
+            win32api.PostMessage(hwnd, win32con.WM_INPUTLANGCHANGEREQUEST, 0, hkl)
+            return "✅ 已切換至中文輸入"
+        elif action == "toggle":
+            import pyautogui
+            pyautogui.hotkey("shift", "alt")
+            return "✅ 已切換輸入法"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ ime_switch 失敗：{e}"
+
+
+# ── 缺口3：感知能力 ──────────────────────────────────────────────
+
+def execute_wake_word(action, keyword="", duration=5, language="zh-TW"):
+    try:
+        import speech_recognition as _sr
+        r = _sr.Recognizer()
+        mic = _sr.Microphone()
+
+        if action == "listen_once":
+            with mic as src:
+                r.adjust_for_ambient_noise(src, duration=0.5)
+                audio = r.listen(src, timeout=duration, phrase_time_limit=duration)
+            try:
+                text = r.recognize_google(audio, language=language)
+                return f"🎤 聽到：{text}"
+            except _sr.UnknownValueError:
+                return "❌ 無法辨識語音"
+
+        elif action == "transcribe_stream":
+            import time as _t
+            results = []
+            end = _t.time() + duration
+            while _t.time() < end:
+                with mic as src:
+                    r.adjust_for_ambient_noise(src, duration=0.3)
+                    try:
+                        audio = r.listen(src, timeout=2, phrase_time_limit=5)
+                        text = r.recognize_google(audio, language=language)
+                        results.append(text)
+                    except (_sr.WaitTimeoutError, _sr.UnknownValueError):
+                        pass
+            return "\n".join(results) if results else "未偵測到語音"
+
+        elif action == "detect_keyword":
+            import time as _t
+            end = _t.time() + duration
+            while _t.time() < end:
+                with mic as src:
+                    r.adjust_for_ambient_noise(src, duration=0.3)
+                    try:
+                        audio = r.listen(src, timeout=2, phrase_time_limit=5)
+                        text = r.recognize_google(audio, language=language)
+                        if keyword.lower() in text.lower():
+                            return f"✅ 偵測到關鍵字「{keyword}」，完整語音：{text}"
+                    except (_sr.WaitTimeoutError, _sr.UnknownValueError):
+                        pass
+            return f"❌ {duration} 秒內未偵測到關鍵字「{keyword}」"
+        return "未知動作"
+    except ImportError:
+        return "❌ 請先安裝：pip install SpeechRecognition"
+    except Exception as e:
+        return f"❌ wake_word 失敗：{e}"
+
+
+def execute_sound_detect(action, threshold=20, duration=5, output=""):
+    try:
+        import numpy as _np
+        try:
+            import sounddevice as _sd
+        except ImportError:
+            return "❌ 請先安裝：pip install sounddevice"
+
+        RATE = 16000
+        if action == "volume_level":
+            data = _sd.rec(int(RATE * 1), samplerate=RATE, channels=1, dtype="float32")
+            _sd.wait()
+            vol = int(_np.abs(data).mean() * 1000)
+            return f"🔊 當前音量：{vol}/100"
+
+        elif action == "detect_silence":
+            import time as _t
+            silent_start = None
+            start = _t.time()
+            while _t.time() - start < duration:
+                data = _sd.rec(int(RATE * 0.5), samplerate=RATE, channels=1, dtype="float32")
+                _sd.wait()
+                vol = int(_np.abs(data).mean() * 1000)
+                if vol < threshold:
+                    if silent_start is None:
+                        silent_start = _t.time()
+                    elif _t.time() - silent_start > 1.5:
+                        return f"🔇 偵測到靜音（音量 {vol}）"
+                else:
+                    silent_start = None
+            return f"監控 {duration} 秒內無靜音段"
+
+        elif action == "detect_speech":
+            import time as _t
+            start = _t.time()
+            while _t.time() - start < duration:
+                data = _sd.rec(int(RATE * 0.5), samplerate=RATE, channels=1, dtype="float32")
+                _sd.wait()
+                vol = int(_np.abs(data).mean() * 1000)
+                if vol > threshold:
+                    return f"🗣 偵測到說話（音量 {vol}）"
+            return f"監控 {duration} 秒內未偵測到說話"
+
+        elif action == "record_until_silence":
+            import time as _t
+            import wave
+            frames = []
+            out = output or str(__import__("pathlib").Path.home() / "Desktop" / "recording.wav")
+            CHUNK = int(RATE * 0.5)
+            silent_count = 0
+            while True:
+                data = _sd.rec(CHUNK, samplerate=RATE, channels=1, dtype="int16")
+                _sd.wait()
+                frames.append(data.tobytes())
+                vol = int(_np.abs(data.astype(float)).mean() / 32768 * 1000)
+                if vol < threshold:
+                    silent_count += 1
+                    if silent_count >= 4:
+                        break
+                else:
+                    silent_count = 0
+                if len(frames) > 200:
+                    break
+            with wave.open(out, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(RATE)
+                wf.writeframes(b"".join(frames))
+            return f"✅ 錄音完成：{out}（{len(frames)*0.5:.1f}秒）"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ sound_detect 失敗：{e}"
+
+
+def execute_face_recognize(action, name="", image_path="", output=""):
+    try:
+        import cv2 as _cv2
+        import numpy as _np
+        from pathlib import Path as _P
+        import json, os as _os
+
+        FACE_DB = str(_P.home() / ".face_db")
+        _os.makedirs(FACE_DB, exist_ok=True)
+
+        try:
+            import face_recognition as _fr
+        except ImportError:
+            return "❌ 請先安裝：pip install face-recognition opencv-python"
+
+        def _capture_frame():
+            cap = _cv2.VideoCapture(0)
+            ret, frame = cap.read()
+            cap.release()
+            if not ret:
+                raise RuntimeError("無法開啟攝影機")
+            return frame
+
+        if action == "capture":
+            frame = _capture_frame()
+            out = output or str(_P.home() / "Desktop" / "face_capture.jpg")
+            _cv2.imwrite(out, frame)
+            return f"✅ 已拍照：{out}"
+
+        elif action == "detect":
+            img = _fr.load_image_file(image_path) if image_path else _capture_frame()
+            if image_path:
+                img = _cv2.cvtColor(_cv2.imread(image_path), _cv2.COLOR_BGR2RGB)
+            locs = _fr.face_locations(img)
+            return f"✅ 偵測到 {len(locs)} 個人臉"
+
+        elif action == "enroll":
+            if not name:
+                return "❌ 需提供 name"
+            img = _fr.load_image_file(image_path) if image_path else _capture_frame()
+            if not image_path:
+                img = _cv2.cvtColor(img, _cv2.COLOR_BGR2RGB)
+            encs = _fr.face_encodings(img)
+            if not encs:
+                return "❌ 未偵測到人臉"
+            enc_path = _os.path.join(FACE_DB, f"{name}.npy")
+            _np.save(enc_path, encs[0])
+            return f"✅ 已登記人臉：{name}"
+
+        elif action == "recognize":
+            known_encs, known_names = [], []
+            for f in _P(FACE_DB).glob("*.npy"):
+                known_encs.append(_np.load(str(f)))
+                known_names.append(f.stem)
+            if not known_encs:
+                return "❌ 尚未登記任何人臉，請先用 enroll"
+            img = _fr.load_image_file(image_path) if image_path else _capture_frame()
+            if not image_path:
+                img = _cv2.cvtColor(img, _cv2.COLOR_BGR2RGB)
+            encs = _fr.face_encodings(img)
+            if not encs:
+                return "❌ 未偵測到人臉"
+            results = []
+            for enc in encs:
+                matches = _fr.compare_faces(known_encs, enc)
+                dists = _fr.face_distance(known_encs, enc)
+                best = int(_np.argmin(dists))
+                if matches[best]:
+                    results.append(f"✅ 識別為：{known_names[best]}（相似度 {(1-dists[best])*100:.0f}%）")
+                else:
+                    results.append("❓ 未知人物")
+            return "\n".join(results)
+        return "未知動作"
+    except Exception as e:
+        return f"❌ face_recognize 失敗：{e}"
+
+
+# ── 缺口4：跨裝置控制 ────────────────────────────────────────────
+
+_http_control_proc = None
+
+def execute_http_server(action, port=9876, password=""):
+    global _http_control_proc
+    try:
+        import socket, subprocess as _sp, sys, os as _os
+        if action == "start":
+            if _http_control_proc and _http_control_proc.poll() is None:
+                ip = socket.gethostbyname(socket.gethostname())
+                return f"✅ HTTP 控制伺服器已在運行\n網址：http://{ip}:{port}/"
+            script = f"""
+import http.server, urllib.parse, json, subprocess, sys, os
+PASSWORD = "{password}"
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if PASSWORD and self.headers.get('X-Password','') != PASSWORD:
+            p = urllib.parse.urlparse(self.path)
+            q = urllib.parse.parse_qs(p.query)
+            if q.get('pw',[''])[0] != PASSWORD:
+                self.send_response(403); self.end_headers()
+                self.wfile.write(b'Unauthorized'); return
+        self.send_response(200)
+        self.send_header('Content-Type','text/html; charset=utf-8')
+        self.end_headers()
+        html = '''<html><body><h2>小牛馬遠端控制</h2>
+<form method=post><input name=cmd size=60 placeholder="輸入指令"><button>執行</button></form></body></html>'''
+        self.wfile.write(html.encode())
+    def do_POST(self):
+        l = int(self.headers.get('Content-Length',0))
+        body = urllib.parse.parse_qs(self.rfile.read(l).decode())
+        cmd = body.get('cmd',[''])[0]
+        self.send_response(200)
+        self.send_header('Content-Type','text/plain; charset=utf-8')
+        self.end_headers()
+        if cmd:
+            try:
+                out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT, timeout=10)
+            except Exception as e:
+                out = str(e)
+            self.wfile.write(out.encode('utf-8','ignore'))
+    def log_message(self, *a): pass
+http.server.HTTPServer(('0.0.0.0', {port}), H).serve_forever()
+"""
+            _http_control_proc = _sp.Popen([sys.executable, "-c", script],
+                                            creationflags=0x00000008)
+            ip = socket.gethostbyname(socket.gethostname())
+            return f"✅ HTTP 控制伺服器已啟動\n網址：http://{ip}:{port}/\n（手機在同一 WiFi 下可存取）"
+        elif action == "stop":
+            if _http_control_proc:
+                _http_control_proc.terminate()
+                _http_control_proc = None
+            return "✅ 已停止"
+        elif action == "status":
+            running = _http_control_proc and _http_control_proc.poll() is None
+            return f"狀態：{'運行中' if running else '已停止'}"
+        elif action == "get_url":
+            ip = socket.gethostbyname(socket.gethostname())
+            return f"http://{ip}:{port}/"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ http_server 失敗：{e}"
+
+
+def execute_lan_scan(action, subnet="", host="", port=80):
+    try:
+        import socket, subprocess as _sp, concurrent.futures
+        if action == "get_local_ip":
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return f"本機 IP：{ip}"
+
+        elif action == "ping_sweep":
+            if not subnet:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+                subnet = ".".join(local_ip.split(".")[:3]) + ".0/24"
+            base = ".".join(subnet.split(".")[:3])
+            online = []
+            def ping(i):
+                ip = f"{base}.{i}"
+                r = _sp.run(["ping", "-n", "1", "-w", "300", ip],
+                            capture_output=True, text=True)
+                if "TTL=" in r.stdout or "ttl=" in r.stdout:
+                    try:
+                        hostname = socket.gethostbyaddr(ip)[0]
+                    except Exception:
+                        hostname = "unknown"
+                    return f"{ip} ({hostname})"
+                return None
+            with concurrent.futures.ThreadPoolExecutor(max_workers=50) as ex:
+                results = ex.map(ping, range(1, 255))
+            online = [r for r in results if r]
+            return f"區域網路掃描結果（{subnet}）：\n" + "\n".join(online) if online else "無裝置回應"
+
+        elif action == "port_check":
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2)
+            result = s.connect_ex((host, int(port)))
+            s.close()
+            return f"{'✅' if result == 0 else '❌'} {host}:{port} {'開啟' if result == 0 else '關閉'}"
+
+        elif action == "scan":
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            base = ".".join(local_ip.split(".")[:3])
+            common_ports = [21, 22, 80, 443, 3389, 8080, 1883]
+            results = []
+            def check(i):
+                ip = f"{base}.{i}"
+                r = _sp.run(["ping", "-n", "1", "-w", "200", ip], capture_output=True)
+                if b"TTL=" in r.stdout or b"ttl=" in r.stdout:
+                    open_ports = []
+                    for p in common_ports:
+                        sock = socket.socket()
+                        sock.settimeout(0.3)
+                        if sock.connect_ex((ip, p)) == 0:
+                            open_ports.append(str(p))
+                        sock.close()
+                    try:
+                        hn = socket.gethostbyaddr(ip)[0]
+                    except Exception:
+                        hn = "?"
+                    return f"{ip} ({hn}) 開放 port: {','.join(open_ports) or '無'}"
+                return None
+            with concurrent.futures.ThreadPoolExecutor(max_workers=50) as ex:
+                res = list(ex.map(check, range(1, 255)))
+            found = [r for r in res if r]
+            return "\n".join(found) if found else "未找到裝置"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ lan_scan 失敗：{e}"
+
+
+def execute_serial_port(action, port="", baudrate=9600, data="", timeout=2):
+    try:
+        import serial, serial.tools.list_ports
+        if action == "list":
+            ports = serial.tools.list_ports.comports()
+            if not ports:
+                return "❌ 未找到 COM port"
+            return "\n".join(f"{p.device} - {p.description}" for p in ports)
+        if not port:
+            return "❌ 需指定 port"
+        if action == "send":
+            with serial.Serial(port, baudrate, timeout=timeout) as s:
+                s.write(data.encode())
+            return f"✅ 已發送：{data}"
+        elif action == "read":
+            with serial.Serial(port, baudrate, timeout=timeout) as s:
+                resp = s.read(1024).decode("utf-8", errors="ignore")
+            return f"收到：{resp}" if resp else "❌ 無資料回應"
+        elif action == "send_read":
+            with serial.Serial(port, baudrate, timeout=timeout) as s:
+                s.write(data.encode())
+                import time; time.sleep(0.1)
+                resp = s.read(1024).decode("utf-8", errors="ignore")
+            return f"發送：{data}\n收到：{resp}"
+        return "未知動作"
+    except ImportError:
+        return "❌ 請先安裝：pip install pyserial"
+    except Exception as e:
+        return f"❌ serial_port 失敗：{e}"
+
+
+def execute_mqtt(action, broker, port=1883, topic="", message="",
+                 duration=10, username="", password=""):
+    try:
+        import paho.mqtt.client as _mqtt
+        import time as _t
+    except ImportError:
+        return "❌ 請先安裝：pip install paho-mqtt"
+    try:
+        received = []
+        connected = [False]
+
+        def on_connect(c, ud, flags, rc):
+            connected[0] = rc == 0
+
+        def on_message(c, ud, msg):
+            received.append(f"[{msg.topic}] {msg.payload.decode('utf-8','ignore')}")
+
+        client = _mqtt.Client()
+        client.on_connect = on_connect
+        client.on_message = on_message
+        if username:
+            client.username_pw_set(username, password)
+        client.connect(broker, int(port), 60)
+        client.loop_start()
+        _t.sleep(1)
+
+        if not connected[0]:
+            return f"❌ 無法連線至 {broker}:{port}"
+
+        if action == "test_connect":
+            client.disconnect()
+            return f"✅ 成功連線 {broker}:{port}"
+        elif action == "publish":
+            client.publish(topic, message)
+            _t.sleep(0.5)
+            client.disconnect()
+            return f"✅ 已發布到 {topic}：{message}"
+        elif action == "subscribe":
+            client.subscribe(topic)
+            _t.sleep(duration)
+            client.disconnect()
+            return "\n".join(received) if received else f"訂閱 {topic} 共 {duration} 秒，無訊息"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ mqtt 失敗：{e}"
+
+
+# ── 缺口5：內容理解與處理 ────────────────────────────────────────
+
+def execute_doc_ai(action, path="", path2="", fields="", question="", url=""):
+    try:
+        import anthropic as _ant, base64, mimetypes
+        from pathlib import Path as _P
+
+        client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+
+        def _load_content(p, u=""):
+            if u:
+                return [{"type": "text", "text": f"請分析這個網址的內容：{u}"}]
+            if not p or not _P(p).exists():
+                return [{"type": "text", "text": f"（檔案不存在：{p}）"}]
+            ext = _P(p).suffix.lower()
+            if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+                with open(p, "rb") as f:
+                    data = base64.b64encode(f.read()).decode()
+                mime = mimetypes.guess_type(p)[0] or "image/jpeg"
+                return [{"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}]
+            elif ext == ".pdf":
+                try:
+                    import pdfplumber
+                    with pdfplumber.open(p) as pdf:
+                        text = "\n".join(pg.extract_text() or "" for pg in pdf.pages[:10])
+                except ImportError:
+                    text = f"（需安裝 pdfplumber 才能讀取 PDF：{p}）"
+                return [{"type": "text", "text": text[:4000]}]
+            else:
+                with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                    return [{"type": "text", "text": f.read()[:4000]}]
+
+        content = _load_content(path, url)
+
+        if action == "extract":
+            prompt = f"請從以下內容提取這些欄位：{fields or '所有重要資訊'}。以 JSON 格式回傳。"
+        elif action == "summarize":
+            prompt = "請用繁體中文摘要這份文件的主要內容（200字以內）。"
+        elif action == "classify":
+            prompt = "請判斷這份文件的類型（如：發票、合約、報表、履歷等），並說明判斷依據。"
+        elif action == "qa":
+            prompt = f"根據文件內容回答：{question}"
+        elif action == "compare":
+            content2 = _load_content(path2)
+            prompt = "請比較這兩份文件的差異，列出主要不同點。"
+            content = content + [{"type": "text", "text": "---第二份文件---"}] + content2
+        else:
+            prompt = "請分析並說明這份文件的內容。"
+
+        resp = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": content + [{"type": "text", "text": prompt}]}]
+        )
+        return resp.content[0].text
+    except Exception as e:
+        return f"❌ doc_ai 失敗：{e}"
+
+
+def execute_web_monitor(action, url, selector="body", interval=60, duration=300, keyword=""):
+    try:
+        import requests as _req, time as _t, hashlib, json
+        from pathlib import Path as _P
+        try:
+            from bs4 import BeautifulSoup as _BS
+        except ImportError:
+            _BS = None
+
+        CACHE_FILE = str(_P.home() / ".web_monitor_cache.json")
+
+        def _fetch(u, sel):
+            r = _req.get(u, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            if _BS:
+                soup = _BS(r.text, "html.parser")
+                el = soup.select_one(sel)
+                return el.get_text(strip=True)[:2000] if el else soup.get_text(strip=True)[:2000]
+            return r.text[:2000]
+
+        if action == "check_once":
+            text = _fetch(url, selector)
+            return f"📄 {url}\n{text}"
+
+        elif action == "get_price":
+            text = _fetch(url, selector)
+            import re
+            prices = re.findall(r"[\$NT\$￥]?\s*[\d,]+\.?\d*", text)
+            return f"💰 找到的價格：{', '.join(prices[:10])}" if prices else "❌ 未找到價格"
+
+        elif action == "diff":
+            try:
+                with open(CACHE_FILE, encoding="utf-8") as f:
+                    cache = json.load(f)
+            except Exception:
+                cache = {}
+            current = _fetch(url, selector)
+            h = hashlib.md5(current.encode()).hexdigest()
+            prev = cache.get(url, "")
+            cache[url] = current
+            with open(CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(cache, f, ensure_ascii=False)
+            if not prev:
+                return f"✅ 已記錄初始狀態（{len(current)} 字）"
+            if prev == current:
+                return "✅ 與上次相同，無變化"
+            import difflib
+            diff = list(difflib.unified_diff(prev.splitlines(), current.splitlines(), lineterm="", n=2))
+            return "⚠️ 內容有變化：\n" + "\n".join(diff[:30])
+
+        elif action == "watch":
+            last = _fetch(url, selector)
+            changes = []
+            start = _t.time()
+            while _t.time() - start < duration:
+                _t.sleep(interval)
+                try:
+                    current = _fetch(url, selector)
+                    if current != last:
+                        msg = f"⚠️ [{_t.strftime('%H:%M:%S')}] 網頁內容變化"
+                        if keyword:
+                            if keyword in current and keyword not in last:
+                                msg += f"（出現關鍵字「{keyword}」）"
+                            elif keyword not in current and keyword in last:
+                                msg += f"（關鍵字「{keyword}」消失）"
+                        changes.append(msg)
+                        last = current
+                except Exception as ex:
+                    changes.append(f"❌ 抓取失敗：{ex}")
+            return "\n".join(changes) if changes else f"監控 {duration} 秒內無變化"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ web_monitor 失敗：{e}"
+
+
+def execute_audio_transcribe(action, path="", duration=30, language="", output=""):
+    try:
+        if action == "transcribe_file":
+            if not path:
+                return "❌ 需提供 path"
+            try:
+                import whisper
+                model = whisper.load_model("base")
+                result = model.transcribe(path, language=language or None)
+                text = result["text"]
+            except ImportError:
+                import speech_recognition as _sr
+                r = _sr.Recognizer()
+                with _sr.AudioFile(path) as src:
+                    audio = r.record(src)
+                lang = language or "zh-TW"
+                text = r.recognize_google(audio, language=lang)
+            if output:
+                with open(output, "w", encoding="utf-8") as f:
+                    f.write(text)
+                return f"✅ 轉錄完成，已儲存：{output}\n\n{text[:500]}"
+            return f"📝 轉錄結果：\n{text}"
+
+        elif action == "transcribe_mic":
+            import speech_recognition as _sr
+            r = _sr.Recognizer()
+            m = _sr.Microphone()
+            results = []
+            import time as _t
+            end = _t.time() + duration
+            while _t.time() < end:
+                with m as src:
+                    r.adjust_for_ambient_noise(src, duration=0.3)
+                    try:
+                        audio = r.listen(src, timeout=3, phrase_time_limit=10)
+                        lang = language or "zh-TW"
+                        text = r.recognize_google(audio, language=lang)
+                        results.append(text)
+                    except (_sr.WaitTimeoutError, _sr.UnknownValueError):
+                        pass
+            full = " ".join(results)
+            if output:
+                with open(output, "w", encoding="utf-8") as f:
+                    f.write(full)
+            return f"📝 麥克風轉錄：\n{full}" if full else "❌ 未偵測到語音"
+
+        elif action == "transcribe_system":
+            return "⚠️ 系統音訊轉錄需要虛擬音訊裝置（如 VB-Cable），建議先錄製後用 transcribe_file"
+        return "未知動作"
+    except ImportError:
+        return "❌ 請先安裝：pip install SpeechRecognition（或 openai-whisper 提供更高精度）"
+    except Exception as e:
+        return f"❌ audio_transcribe 失敗：{e}"
+
+
 def fetch_image(prompt: str, width: int = 512, height: int = 512):
     hf_token = os.getenv("HF_TOKEN")
     headers = {"Authorization": f"Bearer {hf_token}"}
@@ -6630,6 +7816,109 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("content",""),
                     tool_use.input.get("path",""),
                     tool_use.input.get("duration", 30.0)),
+                # ── 缺口1：觸發驅動 ──────────────────────────
+                "email_trigger": lambda: execute_email_trigger(
+                    tool_use.input["action"],
+                    tool_use.input.get("host",""),
+                    tool_use.input.get("user",""),
+                    tool_use.input.get("password",""),
+                    tool_use.input.get("filter_from",""),
+                    tool_use.input.get("filter_subject",""),
+                    tool_use.input.get("duration",300),
+                    tool_use.input.get("to",""),
+                    tool_use.input.get("subject",""),
+                    tool_use.input.get("body","")),
+                "file_trigger": lambda: execute_file_trigger(
+                    tool_use.input["folder"],
+                    tool_use.input["event"],
+                    tool_use.input["action"],
+                    tool_use.input.get("pattern",""),
+                    tool_use.input.get("target",""),
+                    tool_use.input.get("duration",60)),
+                "webhook_server": lambda: execute_webhook_server(
+                    tool_use.input["action"],
+                    tool_use.input.get("port",8765),
+                    tool_use.input.get("secret","")),
+                # ── 缺口2：應用程式深度控制 ──────────────────
+                "com_auto": lambda: execute_com_auto(
+                    tool_use.input["app"],
+                    tool_use.input["action"],
+                    tool_use.input.get("path",""),
+                    tool_use.input.get("sheet"),
+                    tool_use.input.get("cell",""),
+                    tool_use.input.get("value",""),
+                    tool_use.input.get("macro",""),
+                    tool_use.input.get("to",""),
+                    tool_use.input.get("subject","")),
+                "dialog_auto": lambda: execute_dialog_auto(
+                    tool_use.input["action"],
+                    tool_use.input.get("button_text",""),
+                    tool_use.input.get("window_title",""),
+                    tool_use.input.get("timeout",30)),
+                "ime_switch": lambda: execute_ime_switch(
+                    tool_use.input["action"]),
+                # ── 缺口3：感知能力 ──────────────────────────
+                "wake_word": lambda: execute_wake_word(
+                    tool_use.input["action"],
+                    tool_use.input.get("keyword",""),
+                    tool_use.input.get("duration",5),
+                    tool_use.input.get("language","zh-TW")),
+                "sound_detect": lambda: execute_sound_detect(
+                    tool_use.input["action"],
+                    tool_use.input.get("threshold",20),
+                    tool_use.input.get("duration",5),
+                    tool_use.input.get("output","")),
+                "face_recognize": lambda: execute_face_recognize(
+                    tool_use.input["action"],
+                    tool_use.input.get("name",""),
+                    tool_use.input.get("image_path",""),
+                    tool_use.input.get("output","")),
+                # ── 缺口4：跨裝置控制 ────────────────────────
+                "http_server": lambda: execute_http_server(
+                    tool_use.input["action"],
+                    tool_use.input.get("port",9876),
+                    tool_use.input.get("password","")),
+                "lan_scan": lambda: execute_lan_scan(
+                    tool_use.input["action"],
+                    tool_use.input.get("subnet",""),
+                    tool_use.input.get("host",""),
+                    tool_use.input.get("port",80)),
+                "serial_port": lambda: execute_serial_port(
+                    tool_use.input["action"],
+                    tool_use.input.get("port",""),
+                    tool_use.input.get("baudrate",9600),
+                    tool_use.input.get("data",""),
+                    tool_use.input.get("timeout",2)),
+                "mqtt": lambda: execute_mqtt(
+                    tool_use.input["action"],
+                    tool_use.input["broker"],
+                    tool_use.input.get("port",1883),
+                    tool_use.input.get("topic",""),
+                    tool_use.input.get("message",""),
+                    tool_use.input.get("duration",10),
+                    tool_use.input.get("username",""),
+                    tool_use.input.get("password","")),
+                # ── 缺口5：內容理解與處理 ────────────────────
+                "doc_ai": lambda: execute_doc_ai(
+                    tool_use.input["action"],
+                    tool_use.input.get("path",""),
+                    tool_use.input.get("path2",""),
+                    tool_use.input.get("fields",""),
+                    tool_use.input.get("question",""),
+                    tool_use.input.get("url","")),
+                "web_monitor": lambda: execute_web_monitor(
+                    tool_use.input["action"],
+                    tool_use.input["url"],
+                    tool_use.input.get("selector","body"),
+                    tool_use.input.get("interval",60),
+                    tool_use.input.get("duration",300),
+                    tool_use.input.get("keyword","")),
+                "audio_transcribe": lambda: execute_audio_transcribe(
+                    tool_use.input["action"],
+                    tool_use.input.get("path",""),
+                    tool_use.input.get("duration",30),
+                    tool_use.input.get("language",""),
+                    tool_use.input.get("output","")),
                 "screen_record": lambda: execute_screen_record(
                     tool_use.input["action"],
                     tool_use.input.get("duration", 10.0),
