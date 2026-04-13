@@ -3711,6 +3711,346 @@ def window_screenshot(title_keyword: str, output: str = ""):
         print(f"❌ 視窗截圖失敗：{e}")
 
 
+# ── Wave 11：防火牆/程序/電源/事件/時間/UI自動化/巨集/顏色/攝影機/多螢幕/印表機/WiFi/代理/鎖定/Defender ──
+
+def firewall(action: str, name: str = "", port: int = None, protocol: str = "TCP", direction: str = "Inbound"):
+    import subprocess
+    try:
+        if action == "status":
+            r = subprocess.run(["powershell","-Command","Get-NetFirewallProfile | Select-Object Name,Enabled | Format-Table -AutoSize"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+        elif action == "list":
+            r = subprocess.run(["powershell","-Command","Get-NetFirewallRule | Where-Object {$_.Enabled -eq 'True'} | Select-Object DisplayName,Direction,Action | Format-Table -AutoSize"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip()[:3000])
+        elif action == "add":
+            r = subprocess.run(["powershell","-Command",f"New-NetFirewallRule -DisplayName '{name}' -Direction {direction} -Protocol {protocol} -LocalPort {port} -Action Allow -Enabled True"], capture_output=True, text=True)
+            print(f"✅ 已新增防火牆規則：{name}" if r.returncode==0 else f"❌ 失敗：{r.stderr.strip()}")
+        elif action == "remove":
+            r = subprocess.run(["powershell","-Command",f"Remove-NetFirewallRule -DisplayName '{name}' -Confirm:$false"], capture_output=True, text=True)
+            print(f"✅ 已移除：{name}" if r.returncode==0 else f"❌ 失敗：{r.stderr.strip()}")
+        elif action == "enable":
+            subprocess.run(["powershell","-Command","Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True"], capture_output=True)
+            print("✅ 防火牆已啟用")
+        elif action == "disable":
+            subprocess.run(["powershell","-Command","Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False"], capture_output=True)
+            print("✅ 防火牆已停用")
+    except Exception as e:
+        print(f"❌ 防火牆操作失敗：{e}")
+
+def process_mgr(action: str, name: str = "", pid: int = None, level: str = "normal"):
+    import psutil
+    priority_map = {"realtime":psutil.REALTIME_PRIORITY_CLASS,"high":psutil.HIGH_PRIORITY_CLASS,"above_normal":psutil.ABOVE_NORMAL_PRIORITY_CLASS,"normal":psutil.NORMAL_PRIORITY_CLASS,"below_normal":psutil.BELOW_NORMAL_PRIORITY_CLASS,"idle":psutil.IDLE_PRIORITY_CLASS}
+    try:
+        if action == "list":
+            procs = sorted(psutil.process_iter(["pid","name","cpu_percent","memory_info"]), key=lambda p: p.info["cpu_percent"] or 0, reverse=True)
+            print(f"{'PID':>6} {'CPU%':>6} {'MEM MB':>8}  名稱")
+            for p in procs[:25]:
+                mem = (p.info["memory_info"].rss//1024//1024) if p.info["memory_info"] else 0
+                print(f"{p.info['pid']:>6} {p.info['cpu_percent'] or 0:>6.1f} {mem:>8}  {p.info['name']}")
+        elif action == "search":
+            found = [p for p in psutil.process_iter(["pid","name","cpu_percent","memory_info"]) if name.lower() in p.info["name"].lower()]
+            if not found: print(f"⚠️ 找不到：{name}"); return
+            for p in found:
+                print(f"PID:{p.info['pid']} CPU:{p.info['cpu_percent']}% MEM:{p.info['memory_info'].rss//1024//1024}MB {p.info['name']}")
+        elif action == "kill":
+            targets = [psutil.Process(int(pid))] if pid else [p for p in psutil.process_iter(["pid","name"]) if name.lower() in p.info["name"].lower()]
+            if not targets: print(f"⚠️ 找不到：{name}"); return
+            for p in targets: p.kill()
+            print(f"✅ 已終止 {len(targets)} 個程序：{name or pid}")
+        elif action == "priority":
+            p = psutil.Process(int(pid)) if pid else next((x for x in psutil.process_iter(["pid","name"]) if name.lower() in x.info["name"].lower()), None)
+            if not p: print(f"⚠️ 找不到：{name}"); return
+            p.nice(priority_map.get(level, psutil.NORMAL_PRIORITY_CLASS))
+            print(f"✅ 已設定 PID {p.pid} 優先權為 {level}")
+    except Exception as e:
+        print(f"❌ 程序管理失敗：{e}")
+
+def power_plan(action: str, plan: str = "balanced"):
+    import subprocess
+    plan_guids = {"balanced":"381b4222-f694-41f0-9685-ff5bb260df2e","high_performance":"8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c","power_saver":"a1841308-3541-4fab-bc81-f71556f20b4a"}
+    try:
+        if action == "list":
+            r = subprocess.run(["powercfg","/list"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+        elif action == "get":
+            r = subprocess.run(["powercfg","/getactivescheme"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+        elif action == "set":
+            guid = plan_guids.get(plan)
+            if not guid: print(f"⚠️ 未知計畫：{plan}"); return
+            subprocess.run(["powercfg","/setactive",guid], capture_output=True)
+            print(f"✅ 電源計畫：{plan}")
+    except Exception as e:
+        print(f"❌ 電源計畫失敗：{e}")
+
+def event_log(log: str = "System", level: str = "Error", count: int = 10):
+    import win32evtlog, win32evtlogutil
+    level_map = {"Error":1,"Warning":2,"Information":4,"All":7}
+    event_type = level_map.get(level, 1)
+    try:
+        hand = win32evtlog.OpenEventLog(None, log)
+        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+        events = []
+        while len(events) < count:
+            batch = win32evtlog.ReadEventLog(hand, flags, 0)
+            if not batch: break
+            for e in batch:
+                if level == "All" or e.EventType == event_type:
+                    try: msg = win32evtlogutil.SafeFormatMessage(e, log)[:100]
+                    except: msg = "(無法讀取)"
+                    events.append(f"[{e.TimeGenerated.Format()}] {e.SourceName}: {msg}")
+                if len(events) >= count: break
+        win32evtlog.CloseEventLog(hand)
+        print(f"📋 {log} 事件（{level}）：")
+        print("\n".join(events) if events else "✅ 無事件")
+    except Exception as e:
+        print(f"❌ 事件記錄失敗：{e}")
+
+def datetime_config(action: str, timezone: str = "", datetime_str: str = ""):
+    import subprocess
+    try:
+        if action == "get":
+            r = subprocess.run(["powershell","-Command","Get-Date | Format-List; (Get-TimeZone).DisplayName"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+        elif action == "sync":
+            subprocess.run(["powershell","-Command","Start-Service w32tm -ErrorAction SilentlyContinue; w32tm /resync /force"], capture_output=True)
+            print("✅ 已同步網路時間")
+        elif action == "set_timezone":
+            r = subprocess.run(["powershell","-Command",f"Set-TimeZone -Id '{timezone}'"], capture_output=True, text=True)
+            print(f"✅ 時區：{timezone}" if r.returncode==0 else f"❌ 失敗：{r.stderr.strip()}")
+        elif action == "set_time":
+            r = subprocess.run(["powershell","-Command",f"Set-Date -Date '{datetime_str}'"], capture_output=True, text=True)
+            print(f"✅ 時間：{datetime_str}" if r.returncode==0 else f"❌ 失敗：{r.stderr.strip()}")
+    except Exception as e:
+        print(f"❌ 時間設定失敗：{e}")
+
+def ui_auto(action: str, window: str = "", control: str = "", text: str = ""):
+    from pywinauto import Desktop
+    try:
+        desktop = Desktop(backend="uia")
+        if action == "get_windows":
+            wins = [w.window_text() for w in desktop.windows() if w.window_text()]
+            print("\n".join(f"- {w}" for w in wins[:30]))
+            return
+        win = next((w for w in desktop.windows() if window.lower() in w.window_text().lower()), None)
+        if not win: print(f"⚠️ 找不到視窗：{window}"); return
+        if action == "find":
+            info = [f"[{c.control_type()}] {c.window_text()}" for c in win.descendants() if c.window_text()][:30]
+            print("\n".join(info))
+        elif action == "read":
+            print("\n".join(c.window_text() for c in win.descendants() if c.window_text())[:50])
+        elif action == "click":
+            c = next((c for c in win.descendants() if control.lower() in c.window_text().lower()), None)
+            if c: c.click_input(); print(f"✅ 已點擊：{c.window_text()}")
+            else: print(f"⚠️ 找不到：{control}")
+        elif action == "type":
+            c = next((c for c in win.descendants() if control.lower() in c.window_text().lower() or c.control_type() in ("Edit","Document")), None)
+            if c: c.type_keys(text); print(f"✅ 已輸入文字")
+            else: print(f"⚠️ 找不到輸入框：{control}")
+    except Exception as e:
+        print(f"❌ UI 自動化失敗：{e}")
+
+def macro(action: str, name: str = "", repeat: int = 1, duration: float = 10.0):
+    import keyboard, json, time
+    macro_file = Path.home() / ".claude_macros.json"
+    store = json.loads(macro_file.read_text()) if macro_file.exists() else {}
+    try:
+        if action == "record_start":
+            keyboard.start_recording()
+            time.sleep(duration)
+            recorded = keyboard.stop_recording()
+            store[name] = [{"type":e.event_type,"name":e.name,"time":e.time} for e in recorded]
+            macro_file.write_text(json.dumps(store))
+            print(f"✅ 已錄製巨集 '{name}'（{len(recorded)} 事件）")
+        elif action == "play":
+            if name not in store: print(f"⚠️ 找不到巨集：{name}"); return
+            events = store[name]
+            for _ in range(repeat):
+                prev = events[0]["time"] if events else 0
+                for e in events:
+                    time.sleep(min(max(0,e["time"]-prev),0.5)); prev=e["time"]
+                    keyboard.press(e["name"]) if e["type"]=="down" else keyboard.release(e["name"])
+            print(f"✅ 已回放巨集 '{name}' {repeat} 次")
+        elif action == "list":
+            print("\n".join(f"- {k}（{len(v)} 事件）" for k,v in store.items()) if store else "⚠️ 無已儲存巨集")
+        elif action == "delete":
+            if name in store:
+                del store[name]; macro_file.write_text(json.dumps(store)); print(f"✅ 已刪除：{name}")
+            else: print(f"⚠️ 找不到：{name}")
+    except Exception as e:
+        print(f"❌ 巨集操作失敗：{e}")
+
+def color_pick(x: int, y: int, action: str = "pick", w: int = 100, h: int = 100):
+    import pyautogui
+    from collections import Counter
+    try:
+        screenshot = pyautogui.screenshot()
+        if action == "pick":
+            r,g,b = screenshot.getpixel((x,y))[:3]
+            print(f"🎨 ({x},{y}) RGB:({r},{g},{b}) HEX:#{r:02X}{g:02X}{b:02X}")
+        elif action == "dominant":
+            region = screenshot.crop((x,y,x+w,y+h)).convert("RGB").resize((50,50))
+            top5 = Counter(list(region.getdata())).most_common(5)
+            for (r,g,b),cnt in top5:
+                print(f"RGB({r},{g},{b}) #{r:02X}{g:02X}{b:02X}  出現{cnt}次")
+    except Exception as e:
+        print(f"❌ 顏色選取失敗：{e}")
+
+def webcam(action: str, device: int = 0, duration: float = 5.0, output: str = ""):
+    import cv2
+    try:
+        if action == "list":
+            found = []
+            for i in range(5):
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened(): found.append(f"裝置 {i}"); cap.release()
+            print("\n".join(found) if found else "⚠️ 無可用攝影機")
+        elif action == "photo":
+            cap = cv2.VideoCapture(device)
+            if not cap.isOpened(): print(f"❌ 無法開啟攝影機 {device}"); return
+            ret, frame = cap.read(); cap.release()
+            if not ret: print("❌ 無法拍攝"); return
+            out = output or str(Path.home()/"Desktop"/f"webcam_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+            cv2.imwrite(out, frame); print(f"✅ 已拍照：{out}")
+        elif action == "video":
+            cap = cv2.VideoCapture(device)
+            if not cap.isOpened(): print(f"❌ 無法開啟攝影機 {device}"); return
+            out = output or str(Path.home()/"Desktop"/f"webcam_{datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
+            fw,fh = int(cap.get(3)),int(cap.get(4))
+            writer = cv2.VideoWriter(out,cv2.VideoWriter_fourcc(*"XVID"),20,(fw,fh))
+            import time; end=time.time()+duration
+            while time.time()<end:
+                ret,frame=cap.read()
+                if ret: writer.write(frame)
+            cap.release(); writer.release(); print(f"✅ 已錄影：{out}")
+    except Exception as e:
+        print(f"❌ 攝影機操作失敗：{e}")
+
+def multi_monitor(action: str, monitor: int = 1, window: str = ""):
+    import subprocess, win32gui
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell","-Command","Get-CimInstance Win32_DesktopMonitor | Select-Object Name,ScreenWidth,ScreenHeight | Format-Table -AutoSize"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+        elif action in ("extend","clone"):
+            subprocess.Popen(["displayswitch.exe", "/extend" if action=="extend" else "/clone"])
+            print(f"✅ 螢幕模式：{action}")
+        elif action == "move_window":
+            import ctypes; sw=ctypes.windll.user32.GetSystemMetrics(0)
+            hwnds=[]
+            win32gui.EnumWindows(lambda h,l: l.append(h) if win32gui.IsWindowVisible(h) and window.lower() in win32gui.GetWindowText(h).lower() else None, hwnds)
+            if not hwnds: print(f"⚠️ 找不到視窗：{window}"); return
+            rect=win32gui.GetWindowRect(hwnds[0])
+            win32gui.MoveWindow(hwnds[0],sw*(monitor-1)+100,100,rect[2]-rect[0],rect[3]-rect[1],True)
+            print(f"✅ 視窗 '{window}' 移至螢幕 {monitor}")
+    except Exception as e:
+        print(f"❌ 多螢幕管理失敗：{e}")
+
+def printer(action: str, path: str = "", printer_name: str = ""):
+    import win32print
+    try:
+        if action == "list":
+            printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL|win32print.PRINTER_ENUM_CONNECTIONS)
+            default = win32print.GetDefaultPrinter()
+            print(f"預設：{default}")
+            for p in printers: print(f"- {p[2]}")
+        elif action == "print":
+            import win32api
+            pname = printer_name or win32print.GetDefaultPrinter()
+            win32api.ShellExecute(0,"print",path,f'/d:"{pname}"',".",0)
+            print(f"✅ 已傳送列印：{path}")
+        elif action == "queue":
+            pname = printer_name or win32print.GetDefaultPrinter()
+            h = win32print.OpenPrinter(pname)
+            jobs = win32print.EnumJobs(h,0,-1,1)
+            win32print.ClosePrinter(h)
+            print("佇列為空" if not jobs else "\n".join(f"工作{j['JobId']}：{j['pDocument']}" for j in jobs))
+        elif action == "clear_queue":
+            pname = printer_name or win32print.GetDefaultPrinter()
+            h = win32print.OpenPrinter(pname)
+            for j in win32print.EnumJobs(h,0,-1,1):
+                win32print.SetJob(h,j["JobId"],0,None,win32print.JOB_CONTROL_DELETE)
+            win32print.ClosePrinter(h); print(f"✅ 佇列已清除")
+        elif action == "set_default":
+            win32print.SetDefaultPrinter(printer_name); print(f"✅ 預設印表機：{printer_name}")
+    except Exception as e:
+        print(f"❌ 印表機操作失敗：{e}")
+
+def wifi(action: str, ssid: str = "", password: str = ""):
+    import subprocess
+    try:
+        cmd_map = {"scan":["netsh","wlan","show","networks","mode=Bssid"],"status":["netsh","wlan","show","interfaces"],"saved":["netsh","wlan","show","profiles"],"disconnect":["netsh","wlan","disconnect"]}
+        if action in cmd_map:
+            r = subprocess.run(cmd_map[action], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip()[:2000])
+        elif action == "password":
+            r = subprocess.run(["netsh","wlan","show","profile",f"name={ssid}","key=clear"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+        elif action == "connect":
+            r = subprocess.run(["netsh","wlan","connect",f"name={ssid}"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+    except Exception as e:
+        print(f"❌ WiFi 操作失敗：{e}")
+
+def proxy(action: str, host: str = ""):
+    import winreg
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ|winreg.KEY_SET_VALUE) as k:
+            if action == "get":
+                try:
+                    enabled = winreg.QueryValueEx(k,"ProxyEnable")[0]
+                    server = winreg.QueryValueEx(k,"ProxyServer")[0]
+                    print(f"代理：{'啟用' if enabled else '停用'}  伺服器：{server}")
+                except: print("代理：未設定")
+            elif action == "set":
+                winreg.SetValueEx(k,"ProxyEnable",0,winreg.REG_DWORD,1)
+                winreg.SetValueEx(k,"ProxyServer",0,winreg.REG_SZ,host)
+                print(f"✅ 代理已設定：{host}")
+            elif action == "disable":
+                winreg.SetValueEx(k,"ProxyEnable",0,winreg.REG_DWORD,0)
+                print("✅ 代理已停用")
+    except Exception as e:
+        print(f"❌ 代理設定失敗：{e}")
+
+def lock_screen(action: str = "lock"):
+    import subprocess
+    try:
+        if action == "lock":
+            subprocess.Popen(["rundll32.exe","user32.dll,LockWorkStation"]); print("🔒 螢幕已鎖定")
+        elif action == "logoff":
+            subprocess.run(["shutdown","/l"],capture_output=True); print("✅ 已登出")
+        elif action == "switch_user":
+            subprocess.Popen(["tsdiscon.exe"]); print("✅ 已切換使用者")
+    except Exception as e:
+        print(f"❌ 鎖定/登出失敗：{e}")
+
+def defender(action: str, path: str = ""):
+    import subprocess
+    try:
+        if action == "status":
+            r = subprocess.run(["powershell","-Command","Get-MpComputerStatus | Select-Object AMRunningMode,RealTimeProtectionEnabled,AntivirusSignatureLastUpdated | Format-List"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip())
+        elif action in ("quick_scan","full_scan"):
+            scan_type = "QuickScan" if action=="quick_scan" else "FullScan"
+            subprocess.Popen(["powershell","-Command",f"Start-MpScan -ScanType {scan_type}"])
+            print(f"🛡️ {action} 已啟動（背景執行中）")
+        elif action == "threats":
+            r = subprocess.run(["powershell","-Command","Get-MpThreatDetection | Select-Object ThreatID,Resources,ActionSuccess | Format-Table -AutoSize"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip() or "✅ 無威脅記錄")
+        elif action == "add_exclusion":
+            r = subprocess.run(["powershell","-Command",f"Add-MpPreference -ExclusionPath '{path}'"], capture_output=True, text=True)
+            print(f"✅ 已新增排除：{path}" if r.returncode==0 else f"❌ 失敗：{r.stderr.strip()}")
+        elif action == "remove_exclusion":
+            r = subprocess.run(["powershell","-Command",f"Remove-MpPreference -ExclusionPath '{path}'"], capture_output=True, text=True)
+            print(f"✅ 已移除排除：{path}" if r.returncode==0 else f"❌ 失敗：{r.stderr.strip()}")
+        elif action == "list_exclusions":
+            r = subprocess.run(["powershell","-Command","(Get-MpPreference).ExclusionPath"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout.strip() or "✅ 無排除項目")
+    except Exception as e:
+        print(f"❌ Defender 操作失敗：{e}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -3926,6 +4266,21 @@ if __name__ == "__main__":
         "window_arrange":  lambda: window_arrange(args[0] if args else "side_by_side"),
         "region_ocr":      lambda: region_ocr(int(args[0]), int(args[1]), int(args[2]), int(args[3]), args[4] if len(args)>4 else "ch_tra"),
         "window_screenshot": lambda: window_screenshot(args[0], args[1] if len(args)>1 else ""),
+        "firewall":          lambda: firewall(args[0], args[1] if len(args)>1 else "", int(args[2]) if len(args)>2 else None, args[3] if len(args)>3 else "TCP", args[4] if len(args)>4 else "Inbound"),
+        "process_mgr":       lambda: process_mgr(args[0], args[1] if len(args)>1 else "", int(args[2]) if len(args)>2 and args[2].isdigit() else None, args[3] if len(args)>3 else "normal"),
+        "power_plan":        lambda: power_plan(args[0], args[1] if len(args)>1 else "balanced"),
+        "event_log":         lambda: event_log(args[0] if args else "System", args[1] if len(args)>1 else "Error", int(args[2]) if len(args)>2 else 10),
+        "datetime_config":   lambda: datetime_config(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else ""),
+        "ui_auto":           lambda: ui_auto(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
+        "macro":             lambda: macro(args[0], args[1] if len(args)>1 else "", int(args[2]) if len(args)>2 else 1, float(args[3]) if len(args)>3 else 10.0),
+        "color_pick":        lambda: color_pick(int(args[0]), int(args[1]), args[2] if len(args)>2 else "pick", int(args[3]) if len(args)>3 else 100, int(args[4]) if len(args)>4 else 100),
+        "webcam":            lambda: webcam(args[0], int(args[1]) if len(args)>1 and args[1].isdigit() else 0, float(args[2]) if len(args)>2 else 5.0, args[3] if len(args)>3 else ""),
+        "multi_monitor":     lambda: multi_monitor(args[0], int(args[1]) if len(args)>1 else 1, args[2] if len(args)>2 else ""),
+        "printer":           lambda: printer(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "wifi":              lambda: wifi(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "proxy":             lambda: proxy(args[0], args[1] if len(args)>1 else ""),
+        "lock_screen":       lambda: lock_screen(args[0] if args else "lock"),
+        "defender":          lambda: defender(args[0], args[1] if len(args)>1 else ""),
     }
 
     if tool not in tools:
