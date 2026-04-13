@@ -2583,6 +2583,215 @@ def video_to_gif(path: str, start: float = 0, duration: float = 5.0, output: str
         print(f"❌ 影片轉 GIF 失敗：{e}")
 
 
+# ── 影片生成 ─────────────────────────────────────────
+
+def video_gen(mode: str = "slideshow", output: str = "", **kwargs):
+    """
+    生成影片
+    mode: slideshow / text_video / tts_video / screen_record
+    """
+    import numpy as np
+    import subprocess
+    import asyncio
+    import tempfile
+    import json as _json
+    from pathlib import Path
+    from PIL import Image, ImageDraw, ImageFont
+    import imageio_ffmpeg
+
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    size = kwargs.get("size", (1280, 720))
+    fps  = kwargs.get("fps", 24)
+    out  = output or str(Path.home() / "Desktop" / f"video_{datetime.now().strftime('%H%M%S')}.mp4")
+    w, h = size
+
+    def _write_frames_to_mp4(frames_iter, out_path, vid_fps, width, height):
+        proc = subprocess.Popen([
+            ffmpeg_exe, "-y",
+            "-f", "rawvideo", "-vcodec", "rawvideo",
+            "-s", f"{width}x{height}", "-pix_fmt", "rgb24",
+            "-r", str(vid_fps), "-i", "pipe:0",
+            "-vcodec", "libx264", "-pix_fmt", "yuv420p",
+            "-preset", "fast", "-crf", "23",
+            out_path
+        ], stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        for frame in frames_iter:
+            proc.stdin.write(frame.tobytes())
+        proc.stdin.close()
+        proc.wait()
+
+    def _get_font(size_pt=60):
+        for fp in [
+            "C:/Windows/Fonts/msjh.ttc",
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/simhei.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+        ]:
+            if Path(fp).exists():
+                try:
+                    return ImageFont.truetype(fp, size_pt)
+                except Exception:
+                    pass
+        return ImageFont.load_default()
+
+    try:
+        if mode == "slideshow":
+            images   = kwargs.get("images", [])
+            duration = kwargs.get("duration", 3)
+            sl_fps   = kwargs.get("fps", 12)
+            trans    = kwargs.get("transition", 0.5)
+
+            if not images:
+                print("❌ 請提供 images 參數（圖片路徑列表）")
+                return
+
+            sframes = int(sl_fps * duration)
+            tframes = int(sl_fps * trans)
+
+            def _gen():
+                loaded = []
+                for p in images:
+                    try:
+                        arr = np.array(Image.open(p).convert("RGB").resize((w, h), Image.LANCZOS))
+                    except Exception:
+                        arr = np.zeros((h, w, 3), dtype=np.uint8)
+                    loaded.append(arr)
+                for arr in loaded:
+                    for i in range(tframes):
+                        yield (arr * (i / tframes)).astype(np.uint8)
+                    for _ in range(max(0, sframes - tframes * 2)):
+                        yield arr
+                    for i in range(tframes):
+                        yield (arr * (1.0 - i / tframes)).astype(np.uint8)
+
+            _write_frames_to_mp4(_gen(), out, sl_fps, w, h)
+            print(f"✅ 投影片影片已生成：{out}")
+
+        elif mode == "text_video":
+            text       = kwargs.get("text", "Hello")
+            duration   = kwargs.get("duration", 5)
+            bg_color   = tuple(kwargs.get("bg_color",   [30,  30,  40]))
+            font_color = tuple(kwargs.get("font_color", [255, 255, 255]))
+            font_size  = kwargs.get("font_size", 60)
+            font       = _get_font(font_size)
+            total      = int(fps * duration)
+
+            def _gen():
+                for i in range(total):
+                    p = i / total
+                    a = p / 0.2 if p < 0.2 else (1.0 - p) / 0.2 if p > 0.8 else 1.0
+                    img  = Image.new("RGB", (w, h), bg_color)
+                    draw = ImageDraw.Draw(img)
+                    c    = tuple(int(x * a) for x in font_color)
+                    lines = text.split("\n")
+                    lh    = font_size + 10
+                    y0    = (h - len(lines) * lh) // 2
+                    for j, line in enumerate(lines):
+                        bb = draw.textbbox((0, 0), line, font=font)
+                        draw.text(((w - (bb[2] - bb[0])) // 2, y0 + j * lh), line, font=font, fill=c)
+                    yield np.array(img)
+
+            _write_frames_to_mp4(_gen(), out, fps, w, h)
+            print(f"✅ 文字動畫影片已生成：{out}")
+
+        elif mode == "tts_video":
+            import edge_tts
+            text       = kwargs.get("text", "")
+            image_path = kwargs.get("image", "")
+            voice      = kwargs.get("voice", "zh-CN-YunjianNeural")
+            subtitle   = kwargs.get("subtitle", True)
+
+            if not text:
+                print("❌ 請提供 text 參數")
+                return
+
+            tmp    = Path(tempfile.mkdtemp())
+            audio  = str(tmp / "tts.mp3")
+            vidtmp = str(tmp / "silent.mp4")
+
+            async def _tts():
+                await edge_tts.Communicate(clean_for_tts(text), voice).save(audio)
+            asyncio.run(_tts())
+
+            probe = subprocess.run([
+                ffmpeg_exe.replace("ffmpeg", "ffprobe").replace("ffmpeg.exe", "ffprobe.exe"),
+                "-v", "quiet", "-print_format", "json", "-show_streams", audio
+            ], capture_output=True, text=True)
+            try:
+                dur = float(_json.loads(probe.stdout)["streams"][0]["duration"])
+            except Exception:
+                dur = 10.0
+
+            if image_path and Path(image_path).exists():
+                bg = np.array(Image.open(image_path).convert("RGB").resize((w, h), Image.LANCZOS))
+            else:
+                bg = np.zeros((h, w, 3), dtype=np.uint8)
+                for row in range(h):
+                    v = int(20 + 30 * row / h)
+                    bg[row, :] = [v, v, v + 20]
+
+            font    = _get_font(40)
+            total   = int(fps * dur)
+            cpl     = 20
+            sublines = [text[i:i+cpl] for i in range(0, len(text), cpl)]
+
+            def _gen():
+                for i in range(total):
+                    frame = bg.copy()
+                    if subtitle and sublines:
+                        li  = min(int(i / total * len(sublines)), len(sublines) - 1)
+                        line = sublines[li]
+                        img  = Image.fromarray(frame)
+                        draw = ImageDraw.Draw(img)
+                        bb   = draw.textbbox((0, 0), line, font=font)
+                        tw   = bb[2] - bb[0]
+                        tx   = (w - tw) // 2
+                        ty   = int(h * 0.82)
+                        draw.rectangle([tx - 10, ty - 5, tx + tw + 10, ty + 45], fill=(0, 0, 0))
+                        draw.text((tx, ty), line, font=font, fill=(255, 255, 255))
+                        frame = np.array(img)
+                    yield frame
+
+            _write_frames_to_mp4(_gen(), vidtmp, fps, w, h)
+            subprocess.run([
+                ffmpeg_exe, "-y",
+                "-i", vidtmp, "-i", audio,
+                "-c:v", "copy", "-c:a", "aac", "-shortest",
+                out
+            ], capture_output=True)
+            print(f"✅ TTS 語音影片已生成：{out}")
+
+        elif mode == "screen_record":
+            import mss, time as _time
+            duration = kwargs.get("duration", 10)
+            rec_fps  = kwargs.get("fps", 10)
+            interval = 1.0 / rec_fps
+            total    = int(rec_fps * duration)
+
+            with mss.mss() as sct:
+                mon = sct.monitors[1]
+                sw, sh = mon["width"], mon["height"]
+
+                def _gen():
+                    for _ in range(total):
+                        t0  = _time.time()
+                        arr = np.array(sct.grab(mon))[:, :, :3][:, :, ::-1]
+                        yield arr
+                        elapsed = _time.time() - t0
+                        if elapsed < interval:
+                            _time.sleep(interval - elapsed)
+
+                _write_frames_to_mp4(_gen(), out, rec_fps, sw, sh)
+            print(f"✅ 螢幕錄影完成：{out}（{duration} 秒）")
+
+        else:
+            print(f"❌ 未知 mode：{mode}")
+
+    except Exception as e:
+        import traceback
+        print(f"❌ 影片生成失敗：{e}\n{traceback.format_exc()}")
+
+
 # ── Excel 圖表 ───────────────────────────────────────
 
 def excel_chart(path: str, sheet: str, chart_type: str = "bar", title: str = ""):
@@ -4791,6 +5000,18 @@ if __name__ == "__main__":
         "hyperv":            lambda: hyperv(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
         "file_diff":         lambda: file_diff(args[0], args[1], args[2] if len(args)>2 else "", args[3] if len(args)>3 else "unified"),
         "screen_live":       lambda: screen_live(float(args[0]) if args else 0.5, float(args[1]) if len(args)>1 else 60.0, int(args[2]) if len(args)>2 else 50),
+        # ── 影片生成 ──────────────────────────────────────────────────
+        # 用法：video_gen <mode> [output] [key=value ...]
+        # mode: slideshow / text_video / tts_video / screen_record
+        # 例：video_gen text_video "" text="你好世界" duration=5
+        "video_gen":         lambda: video_gen(
+            args[0] if args else "text_video",
+            args[1] if len(args) > 1 else "",
+            **dict(
+                kv.split("=", 1) for kv in args[2:]
+                if "=" in kv
+            )
+        ),
     }
 
     if tool not in tools:

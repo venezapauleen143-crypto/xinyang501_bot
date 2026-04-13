@@ -1893,6 +1893,32 @@ TOOLS = [
         }
     },
     {
+        "name": "video_gen",
+        "description": "生成影片：投影片、文字動畫、TTS語音影片、螢幕錄影。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["slideshow", "text_video", "tts_video", "screen_record"],
+                    "description": "slideshow=圖片投影片, text_video=文字動畫, tts_video=語音影片, screen_record=螢幕錄影"
+                },
+                "output": {"type": "string", "description": "輸出路徑（選填，預設桌面）"},
+                "text": {"type": "string", "description": "文字內容（text_video/tts_video使用）"},
+                "images": {"type": "array", "items": {"type": "string"}, "description": "圖片路徑列表（slideshow使用）"},
+                "image": {"type": "string", "description": "背景圖片路徑（tts_video使用，選填）"},
+                "duration": {"type": "number", "description": "時長秒數（text_video/screen_record）或每張停留秒數（slideshow）"},
+                "fps": {"type": "number", "description": "幀率（選填，預設24）"},
+                "voice": {"type": "string", "description": "TTS聲音（tts_video，預設zh-CN-YunjianNeural）"},
+                "bg_color": {"type": "array", "description": "背景顏色RGB（text_video）"},
+                "font_color": {"type": "array", "description": "字體顏色RGB（text_video）"},
+                "font_size": {"type": "number", "description": "字體大小（text_video）"},
+                "subtitle": {"type": "boolean", "description": "是否顯示字幕（tts_video，預設true）"}
+            },
+            "required": ["mode"]
+        }
+    },
+    {
         "name": "video_process",
         "description": "影片處理：截取指定秒數畫面、剪輯片段。",
         "input_schema": {
@@ -5684,6 +5710,256 @@ def execute_video_process(action, path, second=0, start=0, end=0, output=""):
         return f"❌ 影片處理失敗：{e}"
 
 
+def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> str:
+    """
+    生成影片
+    mode:
+      slideshow  - 圖片列表 → mp4 投影片
+      text_video - 文字動畫 → mp4
+      tts_video  - TTS 語音 + 背景圖 → mp4
+      screen_record - 螢幕錄影 → mp4
+    回傳輸出檔案路徑
+    """
+    import numpy as np
+    import subprocess
+    import asyncio
+    import tempfile
+    import json as _json
+    from pathlib import Path
+    from PIL import Image, ImageDraw, ImageFont
+    import imageio_ffmpeg
+
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    size = kwargs.get("size", (1280, 720))
+    fps  = kwargs.get("fps", 24)
+    out  = output or str(Path.home() / "Desktop" / f"video_{datetime.datetime.now().strftime('%H%M%S')}.mp4")
+
+    def _write_frames_to_mp4(frames_iter, out_path, fps, width, height):
+        """用 ffmpeg pipe 把 RGB numpy frames 寫成 mp4"""
+        proc = subprocess.Popen([
+            ffmpeg_exe, "-y",
+            "-f", "rawvideo", "-vcodec", "rawvideo",
+            "-s", f"{width}x{height}", "-pix_fmt", "rgb24",
+            "-r", str(fps), "-i", "pipe:0",
+            "-vcodec", "libx264", "-pix_fmt", "yuv420p",
+            "-preset", "fast", "-crf", "23",
+            out_path
+        ], stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        for frame in frames_iter:
+            proc.stdin.write(frame.tobytes())
+        proc.stdin.close()
+        proc.wait()
+
+    def _get_font(size_pt=60):
+        for fp in [
+            "C:/Windows/Fonts/msjh.ttc",
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/simhei.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+        ]:
+            if Path(fp).exists():
+                try:
+                    return ImageFont.truetype(fp, size_pt)
+                except Exception:
+                    pass
+        return ImageFont.load_default()
+
+    try:
+        w, h = size
+
+        # ── 投影片影片 ────────────────────────────────────────────────
+        if mode == "slideshow":
+            images      = kwargs.get("images", [])
+            duration    = kwargs.get("duration", 3)   # 每張停留秒數
+            transition  = kwargs.get("transition", 0.5)  # 淡入淡出秒數
+            slide_fps   = kwargs.get("fps", 12)
+
+            if not images:
+                return "❌ 請提供 images 參數（圖片路徑列表）"
+
+            frames_per_slide  = int(slide_fps * duration)
+            trans_frames      = int(slide_fps * transition)
+
+            def _gen_frames():
+                loaded = []
+                for p in images:
+                    try:
+                        img = Image.open(p).convert("RGB").resize((w, h), Image.LANCZOS)
+                        loaded.append(np.array(img))
+                    except Exception:
+                        blank = np.zeros((h, w, 3), dtype=np.uint8)
+                        loaded.append(blank)
+
+                for idx, frame_arr in enumerate(loaded):
+                    # 淡入
+                    for i in range(trans_frames):
+                        alpha = i / trans_frames
+                        yield (frame_arr * alpha).astype(np.uint8)
+                    # 靜止
+                    for _ in range(frames_per_slide - trans_frames * 2):
+                        yield frame_arr
+                    # 淡出
+                    for i in range(trans_frames):
+                        alpha = 1.0 - i / trans_frames
+                        yield (frame_arr * alpha).astype(np.uint8)
+
+            _write_frames_to_mp4(_gen_frames(), out, slide_fps, w, h)
+            return f"✅ 投影片影片已生成：{out}"
+
+        # ── 文字動畫影片 ─────────────────────────────────────────────
+        elif mode == "text_video":
+            text       = kwargs.get("text", "Hello")
+            duration   = kwargs.get("duration", 5)
+            bg_color   = tuple(kwargs.get("bg_color",   [30,  30,  40]))
+            font_color = tuple(kwargs.get("font_color", [255, 255, 255]))
+            font_size  = kwargs.get("font_size", 60)
+            font       = _get_font(font_size)
+            total      = int(fps * duration)
+
+            def _gen_frames():
+                for i in range(total):
+                    progress = i / total
+                    # 前 20% 淡入，後 20% 淡出
+                    if progress < 0.2:
+                        alpha = progress / 0.2
+                    elif progress > 0.8:
+                        alpha = (1.0 - progress) / 0.2
+                    else:
+                        alpha = 1.0
+
+                    img  = Image.new("RGB", (w, h), bg_color)
+                    draw = ImageDraw.Draw(img)
+                    c    = tuple(int(x * alpha) for x in font_color)
+                    lines = text.split("\n")
+                    lh    = font_size + 10
+                    total_h = len(lines) * lh
+                    y0 = (h - total_h) // 2
+                    for j, line in enumerate(lines):
+                        bb = draw.textbbox((0, 0), line, font=font)
+                        tw = bb[2] - bb[0]
+                        draw.text(((w - tw) // 2, y0 + j * lh), line, font=font, fill=c)
+                    yield np.array(img)
+
+            _write_frames_to_mp4(_gen_frames(), out, fps, w, h)
+            return f"✅ 文字動畫影片已生成：{out}"
+
+        # ── TTS 語音影片 ─────────────────────────────────────────────
+        elif mode == "tts_video":
+            import edge_tts
+            text       = kwargs.get("text", "")
+            image_path = kwargs.get("image", "")
+            voice      = kwargs.get("voice", "zh-CN-YunjianNeural")
+            subtitle   = kwargs.get("subtitle", True)
+
+            if not text:
+                return "❌ 請提供 text 參數"
+
+            tmp   = Path(tempfile.mkdtemp())
+            audio = str(tmp / "tts.mp3")
+            vidtmp = str(tmp / "silent.mp4")
+
+            # 生成語音
+            async def _tts():
+                comm = edge_tts.Communicate(clean_for_tts(text), voice)
+                await comm.save(audio)
+            asyncio.run(_tts())
+
+            # 取得音訊時長
+            probe = subprocess.run([
+                ffmpeg_exe.replace("ffmpeg", "ffprobe").replace("ffmpeg.exe", "ffprobe.exe"),
+                "-v", "quiet", "-print_format", "json", "-show_streams", audio
+            ], capture_output=True, text=True)
+            try:
+                dur = float(_json.loads(probe.stdout)["streams"][0]["duration"])
+            except Exception:
+                dur = 10.0
+
+            # 準備背景圖
+            if image_path and Path(image_path).exists():
+                bg = np.array(Image.open(image_path).convert("RGB").resize((w, h), Image.LANCZOS))
+            else:
+                # 深色漸層背景
+                bg = np.zeros((h, w, 3), dtype=np.uint8)
+                for row in range(h):
+                    v = int(20 + 30 * row / h)
+                    bg[row, :] = [v, v, v + 20]
+
+            font   = _get_font(40)
+            total  = int(fps * dur)
+
+            # 字幕文字分行
+            words  = text
+            chars_per_line = 20
+            sub_lines = [words[i:i+chars_per_line] for i in range(0, len(words), chars_per_line)]
+
+            def _gen_frames():
+                for i in range(total):
+                    frame = bg.copy()
+                    if subtitle:
+                        # 顯示字幕（底部 1/4 區域）
+                        prog   = i / total
+                        line_i = min(int(prog * len(sub_lines)), len(sub_lines) - 1)
+                        line   = sub_lines[line_i] if sub_lines else ""
+                        if line:
+                            img  = Image.fromarray(frame)
+                            draw = ImageDraw.Draw(img)
+                            bb   = draw.textbbox((0, 0), line, font=font)
+                            tw   = bb[2] - bb[0]
+                            tx   = (w - tw) // 2
+                            ty   = int(h * 0.82)
+                            # 半透明黑底
+                            draw.rectangle([tx - 10, ty - 5, tx + tw + 10, ty + 45], fill=(0, 0, 0, 180))
+                            draw.text((tx, ty), line, font=font, fill=(255, 255, 255))
+                            frame = np.array(img)
+                    yield frame
+
+            _write_frames_to_mp4(_gen_frames(), vidtmp, fps, w, h)
+
+            # 合併音訊
+            subprocess.run([
+                ffmpeg_exe, "-y",
+                "-i", vidtmp, "-i", audio,
+                "-c:v", "copy", "-c:a", "aac", "-shortest",
+                out
+            ], capture_output=True)
+
+            return f"✅ TTS 語音影片已生成：{out}"
+
+        # ── 螢幕錄影 ─────────────────────────────────────────────────
+        elif mode == "screen_record":
+            import mss
+            import time
+            duration = kwargs.get("duration", 10)
+            rec_fps  = kwargs.get("fps", 10)
+            interval = 1.0 / rec_fps
+            total    = int(rec_fps * duration)
+
+            with mss.mss() as sct:
+                mon = sct.monitors[1]
+                sw, sh = mon["width"], mon["height"]
+
+                def _gen_frames():
+                    for _ in range(total):
+                        t0  = time.time()
+                        img = sct.grab(mon)
+                        arr = np.array(img)[:, :, :3][:, :, ::-1]  # BGRA→RGB
+                        yield arr
+                        elapsed = time.time() - t0
+                        if elapsed < interval:
+                            time.sleep(interval - elapsed)
+
+                _write_frames_to_mp4(_gen_frames(), out, rec_fps, sw, sh)
+
+            return f"✅ 螢幕錄影完成：{out}（{duration} 秒）"
+
+        else:
+            return f"❌ 未知 mode：{mode}，可用：slideshow / text_video / tts_video / screen_record"
+
+    except Exception as e:
+        import traceback
+        return f"❌ 影片生成失敗：{e}\n{traceback.format_exc()}"
+
+
 def execute_monitor_config():
     try:
         from screeninfo import get_monitors
@@ -6527,6 +6803,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["action"], tool_use.input.get("fps",0.5),
                     tool_use.input.get("duration",60.0), tool_use.input.get("quality",50),
                     _bot_send=context.bot.send_photo, _chat_id=chat_id),
+                "video_gen": lambda: execute_video_gen(
+                    tool_use.input["mode"],
+                    tool_use.input.get("output",""),
+                    text=tool_use.input.get("text",""),
+                    images=tool_use.input.get("images",[]),
+                    image=tool_use.input.get("image",""),
+                    duration=tool_use.input.get("duration",5),
+                    fps=tool_use.input.get("fps",24),
+                    voice=tool_use.input.get("voice","zh-CN-YunjianNeural"),
+                    bg_color=tool_use.input.get("bg_color",[30,30,40]),
+                    font_color=tool_use.input.get("font_color",[255,255,255]),
+                    font_size=tool_use.input.get("font_size",60),
+                    subtitle=tool_use.input.get("subtitle",True)),
             }
 
             if tool_use.name == "send_voice":
@@ -6544,6 +6833,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply = f"語音生成失敗：{e}\n\n{text}"
                     await update.message.reply_text(reply)
                 save_message(chat_id, "assistant", text)
+                return
+
+            elif tool_use.name == "video_gen":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                mode = tool_use.input["mode"]
+                mode_labels = {
+                    "slideshow": "投影片影片",
+                    "text_video": "文字動畫影片",
+                    "tts_video": "TTS 語音影片",
+                    "screen_record": f"螢幕錄影（{tool_use.input.get('duration',10)} 秒）",
+                }
+                await update.message.reply_text(f"🎬 生成中：{mode_labels.get(mode, mode)}，請稍候...")
+                out_path = await loop.run_in_executor(None, lambda: execute_video_gen(
+                    mode,
+                    tool_use.input.get("output", ""),
+                    text=tool_use.input.get("text", ""),
+                    images=tool_use.input.get("images", []),
+                    image=tool_use.input.get("image", ""),
+                    duration=tool_use.input.get("duration", 5),
+                    fps=tool_use.input.get("fps", 24),
+                    voice=tool_use.input.get("voice", "zh-CN-YunjianNeural"),
+                    bg_color=tool_use.input.get("bg_color", [30, 30, 40]),
+                    font_color=tool_use.input.get("font_color", [255, 255, 255]),
+                    font_size=tool_use.input.get("font_size", 60),
+                    subtitle=tool_use.input.get("subtitle", True),
+                ))
+                if out_path and out_path.startswith("✅") and Path(out_path.split("：")[-1].strip()).exists():
+                    video_file = out_path.split("：")[-1].strip()
+                    await update.message.reply_chat_action("upload_video")
+                    with open(video_file, "rb") as f:
+                        await update.message.reply_video(
+                            video=f,
+                            caption=f"🎬 {mode_labels.get(mode, mode)}",
+                            supports_streaming=True,
+                        )
+                    reply = out_path
+                else:
+                    reply = out_path
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
                 return
 
             elif tool_use.name == "sysres_chart":
@@ -6926,16 +7256,46 @@ async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
     _learned_today = today_str
 
     topics = [
-        "Python asyncio 進階用法與最佳實踐",
-        "Telegram Bot API 進階功能與限制",
-        "Claude API 工具使用（Tool Use）技巧",
-        "SQLite 效能優化技巧",
-        "Python 錯誤處理與 logging 最佳實踐",
-        "圖片處理：Pillow 進階技巧",
-        "HTTP requests 效能優化與重試機制",
-        "Python 排程任務：APScheduler 進階用法",
-        "Git 自動化流程與 GitHub Actions 入門",
-        "pyautogui 桌面自動化進階技巧",
+        "Python asyncio 進階用法與最佳實踐", "Python 錯誤處理與 logging 最佳實踐",
+        "Python 型別提示（Type Hints）與 mypy 靜態檢查", "Python dataclass 與 pydantic 資料模型",
+        "Python 效能分析與優化：cProfile、line_profiler", "Python 多執行緒與多程序：threading vs multiprocessing",
+        "Python subprocess 進階：管道、串流、逾時控制", "Python pathlib 與檔案系統操作最佳實踐",
+        "Python 正則表達式進階技巧", "Python 裝飾器（Decorator）深入解析",
+        "Telegram Bot API 進階功能：InlineKeyboard、CallbackQuery",
+        "Telegram Bot 訊息限速與 flood control 處理", "Telegram Bot 群組管理與權限控制",
+        "python-telegram-bot JobQueue 排程任務管理", "Telegram Bot 語音訊息：STT 辨識與回覆",
+        "Telegram Bot 檔案收發：圖片、影片、文件", "Telegram Bot 狀態機（ConversationHandler）設計",
+        "Claude API Tool Use（工具使用）進階設計模式", "Claude API 串流回應（Streaming）實作",
+        "Claude API System Prompt 工程技巧", "Claude API 多輪對話記憶管理策略",
+        "大型語言模型 Token 計算與成本優化",
+        "pyautogui 桌面自動化：滑鼠、鍵盤、截圖", "pywinauto Windows GUI 自動化進階技巧",
+        "pynput 全域快捷鍵與滑鼠監聽", "keyboard 模組：快捷鍵錄製與重播",
+        "mss 高效螢幕截圖與區域擷取",
+        "OpenCV 圖像處理：模板匹配與特徵偵測", "easyOCR 文字辨識：中英文混合場景",
+        "Pillow 圖像操作：裁切、比較、像素分析", "螢幕像素監控：顏色比對與變化偵測",
+        "edge-tts 語音合成：聲音選擇與參數調整", "SpeechRecognition + sounddevice 語音輸入",
+        "pycaw Windows 音量控制與音訊裝置管理", "pydub 音訊格式轉換與剪輯",
+        "psutil 系統資源監控：CPU、記憶體、磁碟、網路",
+        "Windows 防火牆規則管理（netsh advfirewall）", "Windows 程序管理：啟動、終止、優先級",
+        "Windows 電源計畫管理（powercfg）", "Windows 事件日誌查詢（Get-WinEvent）",
+        "Windows 排程任務管理（Task Scheduler）進階", "Windows Defender 設定與排除清單管理",
+        "watchdog 檔案系統監控：即時偵測變化", "difflib 文字差異比較與 diff 輸出",
+        "requests 進階：Session、重試、代理設定", "imapclient IMAP 收信與郵件解析",
+        "speedtest-cli 網路速度測試自動化", "Wake-on-LAN 網路喚醒實作",
+        "FTP 自動化：ftplib 上傳下載",
+        "Playwright 瀏覽器自動化：頁面操作、截圖、PDF",
+        "Playwright 網頁爬蟲：動態內容擷取", "Playwright 多標籤頁與視窗管理",
+        "Dropbox API：檔案上傳、下載、分享連結", "Docker SDK for Python：容器管理自動化",
+        "OneDrive REST API 整合", "Git 自動化：gitpython 操作倉庫",
+        "OpenCV 攝影機控制：截圖、錄影、即時串流", "GPUtil GPU 監控：溫度、使用率、記憶體",
+        "多螢幕管理：分辨率、排列、設定", "USB 裝置偵測與管理",
+        "Wi-Fi 網路掃描與熱點建立", "ADB Android 設備遠端控制",
+        "WSL2 與 Python 互通：執行 Linux 指令", "Hyper-V 虛擬機管理自動化",
+        "SQLite 效能優化與索引設計", "pandas 資料清洗與分析技巧",
+        "自動化告警系統：條件觸發 → Telegram 通知", "間隔排程自動化：APScheduler vs asyncio",
+        "moviepy 影片生成與剪輯：投影片、字幕、合成",
+        "imageio + ffmpeg 影格合成與影片輸出", "TTS 語音影片生成：edge-tts + ffmpeg",
+        "螢幕錄影自動化：mss + ffmpeg 無縫錄製",
     ]
 
     topic = topics[today.toordinal() % len(topics)]
@@ -6944,8 +7304,16 @@ async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1500,
-            system="你是小牛馬，一個積極自學的 AI 助理。每天晚上你會主動學習一個新技能並做成筆記。",
-            messages=[{"role": "user", "content": f"今天的學習主題是：{topic}。請整理出重點知識、實用範例程式碼（如果適用）、以及你學到的心得，用繁體中文條列式整理，格式清晰。"}]
+            system=(
+                "你是小牛馬，一個積極自學的 AI 助理，擁有超過 100 個自動化技能，"
+                "涵蓋桌面控制、語音、視覺、網路、雲端、影片生成等。"
+                "每天晚上你會主動學習一個新技能並做成筆記，重點放在實際應用。"
+            ),
+            messages=[{"role": "user", "content": (
+                f"今天的學習主題是：{topic}。\n"
+                "請整理出：1.核心概念 2.實用程式碼範例 3.常見坑 4.與其他技能的整合應用。"
+                "用繁體中文條列式整理，格式清晰易查閱。"
+            )}]
         )
         return response.content[0].text
 
