@@ -9084,6 +9084,16 @@ async def _send_reply(update: Update, text: str):
             await update.message.reply_text(text[i:i+MAX])
 
 
+# 每個 chat_id 一個 semaphore，避免多張圖片並發造成 race condition
+_photo_locks: dict = {}
+
+def _get_photo_lock(chat_id: int):
+    import asyncio
+    if chat_id not in _photo_locks:
+        _photo_locks[chat_id] = asyncio.Semaphore(1)
+    return _photo_locks[chat_id]
+
+
 async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """處理用戶傳送的圖片，用 Claude Vision 分析"""
     try:
@@ -9094,7 +9104,7 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         is_group = update.effective_chat.type in ("group", "supergroup")
         caption = update.message.caption or ""
 
-        # 群組內：用 caption_entities 偵測 @mention（比字串比對更準確）
+        # 群組內：用 caption_entities 偵測 @mention
         if is_group:
             bot_username = (context.bot.username or "").lower()
             caption_entities = update.message.caption_entities or []
@@ -9104,27 +9114,33 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             if not mentioned:
                 return
-            # 去除 @mention 文字
             clean_caption = caption
             for e in sorted(caption_entities, key=lambda x: x.offset, reverse=True):
                 if e.type == "mention":
                     clean_caption = clean_caption[:e.offset] + clean_caption[e.offset + e.length:]
             caption = clean_caption.strip()
 
-        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-
-        import asyncio, base64
+        import asyncio, base64, io as _io
         loop = asyncio.get_running_loop()
 
-        # 下載最高解析度圖片（async，不阻塞）
+        # 下載最高解析度圖片
         photo = update.message.photo[-1]
         photo_file = await context.bot.get_file(photo.file_id)
         photo_bytes = await photo_file.download_as_bytearray()
 
-        # base64 轉換（CPU-bound，丟到 executor 不阻塞 event loop）
-        img_b64 = await loop.run_in_executor(
-            None, lambda: base64.b64encode(bytes(photo_bytes)).decode("utf-8")
-        )
+        # 縮圖 + base64（CPU-bound，在 executor 執行，不阻塞 event loop）
+        def _prepare_image(raw: bytearray) -> str:
+            img = Image.open(_io.BytesIO(bytes(raw))).convert("RGB")
+            # 限制最長邊 1280px，減少 API 負載與記憶體
+            max_side = 1280
+            if max(img.width, img.height) > max_side:
+                ratio = max_side / max(img.width, img.height)
+                img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
+            buf = _io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        img_b64 = await loop.run_in_executor(None, _prepare_image, photo_bytes)
 
         question = caption if caption else "請描述這張圖片的內容，有什麼特別的地方？"
         user_content = [
@@ -9132,56 +9148,58 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
             {"type": "text", "text": question}
         ]
 
-        # 儲存純文字版到 DB（不存 base64，避免 DB 爆炸）
-        saved_text = f"[{sender_name}]: [圖片] {caption}" if (is_group and caption) else (
-            f"[{sender_name}]: [圖片]" if is_group else (f"[圖片] {caption}" if caption else "[圖片]")
-        )
-        save_message(chat_id, "user", saved_text)
+        # 用 per-chat semaphore 序列化：同一個 chat 的圖片一次只處理一張
+        # 避免並發讀寫 DB history 造成 race condition
+        async with _get_photo_lock(chat_id):
+            await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-        # 從 DB 取歷史，把剛存的最後一則換成帶圖片的版本
-        history = load_history(chat_id)[-40:]
-        if history and history[-1]["role"] == "user":
-            history[-1] = {"role": "user", "content": user_content}
-        else:
-            history.append({"role": "user", "content": user_content})
-
-        # 確保不會有連續相同 role
-        cleaned_history = []
-        for msg in history:
-            if cleaned_history and cleaned_history[-1]["role"] == msg["role"]:
-                cleaned_history[-1] = msg
-            else:
-                cleaned_history.append(msg)
-
-        base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
-        memories = load_long_term_memory(chat_id)
-        if memories:
-            mem_text = "\n".join(f"- [{m['id']}] {m['content']}" for m in memories)
-            system = base_system + f"\n\n【長期記憶】\n{mem_text}"
-        else:
-            system = base_system
-
-        # Claude API 呼叫是同步阻塞，必須丟到 executor，否則會凍結整個 event loop
-        response = await loop.run_in_executor(
-            None,
-            lambda: client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1024,
-                system=system,
-                messages=cleaned_history
+            # 儲存純文字版到 DB
+            saved_text = f"[{sender_name}]: [圖片] {caption}" if (is_group and caption) else (
+                f"[{sender_name}]: [圖片]" if is_group else (f"[圖片] {caption}" if caption else "[圖片]")
             )
-        )
+            save_message(chat_id, "user", saved_text)
 
-        # 安全取回文字（避免 tool_use block 炸掉）
-        reply = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                reply = block.text
-                break
-        if not reply:
-            reply = "（無法解析回應）"
+            # 取歷史，把最後一則 user 換成帶圖片的版本
+            history = load_history(chat_id)[-40:]
+            if history and history[-1]["role"] == "user":
+                history[-1] = {"role": "user", "content": user_content}
+            else:
+                history.append({"role": "user", "content": user_content})
 
-        save_message(chat_id, "assistant", reply)
+            # 確保不會有連續相同 role
+            cleaned_history = []
+            for msg in history:
+                if cleaned_history and cleaned_history[-1]["role"] == msg["role"]:
+                    cleaned_history[-1] = msg
+                else:
+                    cleaned_history.append(msg)
+
+            base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
+            memories = load_long_term_memory(chat_id)
+            system = base_system
+            if memories:
+                mem_text = "\n".join(f"- [{m['id']}] {m['content']}" for m in memories)
+                system = base_system + f"\n\n【長期記憶】\n{mem_text}"
+
+            # snapshot 必要資料，避免 lambda 捕捉到之後可能改變的變數
+            _system = system
+            _history = list(cleaned_history)
+
+            # Claude API（同步阻塞）→ executor，不鎖住 event loop
+            response = await loop.run_in_executor(
+                None,
+                lambda: client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1024,
+                    system=_system,
+                    messages=_history
+                )
+            )
+
+            # 安全取回文字
+            reply = next((b.text for b in response.content if hasattr(b, "text")), "（無法解析回應）")
+            save_message(chat_id, "assistant", reply)
+
         log_message("<<", "小牛馬[圖]", chat_id, reply)
         await _send_reply(update, reply)
 
