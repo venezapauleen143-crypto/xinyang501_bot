@@ -215,17 +215,18 @@ TOOLS = [
     },
     {
         "name": "desktop_control",
-        "description": "控制電腦桌面。當用戶要求截圖、點擊、移動滑鼠、輸入文字、按鍵、開啟程式時使用此工具。",
+        "description": "控制電腦桌面，支援多螢幕。當用戶要求截圖、點擊、移動滑鼠、輸入文字、按鍵、開啟程式、查看螢幕資訊時使用此工具。",
         "input_schema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["screenshot", "click", "double_click", "right_click", "move", "type", "press_key", "open_app", "scroll"],
-                    "description": "要執行的動作"
+                    "enum": ["screenshot", "click", "double_click", "right_click", "move", "type", "press_key", "open_app", "scroll", "list_monitors"],
+                    "description": "要執行的動作。list_monitors=列出所有螢幕資訊"
                 },
-                "x": {"type": "integer", "description": "滑鼠 X 座標（click/move/scroll 時使用）"},
-                "y": {"type": "integer", "description": "滑鼠 Y 座標（click/move/scroll 時使用）"},
+                "x": {"type": "integer", "description": "滑鼠 X 座標，若指定 monitor 則為該螢幕內的相對座標"},
+                "y": {"type": "integer", "description": "滑鼠 Y 座標，若指定 monitor 則為該螢幕內的相對座標"},
+                "monitor": {"type": "integer", "description": "目標螢幕編號（1=左、2=右、3=中，不填則為全域座標）。screenshot 時只截該螢幕"},
                 "text": {"type": "string", "description": "要輸入的文字或按鍵名稱（type/press_key 時使用）"},
                 "app": {"type": "string", "description": "要開啟的程式名稱或路徑（open_app 時使用）"},
                 "direction": {"type": "string", "enum": ["up", "down"], "description": "滾動方向（scroll 時使用）"},
@@ -2729,33 +2730,71 @@ def add_text_overlay(image_bytes: bytes, text: str) -> bytes:
         return image_bytes
 
 
-def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, direction="down", amount=3) -> dict:
-    """執行桌面控制動作，回傳 {"ok": bool, "message": str, "screenshot": bytes or None}"""
+def _get_monitors():
+    """取得所有螢幕資訊，回傳 list of dict（index 1-based，跳過 monitor[0] 全域合併區）"""
+    import mss
+    with mss.mss() as sct:
+        return sct.monitors[1:]  # index 0 是全域，1~ 才是實體螢幕
+
+def _resolve_coords(x, y, monitor_idx):
+    """將相對於指定螢幕的座標轉換成全域座標"""
+    if monitor_idx is None:
+        return x, y
+    monitors = _get_monitors()
+    if 1 <= monitor_idx <= len(monitors):
+        m = monitors[monitor_idx - 1]
+        return m["left"] + x, m["top"] + y
+    return x, y
+
+def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, direction="down", amount=3, monitor=None) -> dict:
+    """執行桌面控制動作，支援多螢幕，回傳 {"ok": bool, "message": str, "screenshot": bytes or None}"""
     try:
         screenshot_bytes = None
 
-        if action == "screenshot":
-            img = pyautogui.screenshot()
+        if action == "list_monitors":
+            import mss
+            with mss.mss() as sct:
+                monitors = sct.monitors[1:]
+            lines = []
+            for i, m in enumerate(monitors, 1):
+                lines.append(f"螢幕{i}：左={m['left']} 上={m['top']} 寬={m['width']} 高={m['height']}")
+            return {"ok": True, "message": "\n".join(lines), "screenshot": None}
+
+        elif action == "screenshot":
+            import mss
+            with mss.mss() as sct:
+                if monitor and 1 <= monitor <= len(sct.monitors) - 1:
+                    img_data = sct.grab(sct.monitors[monitor])
+                    label = f"螢幕{monitor}"
+                else:
+                    img_data = sct.grab(sct.monitors[0])
+                    label = "全螢幕"
+            from PIL import Image as _PIL_Image
+            img = _PIL_Image.frombytes("RGB", img_data.size, img_data.bgra, "raw", "BGRX")
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             screenshot_bytes = buf.getvalue()
-            return {"ok": True, "message": "截圖完成", "screenshot": screenshot_bytes}
+            return {"ok": True, "message": f"{label}截圖完成", "screenshot": screenshot_bytes}
 
         elif action == "click":
-            pyautogui.click(x, y)
-            return {"ok": True, "message": f"已點擊 ({x}, {y})", "screenshot": None}
+            ax, ay = _resolve_coords(x, y, monitor)
+            pyautogui.click(ax, ay)
+            return {"ok": True, "message": f"已點擊 ({x}, {y})" + (f" 螢幕{monitor}" if monitor else ""), "screenshot": None}
 
         elif action == "double_click":
-            pyautogui.doubleClick(x, y)
-            return {"ok": True, "message": f"已雙擊 ({x}, {y})", "screenshot": None}
+            ax, ay = _resolve_coords(x, y, monitor)
+            pyautogui.doubleClick(ax, ay)
+            return {"ok": True, "message": f"已雙擊 ({x}, {y})" + (f" 螢幕{monitor}" if monitor else ""), "screenshot": None}
 
         elif action == "right_click":
-            pyautogui.rightClick(x, y)
-            return {"ok": True, "message": f"已右鍵點擊 ({x}, {y})", "screenshot": None}
+            ax, ay = _resolve_coords(x, y, monitor)
+            pyautogui.rightClick(ax, ay)
+            return {"ok": True, "message": f"已右鍵點擊 ({x}, {y})" + (f" 螢幕{monitor}" if monitor else ""), "screenshot": None}
 
         elif action == "move":
-            pyautogui.moveTo(x, y, duration=0.3)
-            return {"ok": True, "message": f"滑鼠已移動到 ({x}, {y})", "screenshot": None}
+            ax, ay = _resolve_coords(x, y, monitor)
+            pyautogui.moveTo(ax, ay, duration=0.3)
+            return {"ok": True, "message": f"滑鼠已移動到 ({x}, {y})" + (f" 螢幕{monitor}" if monitor else ""), "screenshot": None}
 
         elif action == "type":
             global _last_opened_hwnd
@@ -2845,7 +2884,8 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
         elif action == "scroll":
             scroll_amount = amount if direction == "up" else -amount
             if x is not None and y is not None:
-                pyautogui.scroll(scroll_amount, x=x, y=y)
+                ax, ay = _resolve_coords(x, y, monitor)
+                pyautogui.scroll(scroll_amount, x=ax, y=ay)
             else:
                 pyautogui.scroll(scroll_amount)
             return {"ok": True, "message": f"已向{direction}滾動 {amount} 格", "screenshot": None}
@@ -10334,7 +10374,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 text=_i.get("text"),
                                 app=_i.get("app"),
                                 direction=_i.get("direction", "down"),
-                                amount=_i.get("amount", 3)
+                                amount=_i.get("amount", 3),
+                                monitor=_i.get("monitor")
                             )
                         )
                         if _dc_result.get("screenshot"):
