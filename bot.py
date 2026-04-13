@@ -13,6 +13,24 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
 
+# ── 單一實例鎖：防止多個 bot 同時跑互相衝突 ──────────────
+import msvcrt, sys
+
+_LOCK_FILE = Path(__file__).parent / "bot.lock"
+_lock_fh = None
+
+def _acquire_lock():
+    global _lock_fh
+    _lock_fh = open(_LOCK_FILE, "w")
+    try:
+        msvcrt.locking(_lock_fh.fileno(), msvcrt.LK_NBLCK, 1)
+    except OSError:
+        print("另一個 bot 實例已在執行中，退出。")
+        sys.exit(0)
+
+_acquire_lock()
+# ──────────────────────────────────────────────────────────
+
 pyautogui.FAILSAFE = True  # 滑鼠移到左上角可緊急停止
 
 load_dotenv(Path(__file__).parent / ".env")
