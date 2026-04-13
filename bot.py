@@ -5713,252 +5713,216 @@ def execute_video_process(action, path, second=0, start=0, end=0, output=""):
 def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> str:
     """
     生成影片
-    mode:
-      slideshow  - 圖片列表 → mp4 投影片
-      text_video - 文字動畫 → mp4
-      tts_video  - TTS 語音 + 背景圖 → mp4
-      screen_record - 螢幕錄影 → mp4
-    回傳輸出檔案路徑
+    mode: slideshow / text_video / tts_video / screen_record
     """
+    import re as _re
     import numpy as np
     import subprocess
-    import asyncio
     import tempfile
-    import json as _json
+    import traceback
     from pathlib import Path
     from PIL import Image, ImageDraw, ImageFont
     import imageio_ffmpeg
 
     ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-    size = kwargs.get("size", (1280, 720))
+    w, h = kwargs.get("size", (1280, 720))
     fps  = kwargs.get("fps", 24)
     out  = output or str(Path.home() / "Desktop" / f"video_{datetime.datetime.now().strftime('%H%M%S')}.mp4")
 
-    def _write_frames_to_mp4(frames_iter, out_path, fps, width, height):
-        """用 ffmpeg pipe 把 RGB numpy frames 寫成 mp4"""
+    def _write_frames(frames_iter, out_path, vid_fps, width, height):
+        """ffmpeg pipe 寫 mp4，失敗時 raise"""
         proc = subprocess.Popen([
             ffmpeg_exe, "-y",
             "-f", "rawvideo", "-vcodec", "rawvideo",
             "-s", f"{width}x{height}", "-pix_fmt", "rgb24",
-            "-r", str(fps), "-i", "pipe:0",
+            "-r", str(vid_fps), "-i", "pipe:0",
             "-vcodec", "libx264", "-pix_fmt", "yuv420p",
             "-preset", "fast", "-crf", "23",
             out_path
-        ], stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        ], stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         for frame in frames_iter:
-            proc.stdin.write(frame.tobytes())
+            proc.stdin.write(np.asarray(frame, dtype=np.uint8).tobytes())
         proc.stdin.close()
-        proc.wait()
+        rc  = proc.wait()
+        err = proc.stderr.read().decode(errors="replace")
+        if rc != 0 or not Path(out_path).exists():
+            raise RuntimeError(f"ffmpeg 失敗 rc={rc}: {err[-300:]}")
 
-    def _get_font(size_pt=60):
-        for fp in [
-            "C:/Windows/Fonts/msjh.ttc",
-            "C:/Windows/Fonts/msyh.ttc",
-            "C:/Windows/Fonts/simhei.ttf",
-            "C:/Windows/Fonts/arial.ttf",
-        ]:
+    def _get_font(pt=60):
+        for fp in ["C:/Windows/Fonts/msjh.ttc", "C:/Windows/Fonts/msyh.ttc",
+                   "C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/arial.ttf"]:
             if Path(fp).exists():
                 try:
-                    return ImageFont.truetype(fp, size_pt)
+                    return ImageFont.truetype(fp, pt)
                 except Exception:
                     pass
         return ImageFont.load_default()
 
+    def _tts_sync(text: str, voice: str, out_path: str):
+        """用 edge-tts CLI 同步生成語音（避免 asyncio 巢狀問題）"""
+        import sys
+        python = sys.executable
+        script = (
+            f"import asyncio, edge_tts\n"
+            f"asyncio.run(edge_tts.Communicate({repr(text)}, {repr(voice)}).save({repr(out_path)}))\n"
+        )
+        r = subprocess.run([python, "-c", script],
+                           capture_output=True, text=True, timeout=60)
+        if not Path(out_path).exists():
+            raise RuntimeError(f"TTS 失敗：{r.stderr[-200:]}")
+
+    def _get_audio_dur(audio_path: str) -> float:
+        r = subprocess.run([ffmpeg_exe, "-i", audio_path],
+                           capture_output=True, text=True, errors="replace")
+        m = _re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", r.stderr)
+        if m:
+            return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+        return 10.0
+
     try:
-        w, h = size
-
-        # ── 投影片影片 ────────────────────────────────────────────────
+        # ── 投影片 ────────────────────────────────────────────────────
         if mode == "slideshow":
-            images      = kwargs.get("images", [])
-            duration    = kwargs.get("duration", 3)   # 每張停留秒數
-            transition  = kwargs.get("transition", 0.5)  # 淡入淡出秒數
-            slide_fps   = kwargs.get("fps", 12)
-
+            images   = kwargs.get("images", [])
+            dur      = kwargs.get("duration", 3)
+            sl_fps   = kwargs.get("fps", 12)
+            trans    = kwargs.get("transition", 0.5)
             if not images:
                 return "❌ 請提供 images 參數（圖片路徑列表）"
 
-            frames_per_slide  = int(slide_fps * duration)
-            trans_frames      = int(slide_fps * transition)
+            sf = int(sl_fps * dur)
+            tf = int(sl_fps * trans)
 
-            def _gen_frames():
+            def _frames():
                 loaded = []
                 for p in images:
                     try:
-                        img = Image.open(p).convert("RGB").resize((w, h), Image.LANCZOS)
-                        loaded.append(np.array(img))
+                        loaded.append(np.array(Image.open(p).convert("RGB").resize((w, h), Image.LANCZOS)))
                     except Exception:
-                        blank = np.zeros((h, w, 3), dtype=np.uint8)
-                        loaded.append(blank)
+                        loaded.append(np.zeros((h, w, 3), dtype=np.uint8))
+                for arr in loaded:
+                    for i in range(tf):
+                        yield (arr * (i / tf)).astype(np.uint8)
+                    for _ in range(max(1, sf - tf * 2)):
+                        yield arr
+                    for i in range(tf):
+                        yield (arr * (1.0 - i / tf)).astype(np.uint8)
 
-                for idx, frame_arr in enumerate(loaded):
-                    # 淡入
-                    for i in range(trans_frames):
-                        alpha = i / trans_frames
-                        yield (frame_arr * alpha).astype(np.uint8)
-                    # 靜止
-                    for _ in range(frames_per_slide - trans_frames * 2):
-                        yield frame_arr
-                    # 淡出
-                    for i in range(trans_frames):
-                        alpha = 1.0 - i / trans_frames
-                        yield (frame_arr * alpha).astype(np.uint8)
-
-            _write_frames_to_mp4(_gen_frames(), out, slide_fps, w, h)
+            _write_frames(_frames(), out, sl_fps, w, h)
             return f"✅ 投影片影片已生成：{out}"
 
-        # ── 文字動畫影片 ─────────────────────────────────────────────
+        # ── 文字動畫 ──────────────────────────────────────────────────
         elif mode == "text_video":
-            text       = kwargs.get("text", "Hello")
-            duration   = kwargs.get("duration", 5)
-            bg_color   = tuple(kwargs.get("bg_color",   [30,  30,  40]))
-            font_color = tuple(kwargs.get("font_color", [255, 255, 255]))
-            font_size  = kwargs.get("font_size", 60)
-            font       = _get_font(font_size)
-            total      = int(fps * duration)
+            text     = kwargs.get("text", "Hello")
+            dur      = kwargs.get("duration", 5)
+            bg_col   = tuple(kwargs.get("bg_color",   [30, 30, 40]))
+            fg_col   = tuple(kwargs.get("font_color", [255, 255, 255]))
+            fsize    = kwargs.get("font_size", 60)
+            font     = _get_font(fsize)
+            total    = max(1, int(fps * dur))
 
-            def _gen_frames():
+            def _frames():
                 for i in range(total):
-                    progress = i / total
-                    # 前 20% 淡入，後 20% 淡出
-                    if progress < 0.2:
-                        alpha = progress / 0.2
-                    elif progress > 0.8:
-                        alpha = (1.0 - progress) / 0.2
-                    else:
-                        alpha = 1.0
-
-                    img  = Image.new("RGB", (w, h), bg_color)
+                    p = i / total
+                    a = p / 0.2 if p < 0.2 else (1.0 - p) / 0.2 if p > 0.8 else 1.0
+                    img  = Image.new("RGB", (w, h), bg_col)
                     draw = ImageDraw.Draw(img)
-                    c    = tuple(int(x * alpha) for x in font_color)
+                    c    = tuple(int(x * a) for x in fg_col)
                     lines = text.split("\n")
-                    lh    = font_size + 10
-                    total_h = len(lines) * lh
-                    y0 = (h - total_h) // 2
-                    for j, line in enumerate(lines):
-                        bb = draw.textbbox((0, 0), line, font=font)
-                        tw = bb[2] - bb[0]
-                        draw.text(((w - tw) // 2, y0 + j * lh), line, font=font, fill=c)
+                    lh    = fsize + 10
+                    y0    = (h - len(lines) * lh) // 2
+                    for j, ln in enumerate(lines):
+                        bb = draw.textbbox((0, 0), ln, font=font)
+                        draw.text(((w - (bb[2] - bb[0])) // 2, y0 + j * lh), ln, font=font, fill=c)
                     yield np.array(img)
 
-            _write_frames_to_mp4(_gen_frames(), out, fps, w, h)
+            _write_frames(_frames(), out, fps, w, h)
             return f"✅ 文字動畫影片已生成：{out}"
 
         # ── TTS 語音影片 ─────────────────────────────────────────────
         elif mode == "tts_video":
-            import edge_tts
-            text       = kwargs.get("text", "")
-            image_path = kwargs.get("image", "")
-            voice      = kwargs.get("voice", "zh-CN-YunjianNeural")
-            subtitle   = kwargs.get("subtitle", True)
-
+            text      = kwargs.get("text", "")
+            img_path  = kwargs.get("image", "")
+            voice     = kwargs.get("voice", "zh-CN-YunjianNeural")
+            subtitle  = kwargs.get("subtitle", True)
             if not text:
                 return "❌ 請提供 text 參數"
 
-            tmp   = Path(tempfile.mkdtemp())
-            audio = str(tmp / "tts.mp3")
-            vidtmp = str(tmp / "silent.mp4")
+            tmp     = Path(tempfile.mkdtemp())
+            audio   = str(tmp / "tts.mp3")
+            vidtmp  = str(tmp / "silent.mp4")
 
-            # 生成語音
-            async def _tts():
-                comm = edge_tts.Communicate(clean_for_tts(text), voice)
-                await comm.save(audio)
-            asyncio.run(_tts())
+            _tts_sync(clean_for_tts(text), voice, audio)
+            dur   = _get_audio_dur(audio)
+            total = max(1, int(fps * dur))
 
-            # 取得音訊時長（用 ffmpeg stderr 解析，不依賴 ffprobe）
-            probe = subprocess.run(
-                [ffmpeg_exe, "-i", audio],
-                capture_output=True, text=True, errors="replace"
-            )
-            import re as _re
-            m = _re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", probe.stderr)
-            if m:
-                dur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+            if img_path and Path(img_path).exists():
+                bg = np.array(Image.open(img_path).convert("RGB").resize((w, h), Image.LANCZOS))
             else:
-                dur = max(3.0, len(text) * 0.18)  # fallback：中文約每字 0.18 秒
-
-            # 準備背景圖
-            if image_path and Path(image_path).exists():
-                bg = np.array(Image.open(image_path).convert("RGB").resize((w, h), Image.LANCZOS))
-            else:
-                # 深色漸層背景
                 bg = np.zeros((h, w, 3), dtype=np.uint8)
                 for row in range(h):
                     v = int(20 + 30 * row / h)
                     bg[row, :] = [v, v, v + 20]
 
-            font   = _get_font(40)
-            total  = int(fps * dur)
+            font  = _get_font(40)
+            cpl   = 20
+            subs  = [text[i:i+cpl] for i in range(0, len(text), cpl)]
 
-            # 字幕文字分行
-            words  = text
-            chars_per_line = 20
-            sub_lines = [words[i:i+chars_per_line] for i in range(0, len(words), chars_per_line)]
-
-            def _gen_frames():
+            def _frames():
                 for i in range(total):
                     frame = bg.copy()
-                    if subtitle:
-                        # 顯示字幕（底部 1/4 區域）
-                        prog   = i / total
-                        line_i = min(int(prog * len(sub_lines)), len(sub_lines) - 1)
-                        line   = sub_lines[line_i] if sub_lines else ""
-                        if line:
-                            img  = Image.fromarray(frame)
-                            draw = ImageDraw.Draw(img)
-                            bb   = draw.textbbox((0, 0), line, font=font)
-                            tw   = bb[2] - bb[0]
-                            tx   = (w - tw) // 2
-                            ty   = int(h * 0.82)
-                            # 半透明黑底
-                            draw.rectangle([tx - 10, ty - 5, tx + tw + 10, ty + 45], fill=(0, 0, 0, 180))
-                            draw.text((tx, ty), line, font=font, fill=(255, 255, 255))
-                            frame = np.array(img)
+                    if subtitle and subs:
+                        ln  = subs[min(int(i / total * len(subs)), len(subs) - 1)]
+                        img = Image.fromarray(frame)
+                        d   = ImageDraw.Draw(img)
+                        bb  = d.textbbox((0, 0), ln, font=font)
+                        tw  = bb[2] - bb[0]
+                        tx  = (w - tw) // 2
+                        ty  = int(h * 0.82)
+                        d.rectangle([tx - 10, ty - 5, tx + tw + 10, ty + 45], fill=(0, 0, 0))
+                        d.text((tx, ty), ln, font=font, fill=(255, 255, 255))
+                        frame = np.array(img)
                     yield frame
 
-            _write_frames_to_mp4(_gen_frames(), vidtmp, fps, w, h)
+            _write_frames(_frames(), vidtmp, fps, w, h)
 
-            # 合併音訊
-            subprocess.run([
-                ffmpeg_exe, "-y",
-                "-i", vidtmp, "-i", audio,
-                "-c:v", "copy", "-c:a", "aac", "-shortest",
-                out
+            r = subprocess.run([
+                ffmpeg_exe, "-y", "-i", vidtmp, "-i", audio,
+                "-c:v", "copy", "-c:a", "aac", "-shortest", out
             ], capture_output=True)
+            if not Path(out).exists():
+                raise RuntimeError(f"音訊合併失敗：{r.stderr.decode(errors='replace')[-200:]}")
 
             return f"✅ TTS 語音影片已生成：{out}"
 
         # ── 螢幕錄影 ─────────────────────────────────────────────────
         elif mode == "screen_record":
-            import mss
-            import time
-            duration = kwargs.get("duration", 10)
+            import mss, time as _t
+            dur      = kwargs.get("duration", 10)
             rec_fps  = kwargs.get("fps", 10)
             interval = 1.0 / rec_fps
-            total    = int(rec_fps * duration)
+            total    = max(1, int(rec_fps * dur))
 
             with mss.mss() as sct:
-                mon = sct.monitors[1]
+                mon    = sct.monitors[1]
                 sw, sh = mon["width"], mon["height"]
 
-                def _gen_frames():
+                def _frames():
                     for _ in range(total):
-                        t0  = time.time()
-                        img = sct.grab(mon)
-                        arr = np.array(img)[:, :, :3][:, :, ::-1]  # BGRA→RGB
+                        t0  = _t.time()
+                        arr = np.array(sct.grab(mon))[:, :, :3][:, :, ::-1]
                         yield arr
-                        elapsed = time.time() - t0
+                        elapsed = _t.time() - t0
                         if elapsed < interval:
-                            time.sleep(interval - elapsed)
+                            _t.sleep(interval - elapsed)
 
-                _write_frames_to_mp4(_gen_frames(), out, rec_fps, sw, sh)
+                _write_frames(_frames(), out, rec_fps, sw, sh)
 
-            return f"✅ 螢幕錄影完成：{out}（{duration} 秒）"
+            return f"✅ 螢幕錄影完成：{out}（{dur} 秒）"
 
         else:
-            return f"❌ 未知 mode：{mode}，可用：slideshow / text_video / tts_video / screen_record"
+            return f"❌ 未知 mode：{mode}"
 
     except Exception as e:
-        import traceback
         return f"❌ 影片生成失敗：{e}\n{traceback.format_exc()}"
 
 
