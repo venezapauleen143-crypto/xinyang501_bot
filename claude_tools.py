@@ -121,6 +121,28 @@ tools:
   video_screenshot <路徑> [秒數] [輸出]  影片截取畫面
   video_trim <路徑> <起始秒> <結束秒> [輸出]  影片剪輯
   monitor_list                  列出所有螢幕資訊
+  email_read <host> <user> <pass> [資料夾] [數量]  讀取 IMAP 郵件
+  gcal_list [天數]              列出 Google Calendar 行程
+  gcal_add <標題> <開始> <結束> [說明]  新增行程（時間格式 2026-04-13T10:00:00）
+  global_hotkey <熱鍵> <指令> [秒數]  監聽全域快捷鍵
+  git_op <動作> [repo] [參數]   Git 操作（status/log/pull/add/commit/push/diff）
+  hw_monitor                    硬體監控（GPU/電池/溫度）
+  report_gen <標題> <資料JSON> [輸出路徑]  生成 HTML 報告
+  dropbox_upload <local> <remote> [token]  上傳到 Dropbox
+  dropbox_download <remote> <local> [token]  從 Dropbox 下載
+  docker_op <動作> [容器名]     Docker 操作（list/start/stop/logs/images）
+  pdf_to_images <路徑> [輸出資料夾] [dpi]  PDF 轉圖片
+  barcode_scan [圖片路徑]       掃描條碼或 QR Code
+  nlp_summarize <文字>          AI 文字摘要
+  nlp_sentiment <文字>          AI 情緒分析
+  vpn_control <list|connect|disconnect> [名稱] [帳號] [密碼]  VPN 控制
+  sys_restore <create|list> [說明]  Windows 系統還原點
+  disk_analyze [路徑] [數量]    磁碟空間分析
+  face_detect [圖片路徑] [輸出路徑]  人臉偵測
+  video_to_gif <路徑> [起始秒] [持續秒] [輸出] [fps]  影片轉 GIF
+  excel_chart <路徑> <工作表> [類型] [標題]  Excel 生成圖表
+  speedtest                     網路速度測試
+  screenshot_compare [圖1] [圖2] [輸出]  截圖比對差異
 """
 
 import sys
@@ -2005,6 +2027,516 @@ def monitor_list():
         print(f"❌ 取得螢幕資訊失敗：{e}")
 
 
+# ── Email 讀取 (IMAP) ────────────────────────────────
+
+def email_read(host: str, user: str, password: str, folder: str = "INBOX", count: int = 5):
+    try:
+        import imapclient, email as _email
+        from email.header import decode_header
+        client = imapclient.IMAPClient(host, ssl=True)
+        client.login(user, password)
+        client.select_folder(folder)
+        msgs = client.search(["ALL"])
+        recent = msgs[-count:] if len(msgs) >= count else msgs
+        results = []
+        for uid in reversed(recent):
+            raw = client.fetch([uid], ["RFC822"])[uid][b"RFC822"]
+            msg = _email.message_from_bytes(raw)
+            subj_raw, enc = decode_header(msg["Subject"])[0]
+            subject = subj_raw.decode(enc or "utf-8") if isinstance(subj_raw, bytes) else subj_raw
+            sender = msg["From"]
+            date = msg["Date"]
+            body = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload(decode=True).decode(errors="replace")[:200]
+                        break
+            else:
+                body = msg.get_payload(decode=True).decode(errors="replace")[:200]
+            results.append(f"[{date}]\n寄件人：{sender}\n主旨：{subject}\n{body}\n{'─'*30}")
+        client.logout()
+        print("\n".join(results))
+    except Exception as e:
+        print(f"❌ 讀取郵件失敗：{e}")
+
+
+# ── Google Calendar ───────────────────────────────────
+
+def gcal_list(days: int = 7):
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from datetime import timezone, timedelta
+        creds_path = Path("C:/Users/blue_/claude-telegram-bot/gcal_token.json")
+        if not creds_path.exists():
+            print("❌ 未找到 Google Calendar 憑證（gcal_token.json）")
+            return
+        creds = Credentials.from_authorized_user_file(str(creds_path))
+        service = build("calendar", "v3", credentials=creds)
+        now = datetime.now(timezone.utc)
+        end = now + timedelta(days=days)
+        events = service.events().list(
+            calendarId="primary",
+            timeMin=now.isoformat(),
+            timeMax=end.isoformat(),
+            maxResults=20, singleEvents=True, orderBy="startTime"
+        ).execute().get("items", [])
+        if not events:
+            print(f"未來 {days} 天沒有行程")
+            return
+        for e in events:
+            start = e["start"].get("dateTime", e["start"].get("date"))
+            print(f"📅 {start}  {e.get('summary','（無標題）')}")
+    except Exception as e:
+        print(f"❌ 讀取行事曆失敗：{e}")
+
+def gcal_add(title: str, start: str, end: str, description: str = ""):
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        creds_path = Path("C:/Users/blue_/claude-telegram-bot/gcal_token.json")
+        if not creds_path.exists():
+            print("❌ 未找到 Google Calendar 憑證（gcal_token.json）")
+            return
+        creds = Credentials.from_authorized_user_file(str(creds_path))
+        service = build("calendar", "v3", credentials=creds)
+        event = {
+            "summary": title,
+            "description": description,
+            "start": {"dateTime": start, "timeZone": "Asia/Taipei"},
+            "end": {"dateTime": end, "timeZone": "Asia/Taipei"},
+        }
+        created = service.events().insert(calendarId="primary", body=event).execute()
+        print(f"✅ 行程已新增：{created.get('htmlLink')}")
+    except Exception as e:
+        print(f"❌ 新增行程失敗：{e}")
+
+
+# ── 全域快捷鍵 ───────────────────────────────────────
+
+def global_hotkey_listen(hotkey: str, command: str, duration: float = 60.0):
+    try:
+        import keyboard as kb, time as t
+        triggered = []
+        def on_trigger():
+            triggered.append(datetime.now().strftime("%H:%M:%S"))
+            subprocess.run(command, shell=True)
+        kb.add_hotkey(hotkey, on_trigger)
+        print(f"🎹 監聽快捷鍵 [{hotkey}]，持續 {duration} 秒...")
+        t.sleep(duration)
+        kb.remove_all_hotkeys()
+        print(f"✅ 共觸發 {len(triggered)} 次：{triggered}")
+    except Exception as e:
+        print(f"❌ 快捷鍵監聽失敗：{e}")
+
+
+# ── Git 操作 ─────────────────────────────────────────
+
+def git_op(action: str, repo: str = ".", message: str = "", remote: str = "origin", branch: str = "master"):
+    try:
+        import git as _git
+        repo_obj = _git.Repo(repo)
+        if action == "status":
+            print(repo_obj.git.status())
+        elif action == "log":
+            for c in list(repo_obj.iter_commits())[:10]:
+                print(f"{c.hexsha[:7]} [{c.authored_datetime.strftime('%Y-%m-%d %H:%M')}] {c.message.strip()[:60]}")
+        elif action == "pull":
+            result = repo_obj.remotes[remote].pull()
+            print(f"✅ Pull 完成：{result[0].commit.hexsha[:7]}")
+        elif action == "add":
+            repo_obj.git.add(A=True)
+            print("✅ 已 git add -A")
+        elif action == "commit":
+            repo_obj.index.commit(message or "auto commit")
+            print(f"✅ 已 commit：{message}")
+        elif action == "push":
+            repo_obj.remotes[remote].push(branch)
+            print(f"✅ 已 push 到 {remote}/{branch}")
+        elif action == "diff":
+            print(repo_obj.git.diff()[:3000] or "（無變更）")
+    except Exception as e:
+        print(f"❌ Git 操作失敗：{e}")
+
+
+# ── 硬體監控進階 ─────────────────────────────────────
+
+def hw_monitor():
+    try:
+        import psutil
+        cpu_temp = ""
+        try:
+            temps = psutil.sensors_temperatures()
+            if temps:
+                for name, entries in temps.items():
+                    for e in entries[:2]:
+                        cpu_temp += f"{name}: {e.current}°C  "
+        except Exception:
+            cpu_temp = "（不支援溫度感測）"
+
+        battery = psutil.sensors_battery()
+        bat_str = f"{battery.percent:.0f}% {'充電中' if battery.power_plugged else '使用電池'}" if battery else "無電池"
+
+        gpu_str = ""
+        try:
+            import GPUtil
+            gpus = GPUtil.getGPUs()
+            for g in gpus:
+                gpu_str += f"\nGPU [{g.name}] 使用率：{g.load*100:.0f}% | 記憶體：{g.memoryUsed:.0f}/{g.memoryTotal:.0f}MB | 溫度：{g.temperature}°C"
+        except Exception:
+            gpu_str = "\nGPU：（未偵測到 NVIDIA GPU）"
+
+        print(
+            f"🌡 溫度：{cpu_temp}\n"
+            f"🔋 電池：{bat_str}"
+            f"{gpu_str}"
+        )
+    except Exception as e:
+        print(f"❌ 硬體監控失敗：{e}")
+
+
+# ── 自動報告生成 ─────────────────────────────────────
+
+def report_gen(title: str, data_json: str, output: str = ""):
+    try:
+        import jinja2, json
+        data = json.loads(data_json)
+        out_path = output or str(Path.home() / "Desktop" / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
+        template_str = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>body{font-family:sans-serif;margin:40px}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#4472C4;color:white}
+tr:nth-child(even){background:#f2f2f2}h1{color:#4472C4}</style></head>
+<body><h1>{{ title }}</h1><p>生成時間：{{ time }}</p>
+{% for section, rows in data.items() %}
+<h2>{{ section }}</h2>
+{% if rows is iterable and rows is not string %}
+{% if rows[0] is mapping %}
+<table><tr>{% for k in rows[0].keys() %}<th>{{ k }}</th>{% endfor %}</tr>
+{% for row in rows %}<tr>{% for v in row.values() %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}
+</table>
+{% else %}<ul>{% for item in rows %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+{% else %}<p>{{ rows }}</p>{% endif %}
+{% endfor %}</body></html>"""
+        tmpl = jinja2.Template(template_str)
+        html = tmpl.render(title=title, data=data, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        Path(out_path).write_text(html, encoding="utf-8")
+        print(f"✅ 報告已生成：{out_path}")
+    except Exception as e:
+        print(f"❌ 報告生成失敗：{e}")
+
+
+# ── Dropbox ──────────────────────────────────────────
+
+def dropbox_upload(local: str, remote: str, token: str = ""):
+    try:
+        import dropbox as dbx
+        tok = token or os.getenv("DROPBOX_TOKEN", "")
+        if not tok:
+            print("❌ 請設定 DROPBOX_TOKEN 環境變數")
+            return
+        d = dbx.Dropbox(tok)
+        with open(local, "rb") as f:
+            d.files_upload(f.read(), remote, mode=dbx.files.WriteMode.overwrite)
+        print(f"✅ 已上傳到 Dropbox：{remote}")
+    except Exception as e:
+        print(f"❌ Dropbox 上傳失敗：{e}")
+
+def dropbox_download(remote: str, local: str, token: str = ""):
+    try:
+        import dropbox as dbx
+        tok = token or os.getenv("DROPBOX_TOKEN", "")
+        if not tok:
+            print("❌ 請設定 DROPBOX_TOKEN 環境變數")
+            return
+        d = dbx.Dropbox(tok)
+        _, res = d.files_download(remote)
+        Path(local).write_bytes(res.content)
+        print(f"✅ 已從 Dropbox 下載：{local}")
+    except Exception as e:
+        print(f"❌ Dropbox 下載失敗：{e}")
+
+
+# ── Docker ───────────────────────────────────────────
+
+def docker_op(action: str, name: str = ""):
+    try:
+        import docker as _docker
+        client = _docker.from_env()
+        if action == "list":
+            for c in client.containers.list(all=True):
+                print(f"[{c.status}] {c.name}  {c.image.tags}")
+        elif action == "start":
+            client.containers.get(name).start()
+            print(f"✅ 容器 [{name}] 已啟動")
+        elif action == "stop":
+            client.containers.get(name).stop()
+            print(f"✅ 容器 [{name}] 已停止")
+        elif action == "logs":
+            logs = client.containers.get(name).logs(tail=50).decode(errors="replace")
+            print(logs)
+        elif action == "images":
+            for img in client.images.list():
+                print(f"{img.tags}  {img.short_id}")
+    except Exception as e:
+        print(f"❌ Docker 操作失敗：{e}")
+
+
+# ── PDF 轉圖片 ───────────────────────────────────────
+
+def pdf_to_images(path: str, output_dir: str = "", dpi: int = 150):
+    try:
+        import fitz
+        doc = fitz.open(path)
+        out = Path(output_dir) if output_dir else Path(path).parent / (Path(path).stem + "_imgs")
+        out.mkdir(parents=True, exist_ok=True)
+        for i, page in enumerate(doc):
+            mat = fitz.Matrix(dpi/72, dpi/72)
+            pix = page.get_pixmap(matrix=mat)
+            img_path = str(out / f"page_{i+1}.png")
+            pix.save(img_path)
+        print(f"✅ 已轉換 {len(doc)} 頁到：{out}")
+    except Exception as e:
+        print(f"❌ PDF 轉圖片失敗：{e}")
+
+
+# ── 條碼掃描 ─────────────────────────────────────────
+
+def barcode_scan(image_path: str = ""):
+    try:
+        from pyzbar.pyzbar import decode
+        from PIL import Image
+        img = Image.open(image_path) if image_path else pyautogui.screenshot()
+        results = decode(img)
+        if not results:
+            print("❌ 未偵測到條碼或 QR Code")
+            return
+        for r in results:
+            print(f"類型：{r.type}  內容：{r.data.decode('utf-8', errors='replace')}")
+    except Exception as e:
+        print(f"❌ 條碼掃描失敗：{e}")
+
+
+# ── NLP 文字分析 ─────────────────────────────────────
+
+def nlp_summarize(text: str):
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            messages=[{"role": "user", "content": f"請用繁體中文摘要以下文字（100字以內）：\n\n{text}"}]
+        )
+        print(msg.content[0].text)
+    except Exception as e:
+        print(f"❌ 摘要失敗：{e}")
+
+def nlp_sentiment(text: str):
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=128,
+            messages=[{"role": "user", "content": f"分析以下文字的情緒，只回覆：正面/負面/中性 + 一句說明：\n\n{text}"}]
+        )
+        print(msg.content[0].text)
+    except Exception as e:
+        print(f"❌ 情緒分析失敗：{e}")
+
+
+# ── VPN 控制 ─────────────────────────────────────────
+
+def vpn_control(action: str, name: str = "", user: str = "", password: str = ""):
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Get-VpnConnection | Select-Object Name,ConnectionStatus | Format-Table"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout or "（未設定 VPN）")
+        elif action == "connect":
+            r = subprocess.run(["rasdial", name, user, password],
+                capture_output=True, text=True, encoding="cp950", errors="replace")
+            print(r.stdout.strip())
+        elif action == "disconnect":
+            r = subprocess.run(["rasdial", name, "/disconnect"],
+                capture_output=True, text=True, encoding="cp950", errors="replace")
+            print(r.stdout.strip())
+    except Exception as e:
+        print(f"❌ VPN 操作失敗：{e}")
+
+
+# ── 系統還原點 ───────────────────────────────────────
+
+def sys_restore(action: str, description: str = ""):
+    try:
+        if action == "create":
+            ps = f"Checkpoint-Computer -Description '{description or 'Claude Auto Restore'}' -RestorePointType MODIFY_SETTINGS"
+            r = subprocess.run(["powershell.exe", "-Command", ps],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout or "✅ 還原點已建立")
+        elif action == "list":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Get-ComputerRestorePoint | Select-Object SequenceNumber,Description,CreationTime | Format-Table"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout or "（無還原點）")
+    except Exception as e:
+        print(f"❌ 系統還原點操作失敗：{e}")
+
+
+# ── 磁碟分析 ─────────────────────────────────────────
+
+def disk_analyze(path: str = "C:/", top: int = 10):
+    try:
+        import psutil
+        usage = psutil.disk_usage(path)
+        print(f"磁碟：{path}\n總容量：{usage.total/1024**3:.1f} GB\n已使用：{usage.used/1024**3:.1f} GB ({usage.percent}%)\n可用：{usage.free/1024**3:.1f} GB\n")
+        sizes = []
+        try:
+            for item in Path(path).iterdir():
+                try:
+                    if item.is_dir():
+                        size = sum(f.stat().st_size for f in item.rglob("*") if f.is_file())
+                    else:
+                        size = item.stat().st_size
+                    sizes.append((size, str(item)))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        sizes.sort(reverse=True)
+        print(f"佔用最多的前 {top} 個項目：")
+        for size, name in sizes[:top]:
+            print(f"  {size/1024**3:.2f} GB  {name}")
+    except Exception as e:
+        print(f"❌ 磁碟分析失敗：{e}")
+
+
+# ── 人臉偵測 ─────────────────────────────────────────
+
+def face_detect(image_path: str = "", output: str = ""):
+    try:
+        import cv2, numpy as np
+        if not image_path:
+            img_pil = pyautogui.screenshot()
+            img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        else:
+            img = cv2.imread(image_path)
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = cascade.detectMultiScale(gray, 1.1, 4)
+        for (x, y, w, h) in faces:
+            cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        out_path = output or str(Path.home() / "Desktop" / f"faces_{datetime.now().strftime('%H%M%S')}.jpg")
+        cv2.imwrite(out_path, img)
+        print(f"✅ 偵測到 {len(faces)} 張人臉，已存：{out_path}")
+    except Exception as e:
+        print(f"❌ 人臉偵測失敗：{e}")
+
+
+# ── 影片轉 GIF ───────────────────────────────────────
+
+def video_to_gif(path: str, start: float = 0, duration: float = 5.0, output: str = "", fps: int = 10):
+    try:
+        import imageio
+        out = output or path.replace(".mp4", ".gif")
+        reader = imageio.get_reader(path)
+        meta = reader.get_meta_data()
+        video_fps = meta.get("fps", 30)
+        start_frame = int(start * video_fps)
+        end_frame = int((start + duration) * video_fps)
+        frames = []
+        for i, frame in enumerate(reader):
+            if i < start_frame:
+                continue
+            if i >= end_frame:
+                break
+            frames.append(frame)
+        imageio.mimsave(out, frames, fps=fps)
+        print(f"✅ GIF 已生成：{out}（{len(frames)} 幀）")
+    except Exception as e:
+        print(f"❌ 影片轉 GIF 失敗：{e}")
+
+
+# ── Excel 圖表 ───────────────────────────────────────
+
+def excel_chart(path: str, sheet: str, chart_type: str = "bar", title: str = ""):
+    try:
+        import openpyxl
+        from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+        wb = openpyxl.load_workbook(path)
+        ws = wb[sheet] if sheet in wb.sheetnames else wb.active
+        max_row = ws.max_row
+        max_col = ws.max_column
+        chart_map = {"bar": BarChart, "line": LineChart, "pie": PieChart}
+        chart = chart_map.get(chart_type, BarChart)()
+        chart.title = title or sheet
+        chart.style = 10
+        data = Reference(ws, min_col=2, min_row=1, max_row=max_row, max_col=max_col)
+        cats = Reference(ws, min_col=1, min_row=2, max_row=max_row)
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(cats)
+        ws.add_chart(chart, "A" + str(max_row + 2))
+        wb.save(path)
+        print(f"✅ 圖表已加入：{path}")
+    except Exception as e:
+        print(f"❌ Excel 圖表失敗：{e}")
+
+
+# ── 網路速度測試 ─────────────────────────────────────
+
+def speedtest_run():
+    try:
+        import speedtest as st
+        print("⏳ 測速中（約需 30 秒）...")
+        s = st.Speedtest()
+        s.get_best_server()
+        download = s.download() / 1_000_000
+        upload = s.upload() / 1_000_000
+        ping = s.results.ping
+        server = s.results.server.get("name","")
+        print(f"📶 網路速度測試結果\n下載：{download:.1f} Mbps\n上傳：{upload:.1f} Mbps\nPing：{ping:.0f} ms\n伺服器：{server}")
+    except Exception as e:
+        print(f"❌ 速度測試失敗：{e}")
+
+
+# ── 螢幕截圖比對 ─────────────────────────────────────
+
+def screenshot_compare(img1_path: str = "", img2_path: str = "", output: str = ""):
+    try:
+        import cv2, numpy as np
+        from PIL import Image
+        if not img1_path:
+            img1 = np.array(pyautogui.screenshot())
+        else:
+            img1 = cv2.imread(img1_path)
+        if not img2_path:
+            import time as t; t.sleep(2)
+            img2 = np.array(pyautogui.screenshot())
+        else:
+            img2 = cv2.imread(img2_path)
+        img1_bgr = cv2.cvtColor(img1, cv2.COLOR_RGB2BGR) if img1_path == "" else img1
+        img2_bgr = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR) if img2_path == "" else img2
+        h, w = min(img1_bgr.shape[0], img2_bgr.shape[0]), min(img1_bgr.shape[1], img2_bgr.shape[1])
+        img1_bgr, img2_bgr = img1_bgr[:h,:w], img2_bgr[:h,:w]
+        diff = cv2.absdiff(img1_bgr, img2_bgr)
+        gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+        _, thresh = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        result = img2_bgr.copy()
+        cv2.drawContours(result, contours, -1, (0, 0, 255), 2)
+        out = output or str(Path.home() / "Desktop" / f"diff_{datetime.now().strftime('%H%M%S')}.png")
+        cv2.imwrite(out, result)
+        changed = cv2.countNonZero(thresh)
+        total = h * w
+        pct = changed / total * 100
+        print(f"✅ 差異：{pct:.2f}%，已標記差異區域：{out}")
+    except Exception as e:
+        print(f"❌ 截圖比對失敗：{e}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -2134,6 +2666,28 @@ if __name__ == "__main__":
         "video_screenshot":lambda: video_screenshot(args[0], float(args[1]) if len(args)>1 else 0, args[2] if len(args)>2 else ""),
         "video_trim":      lambda: video_trim(args[0], float(args[1]), float(args[2]), args[3] if len(args)>3 else ""),
         "monitor_list":    lambda: monitor_list(),
+        "email_read":      lambda: email_read(args[0], args[1], args[2], args[3] if len(args)>3 else "INBOX", int(args[4]) if len(args)>4 else 5),
+        "gcal_list":       lambda: gcal_list(int(args[0]) if args else 7),
+        "gcal_add":        lambda: gcal_add(args[0], args[1], args[2], args[3] if len(args)>3 else ""),
+        "global_hotkey":   lambda: global_hotkey_listen(args[0], args[1], float(args[2]) if len(args)>2 else 60.0),
+        "git_op":          lambda: git_op(args[0], args[1] if len(args)>1 else ".", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "origin", args[4] if len(args)>4 else "master"),
+        "hw_monitor":      lambda: hw_monitor(),
+        "report_gen":      lambda: report_gen(args[0], args[1], args[2] if len(args)>2 else ""),
+        "dropbox_upload":  lambda: dropbox_upload(args[0], args[1], args[2] if len(args)>2 else ""),
+        "dropbox_download":lambda: dropbox_download(args[0], args[1], args[2] if len(args)>2 else ""),
+        "docker_op":       lambda: docker_op(args[0], args[1] if len(args)>1 else ""),
+        "pdf_to_images":   lambda: pdf_to_images(args[0], args[1] if len(args)>1 else "", int(args[2]) if len(args)>2 else 150),
+        "barcode_scan":    lambda: barcode_scan(args[0] if args else ""),
+        "nlp_summarize":   lambda: nlp_summarize(" ".join(args)),
+        "nlp_sentiment":   lambda: nlp_sentiment(" ".join(args)),
+        "vpn_control":     lambda: vpn_control(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else ""),
+        "sys_restore":     lambda: sys_restore(args[0], " ".join(args[1:]) if len(args)>1 else ""),
+        "disk_analyze":    lambda: disk_analyze(args[0] if args else "C:/", int(args[1]) if len(args)>1 else 10),
+        "face_detect":     lambda: face_detect(args[0] if args else "", args[1] if len(args)>1 else ""),
+        "video_to_gif":    lambda: video_to_gif(args[0], float(args[1]) if len(args)>1 else 0, float(args[2]) if len(args)>2 else 5.0, args[3] if len(args)>3 else "", int(args[4]) if len(args)>4 else 10),
+        "excel_chart":     lambda: excel_chart(args[0], args[1], args[2] if len(args)>2 else "bar", args[3] if len(args)>3 else ""),
+        "speedtest":       lambda: speedtest_run(),
+        "screenshot_compare": lambda: screenshot_compare(args[0] if args else "", args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
     }
 
     if tool not in tools:

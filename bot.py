@@ -508,6 +508,241 @@ TOOLS = [
         }
     },
     {
+        "name": "email_control",
+        "description": "讀取 IMAP 郵件收件匣。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "description": "IMAP 伺服器，如 imap.gmail.com"},
+                "user": {"type": "string"},
+                "password": {"type": "string"},
+                "folder": {"type": "string", "description": "資料夾名稱，預設 INBOX"},
+                "count": {"type": "integer", "description": "讀取封數，預設 5"}
+            },
+            "required": ["host", "user", "password"]
+        }
+    },
+    {
+        "name": "calendar",
+        "description": "查詢或新增 Google Calendar 行事曆事件。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","add"]},
+                "days": {"type": "integer", "description": "往後幾天（list 使用），預設 7"},
+                "title": {"type": "string", "description": "行程標題（add 使用）"},
+                "start": {"type": "string", "description": "開始時間，格式 2026-04-13T10:00:00（add 使用）"},
+                "end": {"type": "string", "description": "結束時間（add 使用）"},
+                "description": {"type": "string", "description": "說明（add 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "global_hotkey",
+        "description": "監聽全域快捷鍵，觸發時執行指定指令。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "hotkey": {"type": "string", "description": "快捷鍵組合，如 ctrl+shift+a"},
+                "command": {"type": "string", "description": "觸發時執行的 shell 指令"},
+                "duration": {"type": "number", "description": "監聽秒數，預設 60"}
+            },
+            "required": ["hotkey", "command"]
+        }
+    },
+    {
+        "name": "git",
+        "description": "執行 Git 操作：狀態查看、提交、推送、拉取等。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["status","log","pull","add","commit","push","diff"]},
+                "repo": {"type": "string", "description": "repo 路徑，預設當前目錄"},
+                "message": {"type": "string", "description": "commit 訊息（commit 使用）"},
+                "branch": {"type": "string", "description": "分支名稱，預設 master"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "hardware",
+        "description": "查看進階硬體資訊：GPU 使用率/溫度、電池狀態、CPU 溫度。",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "report",
+        "description": "根據提供的資料生成 HTML 格式報告並存檔。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "data": {"type": "string", "description": "JSON 格式資料，如 {\"section\": [{\"col1\": val}]}"},
+                "output": {"type": "string", "description": "輸出路徑（選填）"}
+            },
+            "required": ["title", "data"]
+        }
+    },
+    {
+        "name": "dropbox",
+        "description": "上傳或下載 Dropbox 雲端檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["upload","download"]},
+                "local": {"type": "string", "description": "本地路徑"},
+                "remote": {"type": "string", "description": "Dropbox 路徑，如 /folder/file.txt"},
+                "token": {"type": "string", "description": "Dropbox access token（選填，可用環境變數）"}
+            },
+            "required": ["action", "local", "remote"]
+        }
+    },
+    {
+        "name": "docker",
+        "description": "管理 Docker 容器：列出、啟動、停止、查看日誌。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","start","stop","logs","images"]},
+                "name": {"type": "string", "description": "容器名稱（start/stop/logs 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "pdf_image",
+        "description": "將 PDF 每頁轉成圖片（PNG）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "output_dir": {"type": "string", "description": "輸出資料夾（選填）"},
+                "dpi": {"type": "integer", "description": "解析度，預設 150"}
+            },
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "barcode",
+        "description": "掃描圖片或截圖中的條碼、QR Code。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "image_path": {"type": "string", "description": "圖片路徑（選填，不填則截圖）"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "nlp",
+        "description": "AI 文字分析：摘要長文或分析情緒。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["summarize","sentiment"]},
+                "text": {"type": "string"}
+            },
+            "required": ["action", "text"]
+        }
+    },
+    {
+        "name": "vpn",
+        "description": "VPN 連線管理：列出、連線、斷線。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","connect","disconnect"]},
+                "name": {"type": "string", "description": "VPN 名稱"},
+                "user": {"type": "string"},
+                "password": {"type": "string"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "restore_point",
+        "description": "建立或列出 Windows 系統還原點。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["create","list"]},
+                "description": {"type": "string", "description": "還原點說明（create 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "disk_analyze",
+        "description": "分析磁碟空間使用，列出佔用最多的資料夾。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "分析路徑，預設 C:/"},
+                "top": {"type": "integer", "description": "顯示前幾名，預設 10"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "face_detect",
+        "description": "從截圖或圖片中偵測人臉，並標記位置。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "image_path": {"type": "string", "description": "圖片路徑（選填，不填則截圖）"},
+                "output": {"type": "string", "description": "輸出路徑（選填）"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "video_gif",
+        "description": "將影片片段轉成 GIF 動圖。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "start": {"type": "number", "description": "起始秒，預設 0"},
+                "duration": {"type": "number", "description": "持續秒數，預設 5"},
+                "output": {"type": "string", "description": "輸出路徑（選填）"},
+                "fps": {"type": "integer", "description": "GIF fps，預設 10"}
+            },
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "excel_chart",
+        "description": "在 Excel 工作表中生成圖表（長條/折線/圓餅）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "sheet": {"type": "string"},
+                "type": {"type": "string", "enum": ["bar","line","pie"], "description": "圖表類型，預設 bar"},
+                "title": {"type": "string"}
+            },
+            "required": ["path", "sheet"]
+        }
+    },
+    {
+        "name": "speedtest",
+        "description": "測試目前網路的上下載速度和 Ping 值。",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "screenshot_compare",
+        "description": "比對兩張截圖或圖片的差異，標記變化區域。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "img1": {"type": "string", "description": "第一張圖片路徑（選填，不填則即時截圖）"},
+                "img2": {"type": "string", "description": "第二張圖片路徑（選填，不填則 2 秒後再截圖）"},
+                "output": {"type": "string", "description": "輸出路徑（選填）"}
+            },
+            "required": []
+        }
+    },
+    {
         "name": "screen_record",
         "description": "螢幕錄影或攝影機拍照。",
         "input_schema": {
@@ -1515,6 +1750,326 @@ def execute_manage_schedule(action: str, name: str = "", time: str = "", script:
         return f"執行失敗：{str(e)}"
 
 
+def execute_email_read(host, user, password, folder="INBOX", count=5):
+    try:
+        import imapclient, email as _email
+        from email.header import decode_header
+        client = imapclient.IMAPClient(host, ssl=True)
+        client.login(user, password)
+        client.select_folder(folder)
+        msgs = client.search(["ALL"])
+        recent = msgs[-count:] if len(msgs) >= count else msgs
+        results = []
+        for uid in reversed(recent):
+            raw = client.fetch([uid], ["RFC822"])[uid][b"RFC822"]
+            msg = _email.message_from_bytes(raw)
+            subj_raw, enc = decode_header(msg["Subject"])[0]
+            subject = subj_raw.decode(enc or "utf-8") if isinstance(subj_raw, bytes) else subj_raw
+            body = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload(decode=True).decode(errors="replace")[:150]; break
+            else:
+                body = msg.get_payload(decode=True).decode(errors="replace")[:150]
+            results.append(f"寄件人：{msg['From']}\n主旨：{subject}\n日期：{msg['Date']}\n{body}\n{'─'*30}")
+        client.logout()
+        return "\n".join(results) if results else "（收件匣為空）"
+    except Exception as e:
+        return f"❌ 讀取郵件失敗：{e}"
+
+
+def execute_calendar(action, days=7, title="", start="", end="", description=""):
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from datetime import timezone, timedelta
+        creds_path = Path("C:/Users/blue_/claude-telegram-bot/gcal_token.json")
+        if not creds_path.exists():
+            return "❌ 未找到 Google Calendar 憑證（gcal_token.json）"
+        creds = Credentials.from_authorized_user_file(str(creds_path))
+        service = build("calendar", "v3", credentials=creds)
+        if action == "list":
+            now = datetime.now(timezone.utc)
+            events = service.events().list(
+                calendarId="primary", timeMin=now.isoformat(),
+                timeMax=(now + timedelta(days=days)).isoformat(),
+                maxResults=20, singleEvents=True, orderBy="startTime"
+            ).execute().get("items", [])
+            if not events:
+                return f"未來 {days} 天沒有行程"
+            return "\n".join(f"📅 {e['start'].get('dateTime',e['start'].get('date'))}  {e.get('summary','（無標題）')}" for e in events)
+        elif action == "add":
+            event = {"summary": title, "description": description,
+                     "start": {"dateTime": start, "timeZone": "Asia/Taipei"},
+                     "end": {"dateTime": end, "timeZone": "Asia/Taipei"}}
+            created = service.events().insert(calendarId="primary", body=event).execute()
+            return f"✅ 行程已新增：{created.get('summary')}"
+    except Exception as e:
+        return f"❌ 行事曆操作失敗：{e}"
+
+
+def execute_global_hotkey(hotkey, command, duration=60.0):
+    try:
+        import keyboard as kb, time as t
+        triggered = []
+        def on_trigger():
+            triggered.append(datetime.now().strftime("%H:%M:%S"))
+            subprocess.run(command, shell=True)
+        kb.add_hotkey(hotkey, on_trigger)
+        t.sleep(duration)
+        kb.remove_all_hotkeys()
+        return f"✅ 快捷鍵 [{hotkey}] 共觸發 {len(triggered)} 次"
+    except Exception as e:
+        return f"❌ 快捷鍵監聽失敗：{e}"
+
+
+def execute_git(action, repo=".", message="", branch="master"):
+    try:
+        import git as _git
+        r = _git.Repo(repo)
+        if action == "status": return r.git.status()
+        elif action == "log":
+            return "\n".join(f"{c.hexsha[:7]} [{c.authored_datetime.strftime('%m-%d %H:%M')}] {c.message.strip()[:60]}" for c in list(r.iter_commits())[:10])
+        elif action == "pull":
+            result = r.remotes.origin.pull(); return f"✅ Pull 完成"
+        elif action == "add": r.git.add(A=True); return "✅ git add -A 完成"
+        elif action == "commit": r.index.commit(message or "auto commit"); return f"✅ committed: {message}"
+        elif action == "push": r.remotes.origin.push(branch); return f"✅ pushed to origin/{branch}"
+        elif action == "diff": return r.git.diff()[:2000] or "（無變更）"
+        return "未知動作"
+    except Exception as e:
+        return f"❌ Git 失敗：{e}"
+
+
+def execute_hardware():
+    try:
+        import psutil
+        battery = psutil.sensors_battery()
+        bat = f"{battery.percent:.0f}% {'充電中' if battery.power_plugged else '使用電池'}" if battery else "無電池"
+        gpu_str = ""
+        try:
+            import GPUtil
+            gpus = GPUtil.getGPUs()
+            gpu_str = "\n".join(f"GPU {g.name}: 使用率 {g.load*100:.0f}% | 記憶體 {g.memoryUsed:.0f}/{g.memoryTotal:.0f}MB | 溫度 {g.temperature}°C" for g in gpus)
+        except Exception:
+            gpu_str = "GPU：未偵測到 NVIDIA GPU"
+        return f"🔋 電池：{bat}\n{gpu_str}"
+    except Exception as e:
+        return f"❌ 硬體監控失敗：{e}"
+
+
+def execute_report(title, data_json, output=""):
+    try:
+        import jinja2, json
+        data = json.loads(data_json)
+        out_path = output or str(Path.home() / "Desktop" / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
+        tmpl = jinja2.Template("""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>body{font-family:sans-serif;margin:40px}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:8px}th{background:#4472C4;color:white}
+tr:nth-child(even){background:#f2f2f2}h1{color:#4472C4}</style></head>
+<body><h1>{{ title }}</h1><p>生成時間：{{ time }}</p>
+{% for section, rows in data.items() %}<h2>{{ section }}</h2>
+{% if rows is iterable and rows is not string %}{% if rows[0] is mapping %}
+<table><tr>{% for k in rows[0].keys() %}<th>{{ k }}</th>{% endfor %}</tr>
+{% for row in rows %}<tr>{% for v in row.values() %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</table>
+{% else %}<ul>{% for i in rows %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
+{% else %}<p>{{ rows }}</p>{% endif %}{% endfor %}</body></html>""")
+        Path(out_path).write_text(tmpl.render(title=title, data=data, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")), encoding="utf-8")
+        return f"✅ 報告已生成：{out_path}"
+    except Exception as e:
+        return f"❌ 報告生成失敗：{e}"
+
+
+def execute_dropbox(action, local, remote, token=""):
+    try:
+        import dropbox as dbx
+        tok = token or os.getenv("DROPBOX_TOKEN", "")
+        if not tok: return "❌ 請設定 DROPBOX_TOKEN 環境變數"
+        d = dbx.Dropbox(tok)
+        if action == "upload":
+            with open(local, "rb") as f:
+                d.files_upload(f.read(), remote, mode=dbx.files.WriteMode.overwrite)
+            return f"✅ 已上傳到 Dropbox：{remote}"
+        elif action == "download":
+            _, res = d.files_download(remote)
+            Path(local).write_bytes(res.content)
+            return f"✅ 已從 Dropbox 下載：{local}"
+    except Exception as e:
+        return f"❌ Dropbox 失敗：{e}"
+
+
+def execute_docker(action, name=""):
+    try:
+        import docker as _docker
+        client = _docker.from_env()
+        if action == "list":
+            return "\n".join(f"[{c.status}] {c.name} {c.image.tags}" for c in client.containers.list(all=True)) or "（無容器）"
+        elif action == "start": client.containers.get(name).start(); return f"✅ {name} 已啟動"
+        elif action == "stop": client.containers.get(name).stop(); return f"✅ {name} 已停止"
+        elif action == "logs": return client.containers.get(name).logs(tail=50).decode(errors="replace")
+        elif action == "images": return "\n".join(f"{img.tags} {img.short_id}" for img in client.images.list())
+    except Exception as e:
+        return f"❌ Docker 失敗：{e}"
+
+
+def execute_pdf_to_image(path, output_dir="", dpi=150):
+    try:
+        import fitz
+        doc = fitz.open(path)
+        out = Path(output_dir) if output_dir else Path(path).parent / (Path(path).stem + "_imgs")
+        out.mkdir(parents=True, exist_ok=True)
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(matrix=fitz.Matrix(dpi/72, dpi/72))
+            pix.save(str(out / f"page_{i+1}.png"))
+        return f"✅ 已轉換 {len(doc)} 頁到：{out}"
+    except Exception as e:
+        return f"❌ PDF 轉圖片失敗：{e}"
+
+
+def execute_barcode(image_path=""):
+    try:
+        from pyzbar.pyzbar import decode
+        from PIL import Image
+        img = Image.open(image_path) if image_path else pyautogui.screenshot()
+        results = decode(img)
+        if not results: return "❌ 未偵測到條碼"
+        return "\n".join(f"類型：{r.type}  內容：{r.data.decode('utf-8', errors='replace')}" for r in results)
+    except Exception as e:
+        return f"❌ 條碼掃描失敗：{e}"
+
+
+def execute_nlp(action, text):
+    try:
+        import anthropic as _ant
+        c = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        prompt = f"請用繁體中文摘要以下文字（100字以內）：\n\n{text}" if action == "summarize" else f"分析以下文字的情緒，只回覆：正面/負面/中性 + 一句說明：\n\n{text}"
+        msg = c.messages.create(model="claude-haiku-4-5-20251001", max_tokens=256, messages=[{"role":"user","content":prompt}])
+        return msg.content[0].text
+    except Exception as e:
+        return f"❌ NLP 失敗：{e}"
+
+
+def execute_vpn(action, name="", user="", password=""):
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell.exe","-Command","Get-VpnConnection | Select-Object Name,ConnectionStatus | Format-Table"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or "（未設定 VPN）"
+        elif action == "connect":
+            r = subprocess.run(["rasdial", name, user, password], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout.strip()
+        elif action == "disconnect":
+            r = subprocess.run(["rasdial", name, "/disconnect"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout.strip()
+    except Exception as e:
+        return f"❌ VPN 失敗：{e}"
+
+
+def execute_restore_point(action, description=""):
+    try:
+        if action == "create":
+            ps = f"Checkpoint-Computer -Description '{description or 'Claude Auto Restore'}' -RestorePointType MODIFY_SETTINGS"
+            r = subprocess.run(["powershell.exe","-Command",ps], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or "✅ 還原點已建立"
+        elif action == "list":
+            r = subprocess.run(["powershell.exe","-Command","Get-ComputerRestorePoint | Select-Object SequenceNumber,Description,CreationTime | Format-Table"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or "（無還原點）"
+    except Exception as e:
+        return f"❌ 系統還原點失敗：{e}"
+
+
+def execute_disk_analyze(path="C:/", top=10):
+    try:
+        import psutil
+        usage = psutil.disk_usage(path)
+        result = f"磁碟：{path}\n總容量：{usage.total/1024**3:.1f} GB | 已使用：{usage.used/1024**3:.1f} GB ({usage.percent}%) | 可用：{usage.free/1024**3:.1f} GB\n\n"
+        sizes = []
+        for item in Path(path).iterdir():
+            try:
+                size = sum(f.stat().st_size for f in item.rglob("*") if f.is_file()) if item.is_dir() else item.stat().st_size
+                sizes.append((size, str(item)))
+            except Exception: pass
+        sizes.sort(reverse=True)
+        result += "\n".join(f"{s/1024**3:.2f} GB  {n}" for s, n in sizes[:top])
+        return result
+    except Exception as e:
+        return f"❌ 磁碟分析失敗：{e}"
+
+
+def execute_face_detect(image_path="", output=""):
+    try:
+        import cv2, numpy as np
+        img = cv2.cvtColor(np.array(pyautogui.screenshot()), cv2.COLOR_RGB2BGR) if not image_path else cv2.imread(image_path)
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        faces = cascade.detectMultiScale(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 1.1, 4)
+        for (x, y, w, h) in faces:
+            cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        out_path = output or str(Path.home() / "Desktop" / f"faces_{datetime.now().strftime('%H%M%S')}.jpg")
+        cv2.imwrite(out_path, img)
+        return f"✅ 偵測到 {len(faces)} 張人臉：{out_path}"
+    except Exception as e:
+        return f"❌ 人臉偵測失敗：{e}"
+
+
+def execute_video_gif(path, start=0, duration=5.0, output="", fps=10):
+    try:
+        import imageio
+        out = output or path.replace(".mp4", ".gif")
+        reader = imageio.get_reader(path)
+        video_fps = reader.get_meta_data().get("fps", 30)
+        frames = [f for i, f in enumerate(reader) if int(start*video_fps) <= i < int((start+duration)*video_fps)]
+        imageio.mimsave(out, frames, fps=fps)
+        return f"✅ GIF 已生成：{out}（{len(frames)} 幀）"
+    except Exception as e:
+        return f"❌ 影片轉 GIF 失敗：{e}"
+
+
+def execute_excel_chart(path, sheet, chart_type="bar", title=""):
+    try:
+        import openpyxl
+        from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+        wb = openpyxl.load_workbook(path)
+        ws = wb[sheet] if sheet in wb.sheetnames else wb.active
+        chart = {"bar": BarChart, "line": LineChart, "pie": PieChart}.get(chart_type, BarChart)()
+        chart.title = title or sheet; chart.style = 10
+        data = Reference(ws, min_col=2, min_row=1, max_row=ws.max_row, max_col=ws.max_column)
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(Reference(ws, min_col=1, min_row=2, max_row=ws.max_row))
+        ws.add_chart(chart, "A" + str(ws.max_row + 2))
+        wb.save(path); return f"✅ 圖表已加入：{path}"
+    except Exception as e:
+        return f"❌ Excel 圖表失敗：{e}"
+
+
+def execute_speedtest():
+    try:
+        import speedtest as st
+        s = st.Speedtest(); s.get_best_server()
+        dl = s.download()/1_000_000; ul = s.upload()/1_000_000
+        return f"📶 下載：{dl:.1f} Mbps | 上傳：{ul:.1f} Mbps | Ping：{s.results.ping:.0f} ms | 伺服器：{s.results.server.get('name','')}"
+    except Exception as e:
+        return f"❌ 速度測試失敗：{e}"
+
+
+def execute_screenshot_compare(img1_path="", img2_path="", output=""):
+    try:
+        import cv2, numpy as np, time as t
+        img1 = cv2.cvtColor(np.array(pyautogui.screenshot()), cv2.COLOR_RGB2BGR) if not img1_path else cv2.imread(img1_path)
+        if not img2_path: t.sleep(2); img2 = cv2.cvtColor(np.array(pyautogui.screenshot()), cv2.COLOR_RGB2BGR)
+        else: img2 = cv2.imread(img2_path)
+        h = min(img1.shape[0], img2.shape[0]); w = min(img1.shape[1], img2.shape[1])
+        diff = cv2.absdiff(img1[:h,:w], img2[:h,:w])
+        _, thresh = cv2.threshold(cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY), 30, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        result = img2[:h,:w].copy(); cv2.drawContours(result, contours, -1, (0, 0, 255), 2)
+        out = output or str(Path.home() / "Desktop" / f"diff_{datetime.now().strftime('%H%M%S')}.png")
+        cv2.imwrite(out, result)
+        pct = cv2.countNonZero(thresh) / (h * w) * 100
+        return f"差異：{pct:.2f}%，標記圖：{out}"
+    except Exception as e:
+        return f"❌ 截圖比對失敗：{e}"
+
+
 def execute_screen_record(action, duration=10.0, output=""):
     try:
         if action == "record":
@@ -2298,6 +2853,56 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("end",0),
                     tool_use.input.get("output","")),
                 "monitor_config": lambda: execute_monitor_config(),
+                "email_control": lambda: execute_email_read(
+                    tool_use.input["host"], tool_use.input["user"], tool_use.input["password"],
+                    tool_use.input.get("folder","INBOX"), tool_use.input.get("count",5)),
+                "calendar": lambda: execute_calendar(
+                    tool_use.input["action"], tool_use.input.get("days",7),
+                    tool_use.input.get("title",""), tool_use.input.get("start",""),
+                    tool_use.input.get("end",""), tool_use.input.get("description","")),
+                "global_hotkey": lambda: execute_global_hotkey(
+                    tool_use.input["hotkey"], tool_use.input["command"],
+                    tool_use.input.get("duration",60.0)),
+                "git": lambda: execute_git(
+                    tool_use.input["action"],
+                    tool_use.input.get("repo","."),
+                    tool_use.input.get("message",""),
+                    tool_use.input.get("branch","master")),
+                "hardware": lambda: execute_hardware(),
+                "report": lambda: execute_report(
+                    tool_use.input["title"], tool_use.input["data"],
+                    tool_use.input.get("output","")),
+                "dropbox": lambda: execute_dropbox(
+                    tool_use.input["action"], tool_use.input["local"],
+                    tool_use.input["remote"], tool_use.input.get("token","")),
+                "docker": lambda: execute_docker(
+                    tool_use.input["action"], tool_use.input.get("name","")),
+                "pdf_image": lambda: execute_pdf_to_image(
+                    tool_use.input["path"], tool_use.input.get("output_dir",""),
+                    tool_use.input.get("dpi",150)),
+                "barcode": lambda: execute_barcode(tool_use.input.get("image_path","")),
+                "nlp": lambda: execute_nlp(
+                    tool_use.input["action"], tool_use.input["text"]),
+                "vpn": lambda: execute_vpn(
+                    tool_use.input["action"], tool_use.input.get("name",""),
+                    tool_use.input.get("user",""), tool_use.input.get("password","")),
+                "restore_point": lambda: execute_restore_point(
+                    tool_use.input["action"], tool_use.input.get("description","")),
+                "disk_analyze": lambda: execute_disk_analyze(
+                    tool_use.input.get("path","C:/"), tool_use.input.get("top",10)),
+                "face_detect": lambda: execute_face_detect(
+                    tool_use.input.get("image_path",""), tool_use.input.get("output","")),
+                "video_gif": lambda: execute_video_gif(
+                    tool_use.input["path"], tool_use.input.get("start",0),
+                    tool_use.input.get("duration",5.0), tool_use.input.get("output",""),
+                    tool_use.input.get("fps",10)),
+                "excel_chart": lambda: execute_excel_chart(
+                    tool_use.input["path"], tool_use.input["sheet"],
+                    tool_use.input.get("type","bar"), tool_use.input.get("title","")),
+                "speedtest": lambda: execute_speedtest(),
+                "screenshot_compare": lambda: execute_screenshot_compare(
+                    tool_use.input.get("img1",""), tool_use.input.get("img2",""),
+                    tool_use.input.get("output","")),
             }
 
             if tool_use.name == "chart":
