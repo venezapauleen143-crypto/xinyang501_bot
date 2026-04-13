@@ -143,6 +143,34 @@ tools:
   excel_chart <路徑> <工作表> [類型] [標題]  Excel 生成圖表
   speedtest                     網路速度測試
   screenshot_compare [圖1] [圖2] [輸出]  截圖比對差異
+  set_reminder <HH:MM或秒數> <訊息>  設定一次性提醒
+  webpage_screenshot <網址> [輸出]  網頁全頁截圖
+  web_monitor <網址> [selector] [間隔秒] [持續秒]  網頁變化監控
+  batch_rename <資料夾> <正規表達式> <替換> [副檔名]  批次重新命名
+  img_compress <路徑> [品質0-100] [輸出]  壓縮圖片
+  batch_img_process <資料夾> <resize|compress> [寬] [高] [品質]  批次圖片處理
+  ocr_translate [圖片路徑] [目標語言]  OCR辨識+翻譯
+  ip_info [IP地址]              查詢 IP 地理位置（留空查自己）
+  currency <金額> <來源幣> <目標幣>  匯率換算
+  event_log [日誌名] [等級] [數量]  Windows 事件日誌
+  tts_edge <文字> [語音] [輸出]  微軟 Edge TTS 語音合成
+  tts_voices                    列出可用 Edge TTS 語音
+  send_email_attach <收件人> <主旨> <內容> [附件路徑,...]  含附件郵件
+  clipboard_img_get [輸出路徑]  讀取剪貼簿圖片
+  clipboard_img_set <圖片路徑>  複製圖片到剪貼簿
+  usb_list                      列出 USB 裝置
+  firewall <list|add|remove> [名稱] [方向] [port] [協定]  防火牆管理
+  todo <add|list|done|delete|clear> [任務] [id]  任務清單
+  file_sync <來源> <目標> [dry_run]  資料夾同步
+  sysres_chart [秒數] [輸出]    系統資源使用圖表
+  password_save <網站> <帳號> <密碼> <主密碼>  加密儲存密碼
+  password_get <網站> <主密碼>  查詢已儲存密碼
+  rdp_connect <host> [user] [寬] [高]  RDP 遠端桌面
+  chrome_bookmarks              列出 Chrome 書籤
+  printer_list                  列出印表機
+  printer_jobs                  列出列印佇列
+  net_share <list|connect|disconnect> [共享路徑] [磁碟代號] [帳號] [密碼]  網路芳鄰
+  font_list [關鍵字]            列出系統字型
 """
 
 import sys
@@ -2537,6 +2565,591 @@ def screenshot_compare(img1_path: str = "", img2_path: str = "", output: str = "
         print(f"❌ 截圖比對失敗：{e}")
 
 
+# ── 一次性提醒 ───────────────────────────────────────
+
+def set_reminder(time_str: str, message: str):
+    """time_str: HH:MM 或 秒數（如 '300' 代表5分鐘後）"""
+    try:
+        import threading, time as t
+        def _remind():
+            if time_str.isdigit():
+                t.sleep(int(time_str))
+            else:
+                import datetime as dt
+                now = dt.datetime.now()
+                target = dt.datetime.strptime(time_str, "%H:%M").replace(
+                    year=now.year, month=now.month, day=now.day)
+                if target < now:
+                    target = target.replace(day=now.day + 1)
+                t.sleep((target - now).total_seconds())
+            try:
+                from win10toast import ToastNotifier
+                ToastNotifier().show_toast("⏰ 提醒", message, duration=10)
+            except Exception:
+                pass
+            try:
+                import pyttsx3
+                engine = pyttsx3.init()
+                engine.say(message)
+                engine.runAndWait()
+            except Exception:
+                pass
+            print(f"⏰ 提醒：{message}")
+        threading.Thread(target=_remind, daemon=True).start()
+        print(f"✅ 提醒已設定：{time_str} → {message}")
+    except Exception as e:
+        print(f"❌ 設定提醒失敗：{e}")
+
+
+# ── 網頁全頁截圖 ─────────────────────────────────────
+
+def webpage_screenshot(url: str, output: str = ""):
+    try:
+        from playwright.sync_api import sync_playwright
+        out = output or str(Path.home() / "Desktop" / f"webpage_{datetime.now().strftime('%H%M%S')}.png")
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.goto(url, timeout=30000)
+            page.wait_for_load_state("networkidle")
+            page.screenshot(path=out, full_page=True)
+            browser.close()
+        print(f"✅ 網頁截圖已存：{out}")
+    except Exception as e:
+        print(f"❌ 網頁截圖失敗：{e}")
+
+
+# ── 網頁變化監控 ─────────────────────────────────────
+
+def web_monitor(url: str, selector: str = "body", interval: float = 60.0, duration: float = 3600.0):
+    try:
+        import hashlib, time as t
+        from bs4 import BeautifulSoup
+        def _fetch():
+            r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            soup = BeautifulSoup(r.text, "html.parser")
+            elements = soup.select(selector)
+            text = "\n".join(e.get_text(strip=True) for e in elements)
+            return hashlib.md5(text.encode()).hexdigest(), text[:200]
+        last_hash, _ = _fetch()
+        print(f"🔍 開始監控：{url}（每 {interval} 秒，持續 {duration} 秒）")
+        end = t.time() + duration
+        changes = 0
+        while t.time() < end:
+            t.sleep(interval)
+            try:
+                new_hash, snippet = _fetch()
+                if new_hash != last_hash:
+                    changes += 1
+                    print(f"⚠️ [{datetime.now().strftime('%H:%M:%S')}] 網頁有變化！\n{snippet}")
+                    last_hash = new_hash
+            except Exception as e:
+                print(f"檢查失敗：{e}")
+        print(f"✅ 監控結束，共偵測到 {changes} 次變化")
+    except Exception as e:
+        print(f"❌ 網頁監控失敗：{e}")
+
+
+# ── 批次重新命名 ─────────────────────────────────────
+
+def batch_rename(folder: str, pattern: str, replacement: str, ext_filter: str = ""):
+    try:
+        import re
+        folder_path = Path(folder)
+        files = [f for f in folder_path.iterdir() if f.is_file()]
+        if ext_filter:
+            files = [f for f in files if f.suffix.lower() == ext_filter.lower()]
+        count = 0
+        for f in sorted(files):
+            new_name = re.sub(pattern, replacement, f.stem) + f.suffix
+            new_path = f.parent / new_name
+            if new_path != f:
+                f.rename(new_path)
+                print(f"  {f.name} → {new_name}")
+                count += 1
+        print(f"✅ 已重新命名 {count} 個檔案")
+    except Exception as e:
+        print(f"❌ 批次重新命名失敗：{e}")
+
+
+# ── 圖片壓縮 ─────────────────────────────────────────
+
+def img_compress(path: str, quality: int = 75, output: str = ""):
+    try:
+        from PIL import Image
+        img = Image.open(path)
+        out = output or path.replace(".", f"_q{quality}.")
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        img.save(out, optimize=True, quality=quality)
+        orig_size = Path(path).stat().st_size
+        new_size = Path(out).stat().st_size
+        print(f"✅ 壓縮完成：{orig_size//1024}KB → {new_size//1024}KB（{(1-new_size/orig_size)*100:.1f}% 節省）\n儲存至：{out}")
+    except Exception as e:
+        print(f"❌ 圖片壓縮失敗：{e}")
+
+def batch_img_process(folder: str, action: str, width: int = 0, height: int = 0, quality: int = 75):
+    try:
+        from PIL import Image
+        folder_path = Path(folder)
+        out_dir = folder_path / f"output_{action}"
+        out_dir.mkdir(exist_ok=True)
+        count = 0
+        for f in folder_path.glob("*.{jpg,jpeg,png,bmp,webp}"):
+            try:
+                img = Image.open(f)
+                if action == "resize" and width and height:
+                    img = img.resize((width, height))
+                elif action == "compress":
+                    if img.mode in ("RGBA", "P"): img = img.convert("RGB")
+                img.save(str(out_dir / f.name), optimize=True, quality=quality)
+                count += 1
+            except Exception:
+                pass
+        print(f"✅ 批次處理完成：{count} 張圖片 → {out_dir}")
+    except Exception as e:
+        print(f"❌ 批次圖片處理失敗：{e}")
+
+
+# ── OCR + 翻譯 pipeline ──────────────────────────────
+
+def ocr_translate(image_path: str = "", target: str = "zh-TW"):
+    try:
+        import easyocr, numpy as np
+        from PIL import Image
+        from deep_translator import GoogleTranslator
+        reader = easyocr.Reader(["ch_tra", "en"], gpu=False)
+        img = Image.open(image_path) if image_path else pyautogui.screenshot()
+        results = reader.readtext(np.array(img))
+        text = " ".join([r[1] for r in results])
+        if not text.strip():
+            print("❌ 未辨識到文字")
+            return
+        print(f"原文：{text[:300]}")
+        translated = GoogleTranslator(source="auto", target=target).translate(text)
+        print(f"翻譯（{target}）：{translated}")
+    except Exception as e:
+        print(f"❌ OCR 翻譯失敗：{e}")
+
+
+# ── IP 資訊查詢 ──────────────────────────────────────
+
+def ip_info(ip: str = ""):
+    try:
+        target = ip or ""
+        res = requests.get(f"http://ip-api.com/json/{target}?lang=zh-TW", timeout=10)
+        d = res.json()
+        if d.get("status") == "fail":
+            print(f"❌ 查詢失敗：{d.get('message')}")
+            return
+        print(
+            f"IP：{d.get('query')}\n"
+            f"國家：{d.get('country')} ({d.get('countryCode')})\n"
+            f"城市：{d.get('city')}  地區：{d.get('regionName')}\n"
+            f"ISP：{d.get('isp')}\n"
+            f"組織：{d.get('org')}\n"
+            f"時區：{d.get('timezone')}\n"
+            f"座標：{d.get('lat')}, {d.get('lon')}"
+        )
+    except Exception as e:
+        print(f"❌ IP 查詢失敗：{e}")
+
+
+# ── 匯率查詢 ─────────────────────────────────────────
+
+def currency(amount: float, from_cur: str, to_cur: str):
+    try:
+        res = requests.get(
+            f"https://api.frankfurter.app/latest?amount={amount}&from={from_cur.upper()}&to={to_cur.upper()}",
+            timeout=10
+        )
+        data = res.json()
+        rate = data["rates"].get(to_cur.upper())
+        if rate is None:
+            print(f"❌ 找不到 {to_cur} 匯率")
+            return
+        print(f"💱 {amount} {from_cur.upper()} = {rate:.4f} {to_cur.upper()}")
+        print(f"（匯率基準日：{data.get('date')}）")
+    except Exception as e:
+        print(f"❌ 匯率查詢失敗：{e}")
+
+
+# ── Windows 事件日誌 ─────────────────────────────────
+
+def event_log(log_name: str = "System", level: str = "Error", count: int = 10):
+    try:
+        ps = (
+            f"Get-WinEvent -LogName '{log_name}' -MaxEvents {count} "
+            f"| Where-Object {{$_.LevelDisplayName -eq '{level}'}} "
+            f"| Select-Object TimeCreated,Id,Message "
+            f"| Format-List"
+        )
+        r = subprocess.run(["powershell.exe", "-Command", ps],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        print(r.stdout[:3000] or f"（無 {level} 等級事件）")
+    except Exception as e:
+        print(f"❌ 事件日誌查詢失敗：{e}")
+
+
+# ── 進階 TTS (edge-tts) ──────────────────────────────
+
+def tts_edge(text: str, voice: str = "zh-TW-HsiaoChenNeural", output: str = ""):
+    try:
+        import edge_tts, asyncio
+        out = output or str(Path.home() / "Desktop" / f"tts_{datetime.now().strftime('%H%M%S')}.mp3")
+        async def _gen():
+            communicate = edge_tts.Communicate(text, voice)
+            await communicate.save(out)
+        asyncio.run(_gen())
+        subprocess.Popen(["powershell.exe", "-Command", f"Start-Process '{out}'"])
+        print(f"✅ 語音已生成並播放：{out}")
+    except Exception as e:
+        print(f"❌ Edge TTS 失敗：{e}")
+
+def tts_voices():
+    try:
+        import edge_tts, asyncio
+        async def _list():
+            return await edge_tts.list_voices()
+        voices = asyncio.run(_list())
+        zh_voices = [v for v in voices if v["Locale"].startswith("zh")]
+        for v in zh_voices:
+            print(f"{v['ShortName']}  {v['FriendlyName']}")
+    except Exception as e:
+        print(f"❌ 列出語音失敗：{e}")
+
+
+# ── 郵件附件發送 ─────────────────────────────────────
+
+def send_email_attach(to: str, subject: str, body: str, attachments: str = ""):
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders
+        smtp_user = os.getenv("SMTP_USER", "")
+        smtp_pass = os.getenv("SMTP_PASS", "")
+        smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        msg = MIMEMultipart()
+        msg["From"] = smtp_user
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+        if attachments:
+            for path in attachments.split(","):
+                path = path.strip()
+                if Path(path).exists():
+                    with open(path, "rb") as f:
+                        part = MIMEBase("application", "octet-stream")
+                        part.set_payload(f.read())
+                    encoders.encode_base64(part)
+                    part.add_header("Content-Disposition", f"attachment; filename={Path(path).name}")
+                    msg.attach(part)
+        with smtplib.SMTP(smtp_host, smtp_port) as s:
+            s.starttls()
+            s.login(smtp_user, smtp_pass)
+            s.send_message(msg)
+        print(f"✅ 郵件已發送至 {to}（附件：{attachments or '無'}）")
+    except Exception as e:
+        print(f"❌ 發送失敗：{e}")
+
+
+# ── 剪貼簿圖片 ───────────────────────────────────────
+
+def clipboard_img_get(output: str = ""):
+    try:
+        import win32clipboard
+        from PIL import Image
+        import io as _io
+        win32clipboard.OpenClipboard()
+        try:
+            data = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
+        finally:
+            win32clipboard.CloseClipboard()
+        out = output or str(Path.home() / "Desktop" / f"clipboard_{datetime.now().strftime('%H%M%S')}.png")
+        img = Image.open(_io.BytesIO(data))
+        img.save(out)
+        print(f"✅ 剪貼簿圖片已存：{out}")
+    except Exception as e:
+        print(f"❌ 讀取剪貼簿圖片失敗：{e}")
+
+def clipboard_img_set(path: str):
+    try:
+        import win32clipboard
+        from PIL import Image
+        import io as _io
+        img = Image.open(path).convert("RGB")
+        buf = _io.BytesIO()
+        img.save(buf, "BMP")
+        data = buf.getvalue()[14:]
+        win32clipboard.OpenClipboard()
+        try:
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+        finally:
+            win32clipboard.CloseClipboard()
+        print(f"✅ 圖片已複製到剪貼簿：{path}")
+    except Exception as e:
+        print(f"❌ 設定剪貼簿圖片失敗：{e}")
+
+
+# ── USB 裝置管理 ─────────────────────────────────────
+
+def usb_list():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-PnpDevice | Where-Object {$_.Class -eq 'USB' -and $_.Status -eq 'OK'} | Select-Object FriendlyName,InstanceId | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout[:3000] or "（無 USB 裝置）")
+    except Exception as e:
+        print(f"❌ USB 查詢失敗：{e}")
+
+
+# ── Windows 防火牆 ───────────────────────────────────
+
+def firewall(action: str, name: str = "", direction: str = "in", port: int = 0, protocol: str = "TCP"):
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Get-NetFirewallRule | Where-Object {$_.Enabled -eq 'True'} | Select-Object DisplayName,Direction,Action | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout[:3000])
+        elif action == "add":
+            ps = f"New-NetFirewallRule -DisplayName '{name}' -Direction {direction} -Protocol {protocol} -LocalPort {port} -Action Allow"
+            r = subprocess.run(["powershell.exe", "-Command", ps], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout or f"✅ 防火牆規則已新增：{name}")
+        elif action == "remove":
+            r = subprocess.run(["powershell.exe", "-Command", f"Remove-NetFirewallRule -DisplayName '{name}'"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(r.stdout or f"✅ 防火牆規則已刪除：{name}")
+    except Exception as e:
+        print(f"❌ 防火牆操作失敗：{e}")
+
+
+# ── 任務清單 ─────────────────────────────────────────
+
+TODO_DB = Path.home() / "claude-telegram-bot" / "todo.db"
+
+def _todo_init():
+    conn = sqlite3.connect(str(TODO_DB))
+    conn.execute("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT, done INTEGER DEFAULT 0, created TEXT)")
+    conn.commit(); conn.close()
+
+def todo(action: str, task: str = "", todo_id: int = 0):
+    try:
+        _todo_init()
+        conn = sqlite3.connect(str(TODO_DB))
+        cur = conn.cursor()
+        if action == "add":
+            cur.execute("INSERT INTO todos (task, created) VALUES (?, ?)", (task, datetime.now().strftime("%Y-%m-%d %H:%M")))
+            conn.commit()
+            print(f"✅ 已新增任務：{task}")
+        elif action == "list":
+            rows = cur.execute("SELECT id, task, done, created FROM todos ORDER BY done, id").fetchall()
+            if not rows: print("（清單為空）"); conn.close(); return
+            for r in rows:
+                status = "✅" if r[2] else "⬜"
+                print(f"{status} [{r[0]}] {r[1]}  ({r[3]})")
+        elif action == "done":
+            cur.execute("UPDATE todos SET done=1 WHERE id=?", (todo_id,))
+            conn.commit(); print(f"✅ 任務 #{todo_id} 已完成")
+        elif action == "delete":
+            cur.execute("DELETE FROM todos WHERE id=?", (todo_id,))
+            conn.commit(); print(f"✅ 任務 #{todo_id} 已刪除")
+        elif action == "clear":
+            cur.execute("DELETE FROM todos WHERE done=1")
+            conn.commit(); print("✅ 已清除所有已完成任務")
+        conn.close()
+    except Exception as e:
+        print(f"❌ 任務清單操作失敗：{e}")
+
+
+# ── 檔案同步 ─────────────────────────────────────────
+
+def file_sync(src: str, dest: str, dry_run: bool = False):
+    try:
+        import filecmp, shutil
+        src_path = Path(src); dest_path = Path(dest)
+        dest_path.mkdir(parents=True, exist_ok=True)
+        copied = deleted = 0
+        for item in src_path.rglob("*"):
+            rel = item.relative_to(src_path)
+            dst = dest_path / rel
+            if item.is_dir():
+                dst.mkdir(parents=True, exist_ok=True)
+            elif item.is_file():
+                if not dst.exists() or not filecmp.cmp(str(item), str(dst), shallow=False):
+                    if not dry_run:
+                        shutil.copy2(str(item), str(dst))
+                    print(f"  複製：{rel}")
+                    copied += 1
+        print(f"{'[預覽] ' if dry_run else ''}✅ 同步完成：{copied} 個檔案更新，{deleted} 個刪除")
+    except Exception as e:
+        print(f"❌ 檔案同步失敗：{e}")
+
+
+# ── 系統資源圖表 ─────────────────────────────────────
+
+def sysres_chart(duration: int = 10, output: str = ""):
+    try:
+        import psutil, matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt, time as t
+        cpu_vals, mem_vals, times = [], [], []
+        for i in range(duration):
+            cpu_vals.append(psutil.cpu_percent(interval=1))
+            mem_vals.append(psutil.virtual_memory().percent)
+            times.append(i + 1)
+        out = output or str(Path.home() / "Desktop" / f"sysres_{datetime.now().strftime('%H%M%S')}.png")
+        fig, ax = plt.subplots()
+        ax.plot(times, cpu_vals, label="CPU %", color="blue")
+        ax.plot(times, mem_vals, label="RAM %", color="orange")
+        ax.set_ylim(0, 100); ax.set_xlabel("秒"); ax.set_ylabel("%")
+        ax.set_title("系統資源使用率"); ax.legend(); plt.tight_layout()
+        plt.savefig(out); plt.close()
+        print(f"✅ 資源圖表已存：{out}")
+    except Exception as e:
+        print(f"❌ 資源圖表失敗：{e}")
+
+
+# ── 密碼管理 ─────────────────────────────────────────
+
+PWD_DB = Path.home() / "claude-telegram-bot" / "passwords.db"
+
+def _pwd_get_key(master: str) -> bytes:
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    import base64
+    kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=b"pwd_manager_v1", iterations=100000)
+    return base64.urlsafe_b64encode(kdf.derive(master.encode()))
+
+def password_save(site: str, username: str, password: str, master: str):
+    try:
+        from cryptography.fernet import Fernet
+        key = _pwd_get_key(master)
+        f = Fernet(key)
+        encrypted = f.encrypt(password.encode()).decode()
+        conn = sqlite3.connect(str(PWD_DB))
+        conn.execute("CREATE TABLE IF NOT EXISTS passwords (id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT, username TEXT, password TEXT)")
+        conn.execute("INSERT OR REPLACE INTO passwords (site, username, password) VALUES (?, ?, ?)", (site, username, encrypted))
+        conn.commit(); conn.close()
+        print(f"✅ 密碼已加密儲存：{site} / {username}")
+    except Exception as e:
+        print(f"❌ 儲存密碼失敗：{e}")
+
+def password_get(site: str, master: str):
+    try:
+        from cryptography.fernet import Fernet
+        key = _pwd_get_key(master)
+        f = Fernet(key)
+        conn = sqlite3.connect(str(PWD_DB))
+        rows = conn.execute("SELECT site, username, password FROM passwords WHERE site LIKE ?", (f"%{site}%",)).fetchall()
+        conn.close()
+        if not rows: print(f"（找不到 {site} 的密碼）"); return
+        for site_, user, enc_pwd in rows:
+            try:
+                pwd = f.decrypt(enc_pwd.encode()).decode()
+                print(f"🔑 {site_}\n帳號：{user}\n密碼：{pwd}")
+            except Exception:
+                print(f"❌ 解密失敗（主密碼錯誤？）")
+    except Exception as e:
+        print(f"❌ 讀取密碼失敗：{e}")
+
+
+# ── RDP 遠端桌面 ─────────────────────────────────────
+
+def rdp_connect(host: str, user: str = "", width: int = 1280, height: int = 720):
+    try:
+        args = ["/v:" + host, f"/w:{width}", f"/h:{height}"]
+        if user:
+            args.append(f"/u:{user}")
+        subprocess.Popen(["mstsc"] + args)
+        print(f"✅ 正在連線 RDP：{host}")
+    except Exception as e:
+        print(f"❌ RDP 連線失敗：{e}")
+
+
+# ── Chrome 書籤 ──────────────────────────────────────
+
+def chrome_bookmarks():
+    try:
+        import json
+        bookmark_path = Path.home() / "AppData/Local/Google/Chrome/User Data/Default/Bookmarks"
+        if not bookmark_path.exists():
+            print("❌ 找不到 Chrome 書籤檔案")
+            return
+        data = json.loads(bookmark_path.read_text(encoding="utf-8"))
+        def _print_node(node, indent=0):
+            if node.get("type") == "url":
+                print("  " * indent + f"🔗 {node['name']}  {node['url']}")
+            elif node.get("type") == "folder":
+                print("  " * indent + f"📁 {node['name']}")
+                for child in node.get("children", []):
+                    _print_node(child, indent + 1)
+        for root in data["roots"].values():
+            _print_node(root)
+    except Exception as e:
+        print(f"❌ 讀取書籤失敗：{e}")
+
+
+# ── 印表機管理 ───────────────────────────────────────
+
+def printer_list():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-Printer | Select-Object Name,DriverName,PrinterStatus | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or "（無印表機）")
+    except Exception as e:
+        print(f"❌ 印表機查詢失敗：{e}")
+
+def printer_jobs():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-PrintJob -PrinterName (Get-Printer | Select-Object -First 1 -ExpandProperty Name) | Format-Table"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or "（列印佇列為空）")
+    except Exception as e:
+        print(f"❌ 列印佇列查詢失敗：{e}")
+
+
+# ── 網路芳鄰 ─────────────────────────────────────────
+
+def net_share(action: str, share_path: str = "", drive: str = "Z:", user: str = "", password: str = ""):
+    try:
+        if action == "list":
+            r = subprocess.run(["net", "use"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            print(r.stdout)
+        elif action == "connect":
+            args = ["net", "use", drive, share_path]
+            if user: args += [f"/user:{user}", password]
+            r = subprocess.run(args, capture_output=True, text=True, encoding="cp950", errors="replace")
+            print(r.stdout or f"✅ 已連線 {share_path} → {drive}")
+        elif action == "disconnect":
+            r = subprocess.run(["net", "use", drive, "/delete"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            print(r.stdout or f"✅ 已中斷 {drive}")
+    except Exception as e:
+        print(f"❌ 網路芳鄰操作失敗：{e}")
+
+
+# ── 字型列表 ─────────────────────────────────────────
+
+def font_list(keyword: str = ""):
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "[System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; "
+            "[System.Drawing.FontFamily]::Families | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        fonts = [f for f in r.stdout.strip().splitlines() if keyword.lower() in f.lower()] if keyword else r.stdout.strip().splitlines()
+        print("\n".join(fonts[:50]))
+        if len(fonts) > 50:
+            print(f"...（共 {len(fonts)} 個字型）")
+    except Exception as e:
+        print(f"❌ 字型列表失敗：{e}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -2688,6 +3301,34 @@ if __name__ == "__main__":
         "excel_chart":     lambda: excel_chart(args[0], args[1], args[2] if len(args)>2 else "bar", args[3] if len(args)>3 else ""),
         "speedtest":       lambda: speedtest_run(),
         "screenshot_compare": lambda: screenshot_compare(args[0] if args else "", args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "set_reminder":    lambda: set_reminder(args[0], " ".join(args[1:])),
+        "webpage_screenshot": lambda: webpage_screenshot(args[0], args[1] if len(args)>1 else ""),
+        "web_monitor":     lambda: web_monitor(args[0], args[1] if len(args)>1 else "body", float(args[2]) if len(args)>2 else 60.0, float(args[3]) if len(args)>3 else 3600.0),
+        "batch_rename":    lambda: batch_rename(args[0], args[1], args[2], args[3] if len(args)>3 else ""),
+        "img_compress":    lambda: img_compress(args[0], int(args[1]) if len(args)>1 else 75, args[2] if len(args)>2 else ""),
+        "batch_img_process": lambda: batch_img_process(args[0], args[1], int(args[2]) if len(args)>2 else 0, int(args[3]) if len(args)>3 else 0, int(args[4]) if len(args)>4 else 75),
+        "ocr_translate":   lambda: ocr_translate(args[0] if args else "", args[1] if len(args)>1 else "zh-TW"),
+        "ip_info":         lambda: ip_info(args[0] if args else ""),
+        "currency":        lambda: currency(float(args[0]), args[1], args[2]),
+        "event_log":       lambda: event_log(args[0] if args else "System", args[1] if len(args)>1 else "Error", int(args[2]) if len(args)>2 else 10),
+        "tts_edge":        lambda: tts_edge(" ".join(args[:-1]) if len(args)>1 else " ".join(args), args[-1] if len(args)>1 and args[-1].startswith("zh-") else "zh-TW-HsiaoChenNeural"),
+        "tts_voices":      lambda: tts_voices(),
+        "send_email_attach": lambda: send_email_attach(args[0], args[1], args[2], args[3] if len(args)>3 else ""),
+        "clipboard_img_get": lambda: clipboard_img_get(args[0] if args else ""),
+        "clipboard_img_set": lambda: clipboard_img_set(args[0]),
+        "usb_list":        lambda: usb_list(),
+        "firewall":        lambda: firewall(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "in", int(args[3]) if len(args)>3 else 0, args[4] if len(args)>4 else "TCP"),
+        "todo":            lambda: todo(args[0], " ".join(args[1:]) if args[0]=="add" else "", int(args[1]) if len(args)>1 and args[0] in ("done","delete") else 0),
+        "file_sync":       lambda: file_sync(args[0], args[1], args[2].lower()=="true" if len(args)>2 else False),
+        "sysres_chart":    lambda: sysres_chart(int(args[0]) if args else 10, args[1] if len(args)>1 else ""),
+        "password_save":   lambda: password_save(args[0], args[1], args[2], args[3]),
+        "password_get":    lambda: password_get(args[0], args[1]),
+        "rdp_connect":     lambda: rdp_connect(args[0], args[1] if len(args)>1 else "", int(args[2]) if len(args)>2 else 1280, int(args[3]) if len(args)>3 else 720),
+        "chrome_bookmarks": lambda: chrome_bookmarks(),
+        "printer_list":    lambda: printer_list(),
+        "printer_jobs":    lambda: printer_jobs(),
+        "net_share":       lambda: net_share(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "Z:", args[3] if len(args)>3 else "", args[4] if len(args)>4 else ""),
+        "font_list":       lambda: font_list(args[0] if args else ""),
     }
 
     if tool not in tools:

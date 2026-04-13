@@ -508,6 +508,166 @@ TOOLS = [
         }
     },
     {
+        "name": "reminder",
+        "description": "設定一次性提醒/鬧鐘，到時發出通知和語音。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "time": {"type": "string", "description": "HH:MM 格式時間，或純數字代表幾秒後"},
+                "message": {"type": "string"}
+            },
+            "required": ["time", "message"]
+        }
+    },
+    {
+        "name": "webpage_shot",
+        "description": "對指定網址截取整頁截圖，或監控網頁內容變化。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["screenshot", "monitor"]},
+                "url": {"type": "string"},
+                "selector": {"type": "string", "description": "監控的 CSS 選擇器（monitor 使用）"},
+                "interval": {"type": "number", "description": "監控間隔秒數（monitor 使用）"},
+                "duration": {"type": "number", "description": "監控總秒數（monitor 使用）"}
+            },
+            "required": ["action", "url"]
+        }
+    },
+    {
+        "name": "file_tools",
+        "description": "批次重新命名檔案、同步資料夾。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["batch_rename", "sync"]},
+                "path": {"type": "string", "description": "資料夾路徑"},
+                "dest": {"type": "string", "description": "目標資料夾（sync 使用）"},
+                "pattern": {"type": "string", "description": "正規表達式（batch_rename 使用）"},
+                "replacement": {"type": "string", "description": "替換字串"},
+                "ext": {"type": "string", "description": "副檔名過濾（batch_rename 使用）"}
+            },
+            "required": ["action", "path"]
+        }
+    },
+    {
+        "name": "image_tools",
+        "description": "壓縮圖片、批次處理圖片資料夾、OCR+翻譯。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["compress", "batch", "ocr_translate"]},
+                "path": {"type": "string"},
+                "quality": {"type": "integer", "description": "壓縮品質 0-100（compress/batch 使用）"},
+                "width": {"type": "integer"}, "height": {"type": "integer"},
+                "target_lang": {"type": "string", "description": "翻譯目標語言（ocr_translate 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "lookup",
+        "description": "查詢 IP 地理位置或外幣匯率。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["ip", "currency"]},
+                "ip": {"type": "string", "description": "IP 位址（ip 使用，留空查自己）"},
+                "amount": {"type": "number", "description": "金額（currency 使用）"},
+                "from_cur": {"type": "string", "description": "來源幣別，如 USD"},
+                "to_cur": {"type": "string", "description": "目標幣別，如 TWD"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "system_tools",
+        "description": "Windows 事件日誌、USB 裝置、防火牆、印表機、網路芳鄰、字型列表。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["event_log","usb_list","firewall_list","firewall_add","firewall_remove","printer_list","printer_jobs","net_share_list","net_share_connect","net_share_disconnect","font_list","rdp"]},
+                "name": {"type": "string"},
+                "host": {"type": "string"},
+                "port": {"type": "integer"},
+                "direction": {"type": "string", "enum": ["in","out"]},
+                "share_path": {"type": "string"},
+                "drive": {"type": "string"},
+                "user": {"type": "string"},
+                "password": {"type": "string"},
+                "keyword": {"type": "string"},
+                "log_name": {"type": "string"},
+                "level": {"type": "string"},
+                "count": {"type": "integer"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "tts_advanced",
+        "description": "使用微軟 Edge TTS 合成更自然的語音，支援多種中文聲音。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["speak","list_voices"]},
+                "text": {"type": "string"},
+                "voice": {"type": "string", "description": "語音名稱，如 zh-TW-HsiaoChenNeural（女）或 zh-TW-YunJheNeural（男）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "todo_list",
+        "description": "管理本地任務清單：新增、列出、完成、刪除任務。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["add","list","done","delete","clear"]},
+                "task": {"type": "string", "description": "任務內容（add 使用）"},
+                "id": {"type": "integer", "description": "任務 ID（done/delete 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "sysres_chart",
+        "description": "即時監控 CPU/RAM 使用率並生成圖表。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "duration": {"type": "integer", "description": "監控秒數，預設 10"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "password_mgr",
+        "description": "加密儲存或查詢帳號密碼（本地加密，需主密碼）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["save","get"]},
+                "site": {"type": "string"},
+                "username": {"type": "string", "description": "帳號（save 使用）"},
+                "password": {"type": "string", "description": "密碼（save 使用）"},
+                "master": {"type": "string", "description": "主密碼"}
+            },
+            "required": ["action", "site", "master"]
+        }
+    },
+    {
+        "name": "clipboard_image",
+        "description": "讀取或寫入剪貼簿中的圖片。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["get","set"]},
+                "path": {"type": "string", "description": "圖片路徑（set 使用）或儲存路徑（get 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "email_control",
         "description": "讀取 IMAP 郵件收件匣。",
         "input_schema": {
@@ -1750,6 +1910,295 @@ def execute_manage_schedule(action: str, name: str = "", time: str = "", script:
         return f"執行失敗：{str(e)}"
 
 
+def execute_reminder(time_str, message):
+    import threading, time as t
+    def _remind():
+        if time_str.isdigit():
+            t.sleep(int(time_str))
+        else:
+            import datetime as dt
+            now = dt.datetime.now()
+            target = dt.datetime.strptime(time_str, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
+            if target < now: target = target.replace(day=now.day+1)
+            t.sleep((target-now).total_seconds())
+        try:
+            from win10toast import ToastNotifier
+            ToastNotifier().show_toast("⏰ 提醒", message, duration=10)
+        except Exception: pass
+        try:
+            import pyttsx3; e = pyttsx3.init(); e.say(message); e.runAndWait()
+        except Exception: pass
+    threading.Thread(target=_remind, daemon=True).start()
+    return f"✅ 提醒已設定：{time_str} → {message}"
+
+
+def execute_webpage_shot(action, url, selector="body", interval=60.0, duration=3600.0):
+    try:
+        if action == "screenshot":
+            from playwright.sync_api import sync_playwright
+            out = str(Path.home() / "Desktop" / f"webpage_{datetime.now().strftime('%H%M%S')}.png")
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 800})
+                page.goto(url, timeout=30000)
+                page.wait_for_load_state("networkidle")
+                page.screenshot(path=out, full_page=True)
+                browser.close()
+            return f"✅ 網頁截圖已存：{out}"
+        elif action == "monitor":
+            import hashlib, time as t
+            from bs4 import BeautifulSoup
+            def _fetch():
+                r = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                soup = BeautifulSoup(r.text, "html.parser")
+                text = "\n".join(e.get_text(strip=True) for e in soup.select(selector))
+                return hashlib.md5(text.encode()).hexdigest(), text[:150]
+            last_hash, _ = _fetch()
+            end = t.time() + duration; changes = []
+            while t.time() < end:
+                t.sleep(interval)
+                new_hash, snippet = _fetch()
+                if new_hash != last_hash:
+                    changes.append(f"[{datetime.now().strftime('%H:%M:%S')}] {snippet}")
+                    last_hash = new_hash
+            return f"監控結束，共 {len(changes)} 次變化\n" + "\n".join(changes[:5])
+    except Exception as e:
+        return f"❌ 失敗：{e}"
+
+
+def execute_file_tools(action, path, dest="", pattern="", replacement="", ext=""):
+    try:
+        import re, filecmp, shutil
+        if action == "batch_rename":
+            files = [f for f in Path(path).iterdir() if f.is_file() and (not ext or f.suffix.lower()==ext.lower())]
+            count = 0
+            for f in sorted(files):
+                new_name = re.sub(pattern, replacement, f.stem) + f.suffix
+                if new_name != f.name: f.rename(f.parent / new_name); count += 1
+            return f"✅ 已重新命名 {count} 個檔案"
+        elif action == "sync":
+            dest_path = Path(dest); dest_path.mkdir(parents=True, exist_ok=True)
+            copied = 0
+            for item in Path(path).rglob("*"):
+                rel = item.relative_to(path); dst = dest_path / rel
+                if item.is_dir(): dst.mkdir(parents=True, exist_ok=True)
+                elif item.is_file() and (not dst.exists() or not filecmp.cmp(str(item), str(dst), shallow=False)):
+                    shutil.copy2(str(item), str(dst)); copied += 1
+            return f"✅ 同步完成：{copied} 個檔案更新"
+    except Exception as e:
+        return f"❌ 失敗：{e}"
+
+
+def execute_image_tools(action, path="", quality=75, width=0, height=0, target_lang="zh-TW"):
+    try:
+        if action == "compress":
+            from PIL import Image
+            img = Image.open(path)
+            if img.mode in ("RGBA","P"): img = img.convert("RGB")
+            out = path.replace(".", f"_q{quality}.")
+            img.save(out, optimize=True, quality=quality)
+            orig = Path(path).stat().st_size; new = Path(out).stat().st_size
+            return f"✅ {orig//1024}KB → {new//1024}KB（節省 {(1-new/orig)*100:.1f}%）：{out}"
+        elif action == "batch":
+            from PIL import Image as _Img
+            folder = Path(path); out_dir = folder / "output"; out_dir.mkdir(exist_ok=True)
+            count = 0
+            for f in list(folder.glob("*.jpg")) + list(folder.glob("*.png")) + list(folder.glob("*.jpeg")):
+                img = _Img.open(f)
+                if width and height: img = img.resize((width, height))
+                if img.mode in ("RGBA","P"): img = img.convert("RGB")
+                img.save(str(out_dir/f.name), optimize=True, quality=quality); count += 1
+            return f"✅ 批次處理 {count} 張 → {out_dir}"
+        elif action == "ocr_translate":
+            import easyocr, numpy as np
+            from PIL import Image
+            from deep_translator import GoogleTranslator
+            reader = easyocr.Reader(["ch_tra","en"], gpu=False)
+            img = Image.open(path) if path else pyautogui.screenshot()
+            text = " ".join(r[1] for r in reader.readtext(np.array(img)))
+            if not text.strip(): return "❌ 未辨識到文字"
+            translated = GoogleTranslator(source="auto", target=target_lang).translate(text)
+            return f"原文：{text[:200]}\n翻譯：{translated}"
+    except Exception as e:
+        return f"❌ 失敗：{e}"
+
+
+def execute_lookup(action, ip="", amount=1.0, from_cur="USD", to_cur="TWD"):
+    try:
+        if action == "ip":
+            d = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-TW", timeout=10).json()
+            if d.get("status") == "fail": return f"❌ {d.get('message')}"
+            return f"IP：{d['query']}\n國家：{d['country']}\n城市：{d['city']}\nISP：{d['isp']}\n時區：{d['timezone']}\n座標：{d['lat']},{d['lon']}"
+        elif action == "currency":
+            d = requests.get(f"https://api.frankfurter.app/latest?amount={amount}&from={from_cur.upper()}&to={to_cur.upper()}", timeout=10).json()
+            rate = d["rates"].get(to_cur.upper())
+            return f"💱 {amount} {from_cur.upper()} = {rate:.4f} {to_cur.upper()}（{d.get('date')}）"
+    except Exception as e:
+        return f"❌ 查詢失敗：{e}"
+
+
+def execute_system_tools(action, **kwargs):
+    try:
+        if action == "event_log":
+            log_name = kwargs.get("log_name","System"); level = kwargs.get("level","Error"); count = kwargs.get("count",10)
+            r = subprocess.run(["powershell.exe","-Command",f"Get-WinEvent -LogName '{log_name}' -MaxEvents {count} | Where-Object {{$_.LevelDisplayName -eq '{level}'}} | Select-Object TimeCreated,Message | Format-List"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+            return r.stdout[:2000] or f"（無 {level} 事件）"
+        elif action == "usb_list":
+            r = subprocess.run(["powershell.exe","-Command","Get-PnpDevice | Where-Object {$_.Class -eq 'USB' -and $_.Status -eq 'OK'} | Select-Object FriendlyName | Format-Table"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout[:2000] or "（無 USB 裝置）"
+        elif action == "firewall_list":
+            r = subprocess.run(["powershell.exe","-Command","Get-NetFirewallRule | Where-Object {$_.Enabled -eq 'True'} | Select-Object DisplayName,Direction,Action | Format-Table -AutoSize"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout[:2000]
+        elif action == "firewall_add":
+            name=kwargs.get("name",""); direction=kwargs.get("direction","in"); port=kwargs.get("port",80)
+            r = subprocess.run(["powershell.exe","-Command",f"New-NetFirewallRule -DisplayName '{name}' -Direction {direction} -Protocol TCP -LocalPort {port} -Action Allow"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or f"✅ 防火牆規則已新增：{name}"
+        elif action == "firewall_remove":
+            r = subprocess.run(["powershell.exe","-Command",f"Remove-NetFirewallRule -DisplayName '{kwargs.get('name','')}'"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or f"✅ 防火牆規則已刪除"
+        elif action == "printer_list":
+            r = subprocess.run(["powershell.exe","-Command","Get-Printer | Select-Object Name,PrinterStatus | Format-Table"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or "（無印表機）"
+        elif action == "printer_jobs":
+            r = subprocess.run(["powershell.exe","-Command","Get-PrintJob -PrinterName (Get-Printer | Select-Object -First 1 -ExpandProperty Name) | Format-Table"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or "（列印佇列為空）"
+        elif action == "net_share_list":
+            r = subprocess.run(["net","use"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout
+        elif action == "net_share_connect":
+            args = ["net","use",kwargs.get("drive","Z:"),kwargs.get("share_path","")]
+            if kwargs.get("user"): args += [f"/user:{kwargs['user']}", kwargs.get("password","")]
+            r = subprocess.run(args, capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout or f"✅ 已連線"
+        elif action == "net_share_disconnect":
+            r = subprocess.run(["net","use",kwargs.get("drive","Z:"),"/delete"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout or "✅ 已中斷"
+        elif action == "font_list":
+            kw = kwargs.get("keyword","")
+            r = subprocess.run(["powershell.exe","-Command","[System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; [System.Drawing.FontFamily]::Families | Select-Object -ExpandProperty Name"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+            fonts = [f for f in r.stdout.strip().splitlines() if kw.lower() in f.lower()] if kw else r.stdout.strip().splitlines()
+            return "\n".join(fonts[:50]) + (f"\n...共 {len(fonts)} 個" if len(fonts)>50 else "")
+        elif action == "rdp":
+            subprocess.Popen(["mstsc", f"/v:{kwargs.get('host','')}"])
+            return f"✅ 正在開啟 RDP：{kwargs.get('host','')}"
+    except Exception as e:
+        return f"❌ 失敗：{e}"
+
+
+def execute_tts_advanced(action, text="", voice="zh-TW-HsiaoChenNeural"):
+    try:
+        import edge_tts, asyncio
+        if action == "speak":
+            out = str(Path.home() / "Desktop" / f"tts_{datetime.now().strftime('%H%M%S')}.mp3")
+            async def _gen():
+                await edge_tts.Communicate(text, voice).save(out)
+            asyncio.run(_gen())
+            subprocess.Popen(["powershell.exe","-Command",f"Start-Process '{out}'"])
+            return f"✅ Edge TTS 語音已播放：{voice}"
+        elif action == "list_voices":
+            async def _list(): return await edge_tts.list_voices()
+            voices = asyncio.run(_list())
+            return "\n".join(f"{v['ShortName']}  {v['FriendlyName']}" for v in voices if v["Locale"].startswith("zh"))
+    except Exception as e:
+        return f"❌ Edge TTS 失敗：{e}"
+
+
+def execute_todo(action, task="", todo_id=0):
+    try:
+        db = str(Path("C:/Users/blue_/claude-telegram-bot/todo.db"))
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT, done INTEGER DEFAULT 0, created TEXT)")
+        conn.commit()
+        if action == "add":
+            conn.execute("INSERT INTO todos (task,created) VALUES (?,?)", (task, datetime.now().strftime("%Y-%m-%d %H:%M")))
+            conn.commit(); conn.close(); return f"✅ 已新增：{task}"
+        elif action == "list":
+            rows = conn.execute("SELECT id,task,done,created FROM todos ORDER BY done,id").fetchall()
+            conn.close()
+            return "\n".join(f"{'✅' if r[2] else '⬜'} [{r[0]}] {r[1]}" for r in rows) or "（清單為空）"
+        elif action == "done":
+            conn.execute("UPDATE todos SET done=1 WHERE id=?", (todo_id,)); conn.commit(); conn.close(); return f"✅ 任務 #{todo_id} 已完成"
+        elif action == "delete":
+            conn.execute("DELETE FROM todos WHERE id=?", (todo_id,)); conn.commit(); conn.close(); return f"✅ 任務 #{todo_id} 已刪除"
+        elif action == "clear":
+            conn.execute("DELETE FROM todos WHERE done=1"); conn.commit(); conn.close(); return "✅ 已清除所有已完成任務"
+    except Exception as e:
+        return f"❌ 任務清單失敗：{e}"
+
+
+def execute_sysres_chart(duration=10):
+    try:
+        import psutil, matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt, time as t
+        cpu_vals, mem_vals = [], []
+        for _ in range(duration):
+            cpu_vals.append(psutil.cpu_percent(interval=1))
+            mem_vals.append(psutil.virtual_memory().percent)
+        out = str(Path.home() / "Desktop" / f"sysres_{datetime.now().strftime('%H%M%S')}.png")
+        fig, ax = plt.subplots()
+        ax.plot(range(1,duration+1), cpu_vals, label="CPU %", color="blue")
+        ax.plot(range(1,duration+1), mem_vals, label="RAM %", color="orange")
+        ax.set_ylim(0,100); ax.legend(); ax.set_title("系統資源使用率")
+        plt.tight_layout(); plt.savefig(out); plt.close()
+        return out
+    except Exception as e:
+        return f"❌ 失敗：{e}"
+
+
+def execute_password_mgr(action, site, master, username="", password=""):
+    try:
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.fernet import Fernet
+        import base64
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=b"pwd_manager_v1", iterations=100000)
+        key = base64.urlsafe_b64encode(kdf.derive(master.encode()))
+        f = Fernet(key)
+        db = str(Path("C:/Users/blue_/claude-telegram-bot/passwords.db"))
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE IF NOT EXISTS passwords (id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT, username TEXT, password TEXT)")
+        conn.commit()
+        if action == "save":
+            enc = f.encrypt(password.encode()).decode()
+            conn.execute("INSERT INTO passwords (site,username,password) VALUES (?,?,?)", (site, username, enc))
+            conn.commit(); conn.close(); return f"✅ 密碼已儲存：{site}"
+        elif action == "get":
+            rows = conn.execute("SELECT site,username,password FROM passwords WHERE site LIKE ?", (f"%{site}%",)).fetchall()
+            conn.close()
+            if not rows: return f"（找不到 {site} 的密碼）"
+            results = []
+            for s, u, enc_p in rows:
+                try: results.append(f"🔑 {s}\n帳號：{u}\n密碼：{f.decrypt(enc_p.encode()).decode()}")
+                except Exception: results.append(f"❌ {s} 解密失敗（主密碼錯誤？）")
+            return "\n".join(results)
+    except Exception as e:
+        return f"❌ 密碼管理失敗：{e}"
+
+
+def execute_clipboard_image(action, path=""):
+    try:
+        import win32clipboard
+        from PIL import Image
+        import io as _io
+        if action == "get":
+            win32clipboard.OpenClipboard()
+            try: data = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
+            finally: win32clipboard.CloseClipboard()
+            out = path or str(Path.home() / "Desktop" / f"clipboard_{datetime.now().strftime('%H%M%S')}.png")
+            Image.open(_io.BytesIO(data)).save(out)
+            return f"✅ 剪貼簿圖片已存：{out}"
+        elif action == "set":
+            img = Image.open(path).convert("RGB")
+            buf = _io.BytesIO(); img.save(buf,"BMP"); data = buf.getvalue()[14:]
+            win32clipboard.OpenClipboard()
+            try: win32clipboard.EmptyClipboard(); win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+            finally: win32clipboard.CloseClipboard()
+            return f"✅ 圖片已複製到剪貼簿"
+    except Exception as e:
+        return f"❌ 剪貼簿圖片失敗：{e}"
+
+
 def execute_email_read(host, user, password, folder="INBOX", count=5):
     try:
         import imapclient, email as _email
@@ -2903,9 +3352,57 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "screenshot_compare": lambda: execute_screenshot_compare(
                     tool_use.input.get("img1",""), tool_use.input.get("img2",""),
                     tool_use.input.get("output","")),
+                "reminder": lambda: execute_reminder(
+                    tool_use.input["time"], tool_use.input["message"]),
+                "webpage_shot": lambda: execute_webpage_shot(
+                    tool_use.input["action"], tool_use.input["url"],
+                    tool_use.input.get("selector","body"),
+                    tool_use.input.get("interval",60.0), tool_use.input.get("duration",3600.0)),
+                "file_tools": lambda: execute_file_tools(
+                    tool_use.input["action"], tool_use.input["path"],
+                    tool_use.input.get("dest",""), tool_use.input.get("pattern",""),
+                    tool_use.input.get("replacement",""), tool_use.input.get("ext","")),
+                "image_tools": lambda: execute_image_tools(
+                    tool_use.input["action"], tool_use.input.get("path",""),
+                    tool_use.input.get("quality",75), tool_use.input.get("width",0),
+                    tool_use.input.get("height",0), tool_use.input.get("target_lang","zh-TW")),
+                "lookup": lambda: execute_lookup(
+                    tool_use.input["action"], tool_use.input.get("ip",""),
+                    tool_use.input.get("amount",1.0), tool_use.input.get("from_cur","USD"),
+                    tool_use.input.get("to_cur","TWD")),
+                "system_tools": lambda: execute_system_tools(
+                    tool_use.input["action"], **{k:v for k,v in tool_use.input.items() if k!="action"}),
+                "tts_advanced": lambda: execute_tts_advanced(
+                    tool_use.input["action"], tool_use.input.get("text",""),
+                    tool_use.input.get("voice","zh-TW-HsiaoChenNeural")),
+                "todo_list": lambda: execute_todo(
+                    tool_use.input["action"], tool_use.input.get("task",""),
+                    tool_use.input.get("id",0)),
+                "password_mgr": lambda: execute_password_mgr(
+                    tool_use.input["action"], tool_use.input["site"],
+                    tool_use.input["master"], tool_use.input.get("username",""),
+                    tool_use.input.get("password","")),
+                "clipboard_image": lambda: execute_clipboard_image(
+                    tool_use.input["action"], tool_use.input.get("path","")),
             }
 
-            if tool_use.name == "chart":
+            if tool_use.name == "sysres_chart":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                duration = tool_use.input.get("duration", 10)
+                await update.message.reply_text(f"⏳ 監控 {duration} 秒中...")
+                out_path = await loop.run_in_executor(None, execute_sysres_chart, duration)
+                if out_path and Path(out_path).exists():
+                    with open(out_path, "rb") as f:
+                        await update.message.reply_photo(photo=f, caption="系統資源使用率")
+                    reply = f"資源圖表已生成"
+                else:
+                    reply = out_path
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
+                return
+
+            elif tool_use.name == "chart":
                 import asyncio
                 loop = asyncio.get_running_loop()
                 out_path = await loop.run_in_executor(None, execute_chart,
