@@ -9084,6 +9084,81 @@ async def _send_reply(update: Update, text: str):
             await update.message.reply_text(text[i:i+MAX])
 
 
+async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """處理用戶傳送的圖片，用 Claude Vision 分析"""
+    try:
+        chat_id = update.effective_chat.id
+        is_owner = update.effective_user.id == OWNER_ID
+        sender_name = "于晏" if is_owner else (update.effective_user.first_name or str(update.effective_user.id))
+
+        is_group = update.effective_chat.type in ("group", "supergroup")
+        caption = update.message.caption or ""
+
+        # 群組內只回應有 @ 提及 bot 的訊息
+        if is_group:
+            bot_username = context.bot.username
+            if f"@{bot_username}" not in caption:
+                return
+            caption = caption.replace(f"@{bot_username}", "").strip()
+
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+
+        # 下載最高解析度圖片
+        photo = update.message.photo[-1]
+        photo_file = await context.bot.get_file(photo.file_id)
+        photo_bytes = await photo_file.download_as_bytearray()
+
+        # 轉成 base64
+        import base64
+        img_b64 = base64.b64encode(bytes(photo_bytes)).decode("utf-8")
+
+        # 判斷格式（Telegram 預設是 JPEG）
+        media_type = "image/jpeg"
+
+        # 組裝帶圖片的 user message
+        question = caption if caption else "請描述這張圖片的內容，並說明你觀察到什麼。"
+        user_content = [
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": img_b64}},
+            {"type": "text", "text": question}
+        ]
+
+        # 儲存文字部分到歷史
+        saved_text = f"[{sender_name}]: [傳送了一張圖片] {caption}" if caption else f"[{sender_name}]: [傳送了一張圖片，請描述內容]"
+        if is_group:
+            saved_text = f"[{sender_name}]: [圖片] {caption}"
+        save_message(chat_id, "user", saved_text if is_group else (f"[圖片] {caption}" if caption else "[圖片] 請描述"))
+
+        # 取歷史（不含最後這則，因為帶圖片要特別處理）
+        history = load_history(chat_id)
+        # 把最後那則（剛存的）拿出來換成帶圖片的版本
+        if history and history[-1]["role"] == "user":
+            history = history[:-1]
+        history.append({"role": "user", "content": user_content})
+
+        base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
+        memories = load_long_term_memory(chat_id)
+        if memories:
+            mem_text = "\n".join(f"- [{m['id']}] {m['content']}" for m in memories)
+            system = base_system + f"\n\n【長期記憶】\n{mem_text}"
+        else:
+            system = base_system
+
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=system,
+            messages=history[-40:]
+        )
+
+        reply = response.content[0].text if response.content else "（無回應）"
+        save_message(chat_id, "assistant", reply)
+        log_message("<<", "小牛馬[圖]", chat_id, reply)
+        await _send_reply(update, reply)
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ 圖片分析失敗：{e}")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -10422,6 +10497,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("clear", clear))
     app.add_handler(CommandHandler("memories", memories))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_message))
     print("Bot 已啟動...")
     app.run_polling(drop_pending_updates=True)
