@@ -856,6 +856,123 @@ TOOLS = [
         }
     },
     {
+        "name": "download_file",
+        "description": "下載網路檔案到本機指定路徑。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "檔案 URL"},
+                "save_path": {"type": "string", "description": "儲存路徑（選填）"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "wake_listen",
+        "description": "持續監聽麥克風，偵測到喚醒詞時回傳。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "喚醒詞，預設「小牛馬」"},
+                "duration": {"type": "integer", "description": "每次監聽秒數，預設 5"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "right_menu",
+        "description": "在指定座標右鍵點擊，並可選擇右鍵選單項目。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "x": {"type": "integer"},
+                "y": {"type": "integer"},
+                "item": {"type": "string", "description": "要選擇的選單項目文字（選填）"}
+            },
+            "required": ["x", "y"]
+        }
+    },
+    {
+        "name": "disk_clean",
+        "description": "查看或清理 Windows 暫存資料夾，釋放磁碟空間。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list", "clean"], "description": "list=查看佔用，clean=清理"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "usb_list",
+        "description": "列出目前連接的 USB 裝置清單。",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "rdp_connect",
+        "description": "使用 mstsc 連線遠端桌面（RDP）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "description": "遠端主機 IP 或域名"},
+                "user": {"type": "string", "description": "使用者名稱（選填）"},
+                "width": {"type": "integer", "description": "解析度寬度，預設 1280"},
+                "height": {"type": "integer", "description": "解析度高度，預設 720"}
+            },
+            "required": ["host"]
+        }
+    },
+    {
+        "name": "chrome_bookmarks",
+        "description": "讀取並顯示 Chrome 瀏覽器的所有書籤。",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
+        "name": "net_share",
+        "description": "網路芳鄰（SMB）：列出、連線、中斷網路磁碟機。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list", "connect", "disconnect"]},
+                "share_path": {"type": "string", "description": "網路路徑，例如 \\\\server\\share"},
+                "drive": {"type": "string", "description": "對應磁碟代號，例如 Z:"},
+                "user": {"type": "string"},
+                "password": {"type": "string"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "font_list",
+        "description": "列出系統已安裝的字型，可用關鍵字過濾。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "搜尋關鍵字（選填）"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "wait_seconds",
+        "description": "等待指定秒數後繼續執行（用於自動化流程的延遲）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "seconds": {"type": "number", "description": "等待秒數"}
+            },
+            "required": ["seconds"]
+        }
+    },
+    {
         "name": "reminder",
         "description": "設定一次性提醒/鬧鐘，到時發出通知和語音。",
         "input_schema": {
@@ -2936,6 +3053,172 @@ def execute_automation(action, condition_type="", condition_value="", command=""
         return f"❌ 自動化失敗：{e}"
 
 
+def execute_download_file(url, save_path=""):
+    try:
+        import requests
+        if not save_path:
+            fname = url.split("/")[-1].split("?")[0] or "download"
+            save_path = str(Path.home() / "Desktop" / fname)
+        r = requests.get(url, stream=True, timeout=60)
+        r.raise_for_status()
+        with open(save_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return f"✅ 已下載：{save_path}"
+    except Exception as e:
+        return f"❌ 下載失敗：{e}"
+
+
+def execute_wake_listen(keyword="小牛馬", duration=5):
+    try:
+        import sounddevice as sd, soundfile as sf, speech_recognition as sr, tempfile, time
+        sample_rate = 16000
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            recording = sd.rec(int(int(duration) * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+            sd.wait()
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp_path = f.name
+            sf.write(tmp_path, recording, sample_rate)
+            recognizer = sr.Recognizer()
+            try:
+                with sr.AudioFile(tmp_path) as source:
+                    audio = recognizer.record(source)
+                text = recognizer.recognize_google(audio, language="zh-TW")
+                Path(tmp_path).unlink(missing_ok=True)
+                if keyword in text:
+                    return f"✅ 偵測到喚醒詞！辨識到：{text}"
+            except Exception:
+                Path(tmp_path).unlink(missing_ok=True)
+        return f"⏳ 60 秒內未偵測到喚醒詞「{keyword}」"
+    except Exception as e:
+        return f"❌ 語音監聽失敗：{e}"
+
+
+def execute_right_menu(x, y, item=""):
+    try:
+        import pyautogui, time
+        pyautogui.rightClick(int(x), int(y))
+        time.sleep(0.3)
+        if item:
+            pyautogui.write(item, interval=0.05)
+            time.sleep(0.2)
+            pyautogui.press("enter")
+            return f"✅ 已右鍵點擊並選擇：{item}"
+        return f"✅ 已右鍵點擊 ({x},{y})"
+    except Exception as e:
+        return f"❌ 右鍵選單失敗：{e}"
+
+
+def execute_disk_clean(action="list"):
+    try:
+        import tempfile, shutil
+        tmp = Path(tempfile.gettempdir())
+        if action == "list":
+            files = list(tmp.rglob("*"))
+            total = sum(f.stat().st_size for f in files if f.is_file())
+            return f"🗑️ 暫存資料夾：{tmp}\n檔案數：{len(files)}\n佔用：{total/1024/1024:.1f} MB"
+        elif action == "clean":
+            count = 0
+            for f in tmp.iterdir():
+                try:
+                    if f.is_file(): f.unlink(); count += 1
+                    elif f.is_dir(): shutil.rmtree(f, ignore_errors=True); count += 1
+                except: pass
+            return f"✅ 已清理 {count} 個暫存項目"
+    except Exception as e:
+        return f"❌ 磁碟清理失敗：{e}"
+
+
+def execute_usb_list():
+    try:
+        import subprocess
+        r = subprocess.run(["powershell", "-Command",
+            "Get-PnpDevice | Where-Object {$_.Class -eq 'USB' -and $_.Status -eq 'OK'} | Select-Object FriendlyName,InstanceId | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return f"🔌 USB 裝置：\n{r.stdout.strip()[:2000]}" if r.stdout.strip() else "⚠️ 無 USB 裝置"
+    except Exception as e:
+        return f"❌ USB 查詢失敗：{e}"
+
+
+def execute_rdp_connect(host, user="", width=1280, height=720):
+    try:
+        import subprocess
+        args = ["/v:" + host, f"/w:{width}", f"/h:{height}"]
+        if user:
+            args.append(f"/u:{user}")
+        subprocess.Popen(["mstsc"] + args)
+        return f"✅ 正在連線 RDP：{host}"
+    except Exception as e:
+        return f"❌ RDP 連線失敗：{e}"
+
+
+def execute_chrome_bookmarks():
+    try:
+        import json
+        bookmark_path = Path.home() / "AppData/Local/Google/Chrome/User Data/Default/Bookmarks"
+        if not bookmark_path.exists():
+            return "❌ 找不到 Chrome 書籤（Chrome 未安裝或路徑不同）"
+        data = json.loads(bookmark_path.read_text(encoding="utf-8"))
+        lines = []
+        def _collect(node, indent=0):
+            if node.get("type") == "url":
+                lines.append("  " * indent + f"🔗 {node['name']}  {node['url']}")
+            elif node.get("type") == "folder":
+                lines.append("  " * indent + f"📁 {node['name']}")
+                for child in node.get("children", []):
+                    _collect(child, indent + 1)
+        for root in data["roots"].values():
+            _collect(root)
+        return "📚 Chrome 書籤：\n" + "\n".join(lines[:80])
+    except Exception as e:
+        return f"❌ 讀取書籤失敗：{e}"
+
+
+def execute_net_share(action, share_path="", drive="Z:", user="", password=""):
+    try:
+        import subprocess
+        if action == "list":
+            r = subprocess.run(["net", "use"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return f"🌐 網路磁碟機：\n{r.stdout.strip()}"
+        elif action == "connect":
+            args = ["net", "use", drive, share_path]
+            if user: args += [f"/user:{user}", password]
+            r = subprocess.run(args, capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout.strip() or f"✅ 已連線 {share_path} → {drive}"
+        elif action == "disconnect":
+            r = subprocess.run(["net", "use", drive, "/delete"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout.strip() or f"✅ 已中斷 {drive}"
+    except Exception as e:
+        return f"❌ 網路芳鄰失敗：{e}"
+
+
+def execute_font_list(keyword=""):
+    try:
+        import subprocess
+        r = subprocess.run(["powershell", "-Command",
+            "[System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; [System.Drawing.FontFamily]::Families | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        fonts = r.stdout.strip().splitlines()
+        if keyword:
+            fonts = [f for f in fonts if keyword.lower() in f.lower()]
+        result = "\n".join(fonts[:50])
+        suffix = f"\n...（共 {len(fonts)} 個字型）" if len(fonts) > 50 else f"\n共 {len(fonts)} 個字型"
+        return f"🔤 字型清單：\n{result}{suffix}"
+    except Exception as e:
+        return f"❌ 字型查詢失敗：{e}"
+
+
+def execute_wait_seconds(seconds):
+    try:
+        import time
+        s = float(seconds)
+        time.sleep(min(s, 60))
+        return f"✅ 已等待 {s} 秒"
+    except Exception as e:
+        return f"❌ 等待失敗：{e}"
+
+
 def execute_firewall(action, name="", port=None, protocol="TCP", direction="Inbound"):
     try:
         import subprocess
@@ -4704,6 +4987,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "lock_screen": lambda: execute_lock_screen(tool_use.input["action"]),
                 "defender": lambda: execute_defender(
                     tool_use.input["action"], tool_use.input.get("path","")),
+                "download_file": lambda: execute_download_file(
+                    tool_use.input["url"], tool_use.input.get("save_path","")),
+                "wake_listen": lambda: execute_wake_listen(
+                    tool_use.input.get("keyword","小牛馬"), tool_use.input.get("duration",5)),
+                "right_menu": lambda: execute_right_menu(
+                    tool_use.input["x"], tool_use.input["y"], tool_use.input.get("item","")),
+                "disk_clean": lambda: execute_disk_clean(tool_use.input["action"]),
+                "usb_list": lambda: execute_usb_list(),
+                "rdp_connect": lambda: execute_rdp_connect(
+                    tool_use.input["host"], tool_use.input.get("user",""),
+                    tool_use.input.get("width",1280), tool_use.input.get("height",720)),
+                "chrome_bookmarks": lambda: execute_chrome_bookmarks(),
+                "net_share": lambda: execute_net_share(
+                    tool_use.input["action"], tool_use.input.get("share_path",""),
+                    tool_use.input.get("drive","Z:"), tool_use.input.get("user",""),
+                    tool_use.input.get("password","")),
+                "font_list": lambda: execute_font_list(tool_use.input.get("keyword","")),
+                "wait_seconds": lambda: execute_wait_seconds(tool_use.input["seconds"]),
             }
 
             if tool_use.name == "send_voice":
