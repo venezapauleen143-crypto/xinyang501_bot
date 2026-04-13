@@ -9079,6 +9079,8 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         reply_text = response.content[0].text if response.content else "..."
+        if _voice_is_group and not is_owner:
+            reply_text = _fix_group_reply(reply_text, sender_name)
         save_message(chat_id, "assistant", reply_text)
         log_message("<<", "小牛馬", chat_id, reply_text)
 
@@ -9094,6 +9096,18 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     except Exception as e:
         await update.message.reply_text(f"❌ 語音處理失敗：{e}")
+
+
+def _fix_group_reply(text: str, sender_name: str) -> str:
+    """非主人的群組回覆：強制移除所有「于晏哥」稱呼，替換為對方名字"""
+    import re
+    # 結尾「于晏哥」（含前後標點空格）
+    text = re.sub(r'[，,、\s]*于晏哥[！!。～~\s]*$', '', text).strip()
+    # 開頭「于晏哥，」
+    text = re.sub(r'^于晏哥[，,、\s]+', '', text).strip()
+    # 中間任何「于晏哥」→ 換成對方名字
+    text = text.replace('于晏哥', sender_name)
+    return text
 
 
 async def _send_reply(update: Update, text: str):
@@ -9239,6 +9253,8 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
         reply = next((b.text for b in response.content if hasattr(b, "text")), "（無法解析回應）")
+        if is_group and not is_owner:
+            reply = _fix_group_reply(reply, sender_name)
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬[圖]", chat_id, reply)
         await _send_reply(update, reply)
@@ -9265,6 +9281,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_group = update.effective_chat.type in ("group", "supergroup")
         is_owner = update.effective_user.id == OWNER_ID
         sender_name = "于晏" if is_owner else (update.effective_user.first_name or str(update.effective_user.id))
+
+        async def _fr(text: str):
+            if is_group and not is_owner:
+                text = _fix_group_reply(text, sender_name)
+            await _send_reply(update, text)
 
         # 群組內只回應有 @ 提及 bot 的訊息
         if is_group:
@@ -9967,7 +9988,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply = f"🔊 語音訊息已傳送"
                 except Exception as e:
                     reply = f"語音生成失敗：{e}\n\n{text}"
-                    await _send_reply(update, reply)
+                    await _fr(reply)
                 save_message(chat_id, "assistant", text)
                 return
 
@@ -9999,7 +10020,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                 reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "video_gen":
@@ -10040,7 +10061,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "sysres_chart":
@@ -10056,7 +10077,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "chart":
@@ -10074,7 +10095,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "screen_stream":
@@ -10088,7 +10109,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_photo(photo=img_bytes, caption=f"📸 {i}/{len(screenshots)}")
                 reply = f"串流完成，共傳送 {len(screenshots)} 張截圖"
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name in simple_tools:
@@ -10136,7 +10157,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in _cur_resp.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else _last_result
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "screen_vision":
@@ -10158,7 +10179,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else analysis
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "find_image_on_screen":
@@ -10182,7 +10203,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else result
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "browser_control":
@@ -10216,7 +10237,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else tool_result_text
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "long_term_memory":
@@ -10249,7 +10270,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else tool_result
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "get_stock":
@@ -10355,7 +10376,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in _dc_cur_resp.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else _dc_last_msg
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "manage_schedule":
@@ -10384,7 +10405,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else tool_result
                 save_message(chat_id, "assistant", reply)
-                await _send_reply(update, reply)
+                await _fr(reply)
                 return
 
             elif tool_use.name == "generate_image":
@@ -10413,7 +10434,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = text_blocks[0]
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬", chat_id, reply)
-        await _send_reply(update, reply)
+        await _fr(reply)
 
     except Exception as e:
         logging.error(f"handle_message error: {e}", exc_info=True)
