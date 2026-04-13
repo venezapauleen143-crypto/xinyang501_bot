@@ -617,6 +617,18 @@ TOOLS = [
         }
     },
     {
+        "name": "send_voice",
+        "description": "將文字轉成語音並以 Telegram 語音訊息傳送給用戶。當用戶說「用語音說」、「語音回答」、「唸給我聽」、「說出來」等時使用此工具。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "要轉換成語音的文字內容"},
+                "voice": {"type": "string", "description": "語音名稱，預設 zh-TW-HsiaoChenNeural（女聲）。男聲用 zh-TW-YunJheNeural"}
+            },
+            "required": ["text"]
+        }
+    },
+    {
         "name": "todo_list",
         "description": "管理本地任務清單：新增、列出、完成、刪除任務。",
         "input_schema": {
@@ -2085,6 +2097,35 @@ def execute_system_tools(action, **kwargs):
         return f"❌ 失敗：{e}"
 
 
+def generate_voice_ogg(text: str, voice: str = "zh-TW-HsiaoChenNeural") -> bytes:
+    """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）"""
+    import edge_tts, asyncio, tempfile, subprocess as sp
+    import imageio_ffmpeg
+
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    tmp_mp3 = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+    tmp_mp3.close()
+    tmp_ogg = tempfile.NamedTemporaryFile(suffix=".ogg", delete=False)
+    tmp_ogg.close()
+
+    # 生成 MP3
+    async def _gen():
+        await edge_tts.Communicate(text, voice).save(tmp_mp3.name)
+    asyncio.run(_gen())
+
+    # 轉換成 OGG OPUS（Telegram voice 格式）
+    sp.run([
+        ffmpeg_exe, "-y", "-i", tmp_mp3.name,
+        "-c:a", "libopus", "-b:a", "64k",
+        tmp_ogg.name
+    ], capture_output=True)
+
+    data = Path(tmp_ogg.name).read_bytes()
+    Path(tmp_mp3.name).unlink(missing_ok=True)
+    Path(tmp_ogg.name).unlink(missing_ok=True)
+    return data
+
+
 def execute_tts_advanced(action, text="", voice="zh-TW-HsiaoChenNeural"):
     try:
         import edge_tts, asyncio
@@ -3387,7 +3428,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["action"], tool_use.input.get("path","")),
             }
 
-            if tool_use.name == "sysres_chart":
+            if tool_use.name == "send_voice":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                text = tool_use.input["text"]
+                voice = tool_use.input.get("voice", "zh-TW-HsiaoChenNeural")
+                await update.message.reply_chat_action("record_voice")
+                try:
+                    ogg_data = await loop.run_in_executor(None, generate_voice_ogg, text, voice)
+                    import io as _io
+                    await update.message.reply_voice(voice=_io.BytesIO(ogg_data))
+                    reply = f"🔊 語音訊息已傳送"
+                except Exception as e:
+                    reply = f"語音生成失敗：{e}\n\n{text}"
+                    await update.message.reply_text(reply)
+                save_message(chat_id, "assistant", text)
+                return
+
+            elif tool_use.name == "sysres_chart":
                 import asyncio
                 loop = asyncio.get_running_loop()
                 duration = tool_use.input.get("duration", 10)
