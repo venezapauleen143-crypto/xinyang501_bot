@@ -3711,6 +3711,203 @@ def window_screenshot(title_keyword: str, output: str = ""):
         print(f"❌ 視窗截圖失敗：{e}")
 
 
+# ── Wave 12：AI視覺循環/監控告警/間隔排程/等待文字/瀏覽器進階/語音命令/通知攔截/資料處理/WOL/剪貼簿歷史 ──
+
+def vision_loop(goal: str, max_steps: int = 20, interval: float = 3.0, timeout: float = 120.0):
+    import pyautogui, anthropic, base64, io as _io, time, json, re, os
+    _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    steps = 0; start = time.time(); log = []
+    while steps < max_steps and (time.time() - start) < timeout:
+        screenshot = pyautogui.screenshot()
+        buf = _io.BytesIO(); screenshot.save(buf, format="PNG")
+        img_b64 = base64.standard_b64encode(buf.getvalue()).decode()
+        resp = _client.messages.create(model="claude-sonnet-4-6", max_tokens=512, messages=[{"role":"user","content":[
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":img_b64}},
+            {"type":"text","text":f"目標：{goal}\n已執行：{log}\n回答 JSON：{{\"done\":bool,\"action\":\"說明\",\"type\":\"click/type/key/wait\",\"x\":0,\"y\":0,\"text\":\"\"}}"}
+        ]}])
+        m = re.search(r'\{.*\}', resp.content[0].text, re.DOTALL)
+        if not m: steps += 1; time.sleep(interval); continue
+        act = json.loads(m.group())
+        if act.get("done"): print(f"✅ 目標達成！{steps} 步\n" + "\n".join(log)); return
+        if act.get("type") == "click" and act.get("x"): pyautogui.click(act["x"], act["y"])
+        elif act.get("type") == "type" and act.get("text"): pyautogui.typewrite(act["text"], interval=0.05)
+        elif act.get("type") == "key" and act.get("text"): pyautogui.press(act["text"])
+        elif act.get("type") == "wait": time.sleep(2)
+        log.append(f"步驟{steps+1}: {act.get('action','')}")
+        steps += 1; time.sleep(interval)
+    print(f"⏳ 完成 {steps} 步\n" + "\n".join(log))
+
+def alert_monitor(condition: str, threshold: str, target: str = "", interval: int = 30, duration: int = 3600):
+    import psutil, time
+    end = time.time() + duration
+    print(f"📊 監控啟動：{condition} {threshold}，每 {interval}s 檢查")
+    while time.time() < end:
+        try:
+            triggered = False; msg = ""
+            if condition == "cpu_above":
+                v = psutil.cpu_percent(1)
+                if v > float(threshold): triggered = True; msg = f"CPU {v:.1f}% > {threshold}%"
+            elif condition == "mem_above":
+                v = psutil.virtual_memory().percent
+                if v > float(threshold): triggered = True; msg = f"記憶體 {v:.1f}% > {threshold}%"
+            elif condition == "disk_above":
+                v = psutil.disk_usage("/").percent
+                if v > float(threshold): triggered = True; msg = f"磁碟 {v:.1f}% > {threshold}%"
+            elif condition == "process_missing":
+                pnames = [p.name().lower() for p in psutil.process_iter(["name"])]
+                if not any(target.lower() in n for n in pnames): triggered = True; msg = f"程序 {target} 已停止"
+            elif condition == "screen_text_found":
+                import pyautogui, easyocr, tempfile
+                reader = easyocr.Reader(["ch_tra","en"], gpu=False)
+                screenshot = pyautogui.screenshot()
+                tmp = tempfile.mktemp(suffix=".png"); screenshot.save(tmp)
+                results = reader.readtext(tmp, detail=0); Path(tmp).unlink(missing_ok=True)
+                if target.lower() in " ".join(results).lower(): triggered = True; msg = f"螢幕出現文字：{target}"
+            if triggered: print(f"🔔 告警觸發：{msg}")
+        except Exception as e: print(f"❌ {e}")
+        time.sleep(interval)
+    print("✅ 監控結束")
+
+def interval_schedule(command: str, every_minutes: float = 60.0, repeat: int = 0, duration_hours: float = 0.0):
+    import subprocess, time
+    end = time.time() + duration_hours * 3600 if duration_hours > 0 else float("inf")
+    count = 0; max_count = repeat if repeat > 0 else float("inf")
+    print(f"⏱️ 間隔排程啟動：{command}，每 {every_minutes} 分鐘")
+    while time.time() < end and count < max_count:
+        subprocess.Popen(command, shell=True)
+        count += 1; print(f"✅ 第 {count} 次執行")
+        time.sleep(every_minutes * 60)
+    print(f"✅ 排程結束，共執行 {count} 次")
+
+def wait_for_text(text: str, timeout: float = 60.0, interval: float = 2.0, region: str = ""):
+    import pyautogui, easyocr, time, tempfile
+    reader = easyocr.Reader(["ch_tra","en"], gpu=False)
+    start = time.time()
+    reg = None
+    if region:
+        parts = [int(v) for v in region.split(",")]
+        if len(parts) == 4: reg = tuple(parts)
+    while time.time() - start < timeout:
+        screenshot = pyautogui.screenshot(region=reg)
+        tmp = tempfile.mktemp(suffix=".png"); screenshot.save(tmp)
+        results = reader.readtext(tmp, detail=0); Path(tmp).unlink(missing_ok=True)
+        if text.lower() in " ".join(results).lower():
+            print(f"✅ 偵測到文字「{text}」（{time.time()-start:.1f}s）"); return
+        time.sleep(interval)
+    print(f"⏳ 超時，未偵測到「{text}」")
+
+def data_process(action: str, path: str = "", output: str = "", query: str = "", data: str = "", paths: str = ""):
+    import json, csv
+    try:
+        if action == "read_json":
+            content = json.loads(Path(path).read_text(encoding="utf-8"))
+            if isinstance(content, list): print(f"JSON {len(content)} 筆：\n{json.dumps(content[:5], ensure_ascii=False, indent=2)}")
+            else: print(json.dumps(content, ensure_ascii=False, indent=2)[:2000])
+        elif action == "write_json":
+            Path(output or path).write_text(json.dumps(json.loads(data), ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"✅ JSON 已儲存：{output or path}")
+        elif action == "read_csv":
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                rows = list(csv.DictReader(f))
+            print(f"CSV {len(rows)} 筆：\n{json.dumps(rows[:5], ensure_ascii=False, indent=2)}")
+        elif action == "write_csv":
+            obj = json.loads(data)
+            with open(output or path, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.DictWriter(f, fieldnames=obj[0].keys()); w.writeheader(); w.writerows(obj)
+            print(f"✅ CSV 已儲存：{output or path}")
+        elif action == "filter":
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                rows = list(csv.DictReader(f))
+            filtered = [r for r in rows if eval(query, {"__builtins__":{}}, r)]
+            print(f"過濾 {len(filtered)}/{len(rows)} 筆：\n{json.dumps(filtered[:10], ensure_ascii=False, indent=2)}")
+        elif action == "stats":
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                rows = list(csv.DictReader(f))
+            for col in rows[0].keys():
+                vals = [r[col] for r in rows if r[col]]
+                try:
+                    nums = [float(v) for v in vals]
+                    print(f"{col}: min={min(nums)} max={max(nums)} avg={sum(nums)/len(nums):.2f}")
+                except: print(f"{col}: {len(vals)} 筆，{len(set(vals))} 種")
+        elif action == "convert":
+            ext_in = Path(path).suffix.lower(); ext_out = Path(output).suffix.lower()
+            if ext_in == ".json" and ext_out == ".csv":
+                obj = json.loads(Path(path).read_text(encoding="utf-8"))
+                if not isinstance(obj, list): obj = [obj]
+                with open(output, "w", newline="", encoding="utf-8-sig") as f:
+                    w = csv.DictWriter(f, fieldnames=obj[0].keys()); w.writeheader(); w.writerows(obj)
+            elif ext_in == ".csv" and ext_out == ".json":
+                with open(path, encoding="utf-8-sig", errors="replace") as f:
+                    rows = list(csv.DictReader(f))
+                Path(output).write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"✅ 已轉換：{output}")
+        elif action == "merge":
+            all_rows = []
+            for p in paths.split(","):
+                p = p.strip()
+                if p.endswith(".csv"):
+                    with open(p, encoding="utf-8-sig", errors="replace") as f: all_rows.extend(list(csv.DictReader(f)))
+                elif p.endswith(".json"):
+                    obj = json.loads(Path(p).read_text(encoding="utf-8"))
+                    if isinstance(obj, list): all_rows.extend(obj)
+            out = output or str(Path(paths.split(",")[0].strip()).parent / "merged.csv")
+            with open(out, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.DictWriter(f, fieldnames=all_rows[0].keys()); w.writeheader(); w.writerows(all_rows)
+            print(f"✅ 合併 {len(all_rows)} 筆 → {out}")
+        elif action == "to_table":
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                rows = list(csv.DictReader(f))
+            cols = list(rows[0].keys())
+            print(" | ".join(cols))
+            print("-" * 60)
+            for r in rows[:20]: print(" | ".join(str(r.get(c,"")) for c in cols))
+    except Exception as e:
+        print(f"❌ 資料處理失敗：{e}")
+
+def wake_on_lan(mac: str, broadcast: str = "255.255.255.255", port: int = 9):
+    import socket
+    try:
+        mac_clean = mac.replace(":","").replace("-","")
+        magic = b"\xff" * 6 + bytes.fromhex(mac_clean) * 16
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            s.sendto(magic, (broadcast, port))
+        print(f"✅ WOL 封包已送出 → {mac}")
+    except Exception as e:
+        print(f"❌ WOL 失敗：{e}")
+
+_cb_history = []
+
+def clipboard_history(action: str = "list", index: int = 0):
+    import pyperclip, threading, time
+    global _cb_history
+    if action == "start_watch":
+        def _w():
+            last = ""
+            while True:
+                try:
+                    cur = pyperclip.paste()
+                    if cur != last and cur:
+                        _cb_history.insert(0, cur)
+                        if len(_cb_history) > 50: _cb_history.pop()
+                        last = cur
+                except: pass
+                time.sleep(1)
+        threading.Thread(target=_w, daemon=True).start()
+        print("✅ 剪貼簿歷史監控已啟動")
+    elif action == "list":
+        if not _cb_history: print("⚠️ 歷史為空（先執行 start_watch）"); return
+        for i, item in enumerate(_cb_history[:20]): print(f"[{i}] {item[:80]}")
+    elif action == "get":
+        if index < len(_cb_history): print(_cb_history[index])
+        else: print(f"⚠️ 索引 {index} 超出範圍")
+    elif action == "set":
+        if index < len(_cb_history): pyperclip.copy(_cb_history[index]); print(f"✅ 已復原 [{index}]")
+        else: print(f"⚠️ 索引 {index} 超出範圍")
+    elif action == "clear":
+        _cb_history.clear(); print("✅ 已清除")
+
+
 # ── Wave 11：防火牆/程序/電源/事件/時間/UI自動化/巨集/顏色/攝影機/多螢幕/印表機/WiFi/代理/鎖定/Defender ──
 
 def firewall(action: str, name: str = "", port: int = None, protocol: str = "TCP", direction: str = "Inbound"):
@@ -4281,6 +4478,13 @@ if __name__ == "__main__":
         "proxy":             lambda: proxy(args[0], args[1] if len(args)>1 else ""),
         "lock_screen":       lambda: lock_screen(args[0] if args else "lock"),
         "defender":          lambda: defender(args[0], args[1] if len(args)>1 else ""),
+        "vision_loop":       lambda: vision_loop(" ".join(args), 20, 3.0, 120.0),
+        "alert_monitor":     lambda: alert_monitor(args[0], args[1] if len(args)>1 else "80", args[2] if len(args)>2 else "", int(args[3]) if len(args)>3 else 30, int(args[4]) if len(args)>4 else 3600),
+        "interval_schedule": lambda: interval_schedule(" ".join(args[:-2]) if len(args)>2 else args[0], float(args[-2]) if len(args)>1 else 60.0, int(args[-1]) if len(args)>2 else 0),
+        "wait_for_text":     lambda: wait_for_text(" ".join(args[:-1]) if len(args)>1 else args[0], float(args[-1]) if len(args)>1 and args[-1].replace(".","").isdigit() else 60.0),
+        "data_process":      lambda: data_process(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
+        "wake_on_lan":       lambda: wake_on_lan(args[0], args[1] if len(args)>1 else "255.255.255.255", int(args[2]) if len(args)>2 else 9),
+        "clipboard_history": lambda: clipboard_history(args[0] if args else "list", int(args[1]) if len(args)>1 else 0),
     }
 
     if tool not in tools:

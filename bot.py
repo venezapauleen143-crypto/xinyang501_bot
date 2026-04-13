@@ -856,6 +856,151 @@ TOOLS = [
         }
     },
     {
+        "name": "vision_loop",
+        "description": "AI 視覺自動化循環：持續截圖讓 AI 判斷畫面狀態並自動執行動作，直到達成目標或超時。真正無人值守自動化的核心。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "goal": {"type": "string", "description": "目標描述，例如「等待安裝完成後點擊 Finish」"},
+                "max_steps": {"type": "integer", "description": "最大執行步數，預設 20"},
+                "interval": {"type": "number", "description": "每步間隔秒數，預設 3"},
+                "timeout": {"type": "number", "description": "總超時秒數，預設 120"}
+            },
+            "required": ["goal"]
+        }
+    },
+    {
+        "name": "alert_monitor",
+        "description": "監控告警：持續監控 CPU/記憶體/程序/溫度/文字，條件觸發時主動發 Telegram 通知。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","list"]},
+                "name": {"type": "string", "description": "告警名稱"},
+                "condition": {"type": "string", "enum": ["cpu_above","mem_above","disk_above","process_missing","process_running","screen_text_found","temperature_above"]},
+                "threshold": {"type": "string", "description": "閾值，例如 80 代表 80%"},
+                "target": {"type": "string", "description": "監控目標（程序名稱或螢幕文字）"},
+                "interval": {"type": "integer", "description": "檢查間隔秒數，預設 30"},
+                "chat_id": {"type": "integer", "description": "通知的 Telegram chat_id，預設發給主人"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "interval_schedule",
+        "description": "間隔排程：每隔 N 分鐘/小時執行指定腳本或指令，可設定持續時間或執行次數。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","list"]},
+                "name": {"type": "string", "description": "排程名稱"},
+                "command": {"type": "string", "description": "要執行的指令或腳本路徑"},
+                "every_minutes": {"type": "number", "description": "每隔幾分鐘執行，預設 60"},
+                "repeat": {"type": "integer", "description": "執行次數，0=無限，預設 0"},
+                "duration_hours": {"type": "number", "description": "持續執行小時數，0=無限，預設 0"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "wait_for_text",
+        "description": "等待螢幕上出現指定文字才繼續執行，常用於自動化流程中等待載入或安裝完成。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "要等待的文字"},
+                "timeout": {"type": "number", "description": "超時秒數，預設 60"},
+                "interval": {"type": "number", "description": "檢查間隔秒數，預設 2"},
+                "region": {"type": "string", "description": "監控區域 x,y,w,h（選填，預設全螢幕）"}
+            },
+            "required": ["text"]
+        }
+    },
+    {
+        "name": "browser_advanced",
+        "description": "瀏覽器進階自動化：等待元素出現、iframe 切換、Cookie 管理、多分頁切換、表單自動填寫、下拉選單。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["wait_element","switch_frame","get_cookies","set_cookie","list_tabs","switch_tab","new_tab","close_tab","fill_form","select_option","scroll_to","get_html","wait_url"]},
+                "selector": {"type": "string", "description": "CSS 選擇器或 XPath"},
+                "value": {"type": "string", "description": "填入值或 Cookie 值"},
+                "name": {"type": "string", "description": "Cookie 名稱或分頁標題關鍵字"},
+                "tab_index": {"type": "integer", "description": "分頁索引（switch_tab 使用）"},
+                "timeout": {"type": "number", "description": "等待超時秒數，預設 30"},
+                "url_pattern": {"type": "string", "description": "等待的 URL 關鍵字（wait_url 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "voice_cmd",
+        "description": "持續語音命令模式：背景持續監聽麥克風，說話即可控制電腦執行命令，說「停止」結束。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop"]},
+                "duration": {"type": "number", "description": "持續監聽秒數，預設 300 (5分鐘)"},
+                "language": {"type": "string", "description": "語音辨識語言，預設 zh-TW"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "win_notify_relay",
+        "description": "Windows 通知攔截：偵測 Windows 系統通知，自動轉發到 Telegram。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["start","stop","status"]},
+                "duration": {"type": "number", "description": "監控秒數，預設 3600"},
+                "filter_app": {"type": "string", "description": "只轉發指定 App 的通知（選填）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "data_process",
+        "description": "JSON/CSV 資料處理：讀取、寫入、過濾、轉換、合併、統計 JSON 和 CSV 檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["read_json","write_json","read_csv","write_csv","filter","convert","merge","stats","to_table"]},
+                "path": {"type": "string", "description": "檔案路徑"},
+                "output": {"type": "string", "description": "輸出路徑"},
+                "query": {"type": "string", "description": "過濾條件，例如 age>18"},
+                "data": {"type": "string", "description": "JSON 字串資料（write 使用）"},
+                "paths": {"type": "string", "description": "多個檔案路徑，逗號分隔（merge 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "wake_on_lan",
+        "description": "發送 WOL 魔法封包，遠端喚醒區域網路內已關機的電腦。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "mac": {"type": "string", "description": "目標電腦 MAC 位址，例如 AA:BB:CC:DD:EE:FF"},
+                "broadcast": {"type": "string", "description": "廣播地址，預設 255.255.255.255"},
+                "port": {"type": "integer", "description": "UDP 埠，預設 9"}
+            },
+            "required": ["mac"]
+        }
+    },
+    {
+        "name": "clipboard_history",
+        "description": "剪貼簿歷史：查看多筆歷史記錄、切換到指定歷史項目、清除歷史。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list","get","set","clear","start_watch","stop_watch"]},
+                "index": {"type": "integer", "description": "歷史索引（get/set 使用，0=最新）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "download_file",
         "description": "下載網路檔案到本機指定路徑。",
         "input_schema": {
@@ -3053,6 +3198,492 @@ def execute_automation(action, condition_type="", condition_value="", command=""
         return f"❌ 自動化失敗：{e}"
 
 
+_alert_monitors = {}
+_interval_schedules = {}
+_clipboard_hist = []
+_voice_cmd_running = False
+
+def execute_vision_loop(goal, max_steps=20, interval=3.0, timeout=120.0):
+    try:
+        import pyautogui, anthropic, base64, io, time
+        steps = 0
+        start = time.time()
+        log = []
+        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        while steps < int(max_steps) and (time.time() - start) < float(timeout):
+            screenshot = pyautogui.screenshot()
+            buf = io.BytesIO()
+            screenshot.save(buf, format="PNG")
+            img_b64 = base64.standard_b64encode(buf.getvalue()).decode()
+            resp = _client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=512,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                        {"type": "text", "text": f"目標：{goal}\n已執行步驟：{log}\n\n請分析畫面，回答：\n1. 目標是否已達成？（是/否）\n2. 如果否，下一步應該怎麼做？請用 JSON 格式回答：{{\"done\": true/false, \"action\": \"動作說明\", \"type\": \"click/type/key/wait\", \"x\": 0, \"y\": 0, \"text\": \"\"}}"}
+                    ]
+                }]
+            )
+            import json, re
+            text = resp.content[0].text
+            m = re.search(r'\{.*\}', text, re.DOTALL)
+            if not m:
+                log.append(f"步驟{steps+1}: AI回應無法解析")
+                steps += 1; time.sleep(float(interval)); continue
+            action = json.loads(m.group())
+            if action.get("done"):
+                return f"✅ 目標達成！共執行 {steps} 步\n" + "\n".join(log)
+            act_type = action.get("type","")
+            act_desc = action.get("action","")
+            if act_type == "click" and action.get("x"):
+                pyautogui.click(action["x"], action["y"])
+            elif act_type == "type" and action.get("text"):
+                pyautogui.typewrite(action["text"], interval=0.05)
+            elif act_type == "key" and action.get("text"):
+                pyautogui.press(action["text"])
+            elif act_type == "wait":
+                time.sleep(2)
+            log.append(f"步驟{steps+1}: {act_desc}")
+            steps += 1
+            time.sleep(float(interval))
+        return f"⏳ 達到上限（{steps} 步 / {int(time.time()-start)}s）\n執行記錄：\n" + "\n".join(log)
+    except Exception as e:
+        return f"❌ 視覺自動化循環失敗：{e}"
+
+
+def execute_alert_monitor(action, name="", condition="", threshold="", target="", interval=30, chat_id=None, _bot_send=None):
+    global _alert_monitors
+    try:
+        import threading, time, psutil
+        if action == "list":
+            if not _alert_monitors:
+                return "⚠️ 無執行中的監控"
+            return "📊 監控清單：\n" + "\n".join(f"- {k}: {v['condition']} {v['threshold']}" for k,v in _alert_monitors.items())
+        elif action == "stop":
+            if name in _alert_monitors:
+                _alert_monitors[name]["running"] = False
+                del _alert_monitors[name]
+                return f"✅ 已停止監控：{name}"
+            return f"⚠️ 找不到監控：{name}"
+        elif action == "start":
+            if name in _alert_monitors:
+                return f"⚠️ 已有同名監控：{name}"
+            cfg = {"condition": condition, "threshold": threshold, "target": target, "running": True}
+            _alert_monitors[name] = cfg
+            send_chat_id = chat_id or OWNER_ID
+            def _monitor():
+                import easyocr
+                reader = None
+                while _alert_monitors.get(name, {}).get("running"):
+                    try:
+                        triggered = False
+                        msg = ""
+                        val = threshold
+                        if condition == "cpu_above":
+                            v = psutil.cpu_percent(1)
+                            if v > float(val): triggered = True; msg = f"⚠️ CPU 使用率 {v:.1f}% 超過 {val}%"
+                        elif condition == "mem_above":
+                            v = psutil.virtual_memory().percent
+                            if v > float(val): triggered = True; msg = f"⚠️ 記憶體使用率 {v:.1f}% 超過 {val}%"
+                        elif condition == "disk_above":
+                            v = psutil.disk_usage("/").percent
+                            if v > float(val): triggered = True; msg = f"⚠️ 磁碟使用率 {v:.1f}% 超過 {val}%"
+                        elif condition == "process_missing":
+                            pnames = [p.name().lower() for p in psutil.process_iter(["name"])]
+                            if not any(target.lower() in n for n in pnames): triggered = True; msg = f"⚠️ 程序 {target} 已停止執行"
+                        elif condition == "process_running":
+                            pnames = [p.name().lower() for p in psutil.process_iter(["name"])]
+                            if any(target.lower() in n for n in pnames): triggered = True; msg = f"ℹ️ 程序 {target} 正在執行"
+                        elif condition == "screen_text_found":
+                            import pyautogui
+                            if reader is None: reader = easyocr.Reader(["ch_tra","en"], gpu=False)
+                            screenshot = pyautogui.screenshot()
+                            import tempfile; tmp = tempfile.mktemp(suffix=".png"); screenshot.save(tmp)
+                            results = reader.readtext(tmp, detail=0)
+                            full_text = " ".join(results)
+                            Path(tmp).unlink(missing_ok=True)
+                            if target.lower() in full_text.lower(): triggered = True; msg = f"ℹ️ 螢幕偵測到文字：{target}"
+                        if triggered and _bot_send:
+                            import asyncio
+                            asyncio.run_coroutine_threadsafe(_bot_send(send_chat_id, f"🔔 【監控告警】{name}\n{msg}"), _bot_send.__self__.loop if hasattr(_bot_send, '__self__') else asyncio.get_event_loop())
+                    except Exception:
+                        pass
+                    time.sleep(int(interval))
+            threading.Thread(target=_monitor, daemon=True).start()
+            return f"✅ 監控已啟動：{name}（{condition} {threshold}，每 {interval}s 檢查）"
+    except Exception as e:
+        return f"❌ 監控告警失敗：{e}"
+
+
+def execute_interval_schedule(action, name="", command="", every_minutes=60.0, repeat=0, duration_hours=0.0):
+    global _interval_schedules
+    try:
+        import threading, time, subprocess
+        if action == "list":
+            if not _interval_schedules:
+                return "⚠️ 無執行中排程"
+            return "⏱️ 間隔排程：\n" + "\n".join(f"- {k}: 每{v['mins']}分鐘，已執行{v['count']}次" for k,v in _interval_schedules.items())
+        elif action == "stop":
+            if name in _interval_schedules:
+                _interval_schedules[name]["running"] = False
+                del _interval_schedules[name]
+                return f"✅ 已停止排程：{name}"
+            return f"⚠️ 找不到排程：{name}"
+        elif action == "start":
+            if name in _interval_schedules:
+                return f"⚠️ 已有同名排程：{name}"
+            cfg = {"command": command, "mins": every_minutes, "repeat": repeat, "count": 0, "running": True}
+            _interval_schedules[name] = cfg
+            def _run():
+                import time as t
+                end_time = t.time() + float(duration_hours) * 3600 if duration_hours > 0 else float("inf")
+                max_count = int(repeat) if repeat > 0 else float("inf")
+                while _interval_schedules.get(name, {}).get("running"):
+                    if t.time() > end_time or _interval_schedules.get(name, {}).get("count", 0) >= max_count:
+                        _interval_schedules.pop(name, None); break
+                    subprocess.Popen(command, shell=True)
+                    _interval_schedules[name]["count"] = _interval_schedules[name].get("count", 0) + 1
+                    t.sleep(float(every_minutes) * 60)
+            threading.Thread(target=_run, daemon=True).start()
+            desc = f"每 {every_minutes} 分鐘" + (f"，共 {repeat} 次" if repeat else "") + (f"，持續 {duration_hours} 小時" if duration_hours else "")
+            return f"✅ 間隔排程已啟動：{name}（{desc}）"
+    except Exception as e:
+        return f"❌ 間隔排程失敗：{e}"
+
+
+def execute_wait_for_text(text, timeout=60.0, interval=2.0, region=""):
+    try:
+        import pyautogui, easyocr, time, tempfile
+        reader = easyocr.Reader(["ch_tra","en"], gpu=False)
+        start = time.time()
+        reg = None
+        if region:
+            parts = [int(v) for v in region.split(",")]
+            if len(parts) == 4: reg = tuple(parts)
+        while time.time() - start < float(timeout):
+            screenshot = pyautogui.screenshot(region=reg)
+            tmp = tempfile.mktemp(suffix=".png")
+            screenshot.save(tmp)
+            results = reader.readtext(tmp, detail=0)
+            Path(tmp).unlink(missing_ok=True)
+            full = " ".join(results)
+            if text.lower() in full.lower():
+                elapsed = time.time() - start
+                return f"✅ 偵測到文字「{text}」（等待 {elapsed:.1f}s）"
+            time.sleep(float(interval))
+        return f"⏳ 超時（{timeout}s），未偵測到文字「{text}」"
+    except Exception as e:
+        return f"❌ 等待文字失敗：{e}"
+
+
+_browser_page = None
+
+def execute_browser_advanced(action, selector="", value="", name="", tab_index=0, timeout=30.0, url_pattern=""):
+    global _browser_page
+    try:
+        from playwright.sync_api import sync_playwright
+        import json
+        if _browser_page is None or _browser_page.is_closed():
+            return "⚠️ 瀏覽器未開啟，請先用 browser_control 開啟瀏覽器"
+        page = _browser_page
+        if action == "wait_element":
+            page.wait_for_selector(selector, timeout=float(timeout)*1000)
+            return f"✅ 元素已出現：{selector}"
+        elif action == "switch_frame":
+            frame = page.frame(selector) or page.frame_locator(selector).first
+            return f"✅ 已切換 iframe：{selector}"
+        elif action == "get_cookies":
+            cookies = page.context.cookies()
+            lines = [f"{c['name']}={c['value'][:30]}" for c in cookies[:20]]
+            return "🍪 Cookies：\n" + "\n".join(lines)
+        elif action == "set_cookie":
+            page.context.add_cookies([{"name": name, "value": value, "url": page.url}])
+            return f"✅ Cookie 已設定：{name}={value}"
+        elif action == "list_tabs":
+            pages = page.context.pages
+            lines = [f"{i}: {p.title()} - {p.url[:50]}" for i, p in enumerate(pages)]
+            return "📑 所有分頁：\n" + "\n".join(lines)
+        elif action == "switch_tab":
+            pages = page.context.pages
+            if tab_index < len(pages):
+                pages[tab_index].bring_to_front()
+                _browser_page = pages[tab_index]
+                return f"✅ 已切換到分頁 {tab_index}：{pages[tab_index].title()}"
+            return f"⚠️ 分頁 {tab_index} 不存在"
+        elif action == "new_tab":
+            new_page = page.context.new_page()
+            if value: new_page.goto(value)
+            _browser_page = new_page
+            return f"✅ 已開新分頁：{value or '空白'}"
+        elif action == "close_tab":
+            page.close()
+            pages = page.context.pages
+            if pages: _browser_page = pages[-1]
+            return "✅ 已關閉目前分頁"
+        elif action == "fill_form":
+            import json as _json
+            fields = _json.loads(value) if value.startswith("{") else {}
+            for sel, val in fields.items():
+                page.fill(sel, val)
+            return f"✅ 表單已填寫"
+        elif action == "select_option":
+            page.select_option(selector, value)
+            return f"✅ 已選擇：{value}"
+        elif action == "scroll_to":
+            page.locator(selector).scroll_into_view_if_needed()
+            return f"✅ 已滾動到：{selector}"
+        elif action == "get_html":
+            return page.inner_html(selector or "body")[:2000]
+        elif action == "wait_url":
+            page.wait_for_url(f"**{url_pattern}**", timeout=float(timeout)*1000)
+            return f"✅ URL 已包含：{url_pattern}"
+    except Exception as e:
+        return f"❌ 瀏覽器進階操作失敗：{e}"
+
+
+_voice_cmd_running = False
+
+def execute_voice_cmd(action, duration=300.0, language="zh-TW", _bot_send=None, _chat_id=None):
+    global _voice_cmd_running
+    try:
+        import threading
+        if action == "stop":
+            _voice_cmd_running = False
+            return "✅ 語音命令模式已停止"
+        elif action == "start":
+            if _voice_cmd_running:
+                return "⚠️ 語音命令模式已在執行中"
+            _voice_cmd_running = True
+            def _listen_loop():
+                global _voice_cmd_running
+                import sounddevice as sd, soundfile as sf, speech_recognition as sr, tempfile, time, subprocess
+                recognizer = sr.Recognizer()
+                sample_rate = 16000
+                end_time = time.time() + float(duration)
+                while _voice_cmd_running and time.time() < end_time:
+                    try:
+                        recording = sd.rec(int(4 * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+                        sd.wait()
+                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                            tmp = f.name
+                        sf.write(tmp, recording, sample_rate)
+                        with sr.AudioFile(tmp) as source:
+                            audio = recognizer.record(source)
+                        Path(tmp).unlink(missing_ok=True)
+                        text = recognizer.recognize_google(audio, language=language)
+                        if not text: continue
+                        if "停止" in text or "stop" in text.lower():
+                            _voice_cmd_running = False
+                            if _bot_send and _chat_id:
+                                import asyncio
+                                asyncio.run_coroutine_threadsafe(_bot_send(_chat_id, "🎤 語音命令模式已停止"), asyncio.get_event_loop())
+                            break
+                        if _bot_send and _chat_id:
+                            import asyncio
+                            asyncio.run_coroutine_threadsafe(_bot_send(_chat_id, f"🎤 語音命令：{text}"), asyncio.get_event_loop())
+                        subprocess.Popen(text, shell=True)
+                    except Exception:
+                        pass
+                _voice_cmd_running = False
+            threading.Thread(target=_listen_loop, daemon=True).start()
+            return f"✅ 語音命令模式已啟動（{duration}s），說「停止」結束"
+    except Exception as e:
+        return f"❌ 語音命令模式失敗：{e}"
+
+
+def execute_win_notify_relay(action, duration=3600.0, filter_app="", _bot_send=None, _chat_id=None):
+    try:
+        import threading, time, subprocess
+        if action == "status":
+            return "ℹ️ Windows 通知攔截透過輪詢事件記錄實現"
+        elif action == "stop":
+            return "✅ 通知攔截已標記停止（重啟生效）"
+        elif action == "start":
+            def _relay():
+                import win32evtlog, win32evtlogutil, time as t
+                seen = set()
+                end = t.time() + float(duration)
+                hand = win32evtlog.OpenEventLog(None, "Application")
+                while t.time() < end:
+                    try:
+                        flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+                        batch = win32evtlog.ReadEventLog(hand, flags, 0)
+                        for e in (batch or []):
+                            eid = (e.RecordNumber, e.TimeGenerated.Format())
+                            if eid in seen: continue
+                            seen.add(eid)
+                            src = e.SourceName
+                            if filter_app and filter_app.lower() not in src.lower(): continue
+                            try: msg = win32evtlogutil.SafeFormatMessage(e, "Application")[:200]
+                            except: msg = "(無法讀取)"
+                            if _bot_send and _chat_id and e.EventType in (1, 2):
+                                import asyncio
+                                level = "❌" if e.EventType == 1 else "⚠️"
+                                asyncio.run_coroutine_threadsafe(
+                                    _bot_send(_chat_id, f"🔔 Windows 通知\n{level} {src}\n{msg}"),
+                                    asyncio.get_event_loop())
+                    except Exception:
+                        pass
+                    t.sleep(10)
+                win32evtlog.CloseEventLog(hand)
+            threading.Thread(target=_relay, daemon=True).start()
+            return f"✅ Windows 通知攔截已啟動（{duration}s）" + (f"，過濾：{filter_app}" if filter_app else "")
+    except Exception as e:
+        return f"❌ 通知攔截失敗：{e}"
+
+
+def execute_data_process(action, path="", output="", query="", data="", paths=""):
+    try:
+        import json, csv, io as _io
+        if action == "read_json":
+            content = json.loads(Path(path).read_text(encoding="utf-8"))
+            if isinstance(content, list):
+                return f"📄 JSON（{len(content)} 筆）：\n" + json.dumps(content[:5], ensure_ascii=False, indent=2)
+            return f"📄 JSON：\n" + json.dumps(content, ensure_ascii=False, indent=2)[:2000]
+        elif action == "write_json":
+            obj = json.loads(data)
+            Path(output or path).write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+            return f"✅ JSON 已儲存：{output or path}"
+        elif action == "read_csv":
+            rows = []
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+            return f"📊 CSV（{len(rows)} 筆，欄位：{list(rows[0].keys()) if rows else []}）：\n" + json.dumps(rows[:5], ensure_ascii=False, indent=2)
+        elif action == "write_csv":
+            obj = json.loads(data)
+            if not obj: return "⚠️ 資料為空"
+            out = output or path
+            with open(out, "w", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=obj[0].keys())
+                writer.writeheader(); writer.writerows(obj)
+            return f"✅ CSV 已儲存：{out}"
+        elif action == "filter":
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                rows = list(csv.DictReader(f))
+            filtered = []
+            for row in rows:
+                try:
+                    if eval(query, {"__builtins__": {}}, row): filtered.append(row)
+                except: pass
+            return f"📊 過濾結果（{len(filtered)}/{len(rows)} 筆）：\n" + json.dumps(filtered[:10], ensure_ascii=False, indent=2)
+        elif action == "stats":
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                rows = list(csv.DictReader(f))
+            if not rows: return "⚠️ 無資料"
+            cols = rows[0].keys()
+            stats = {}
+            for col in cols:
+                vals = [row[col] for row in rows if row[col]]
+                try:
+                    nums = [float(v) for v in vals]
+                    stats[col] = {"count": len(nums), "min": min(nums), "max": max(nums), "avg": round(sum(nums)/len(nums),2)}
+                except:
+                    stats[col] = {"count": len(vals), "unique": len(set(vals))}
+            return "📊 統計：\n" + json.dumps(stats, ensure_ascii=False, indent=2)
+        elif action == "convert":
+            ext_in = Path(path).suffix.lower()
+            ext_out = Path(output).suffix.lower() if output else ""
+            if ext_in == ".json" and ext_out == ".csv":
+                obj = json.loads(Path(path).read_text(encoding="utf-8"))
+                if not isinstance(obj, list): obj = [obj]
+                with open(output, "w", newline="", encoding="utf-8-sig") as f:
+                    w = csv.DictWriter(f, fieldnames=obj[0].keys()); w.writeheader(); w.writerows(obj)
+                return f"✅ JSON → CSV：{output}"
+            elif ext_in == ".csv" and ext_out == ".json":
+                with open(path, encoding="utf-8-sig", errors="replace") as f:
+                    rows = list(csv.DictReader(f))
+                Path(output).write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+                return f"✅ CSV → JSON：{output}"
+            return f"⚠️ 不支援轉換：{ext_in} → {ext_out}"
+        elif action == "merge":
+            all_rows = []
+            for p in paths.split(","):
+                p = p.strip()
+                if p.endswith(".csv"):
+                    with open(p, encoding="utf-8-sig", errors="replace") as f:
+                        all_rows.extend(list(csv.DictReader(f)))
+                elif p.endswith(".json"):
+                    obj = json.loads(Path(p).read_text(encoding="utf-8"))
+                    if isinstance(obj, list): all_rows.extend(obj)
+            out = output or str(Path(paths.split(",")[0].strip()).parent / "merged.csv")
+            with open(out, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.DictWriter(f, fieldnames=all_rows[0].keys()); w.writeheader(); w.writerows(all_rows)
+            return f"✅ 已合併 {len(all_rows)} 筆資料 → {out}"
+        elif action == "to_table":
+            with open(path, encoding="utf-8-sig", errors="replace") as f:
+                rows = list(csv.DictReader(f))
+            if not rows: return "⚠️ 無資料"
+            cols = list(rows[0].keys())
+            header = " | ".join(cols)
+            sep = "-" * len(header)
+            lines = [header, sep] + [" | ".join(str(r.get(c,"")) for c in cols) for r in rows[:20]]
+            return "\n".join(lines)
+    except Exception as e:
+        return f"❌ 資料處理失敗：{e}"
+
+
+def execute_wake_on_lan(mac, broadcast="255.255.255.255", port=9):
+    try:
+        import socket, struct
+        mac_clean = mac.replace(":", "").replace("-", "")
+        if len(mac_clean) != 12:
+            return f"❌ MAC 位址格式錯誤：{mac}"
+        mac_bytes = bytes.fromhex(mac_clean)
+        magic = b"\xff" * 6 + mac_bytes * 16
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.sendto(magic, (broadcast, int(port)))
+        return f"✅ WOL 魔法封包已送出 → {mac}（{broadcast}:{port}）"
+    except Exception as e:
+        return f"❌ WOL 失敗：{e}"
+
+
+def execute_clipboard_history(action, index=0):
+    global _clipboard_hist
+    try:
+        import pyperclip, threading, time
+        if action == "start_watch":
+            def _watch():
+                last = ""
+                while True:
+                    try:
+                        cur = pyperclip.paste()
+                        if cur != last and cur:
+                            _clipboard_hist.insert(0, cur)
+                            if len(_clipboard_hist) > 50:
+                                _clipboard_hist.pop()
+                            last = cur
+                    except: pass
+                    time.sleep(1)
+            threading.Thread(target=_watch, daemon=True).start()
+            return "✅ 剪貼簿歷史監控已啟動"
+        elif action == "stop_watch":
+            return "✅ 剪貼簿監控已停止（重啟才完全生效）"
+        elif action == "list":
+            if not _clipboard_hist:
+                return "⚠️ 剪貼簿歷史為空（請先執行 start_watch）"
+            lines = [f"[{i}] {item[:80]}" for i, item in enumerate(_clipboard_hist[:20])]
+            return "📋 剪貼簿歷史：\n" + "\n".join(lines)
+        elif action == "get":
+            if index < len(_clipboard_hist):
+                return f"📋 [{index}]：{_clipboard_hist[index]}"
+            return f"⚠️ 索引 {index} 超出範圍（共 {len(_clipboard_hist)} 筆）"
+        elif action == "set":
+            if index < len(_clipboard_hist):
+                import pyperclip
+                pyperclip.copy(_clipboard_hist[index])
+                return f"✅ 已復原剪貼簿 [{index}]：{_clipboard_hist[index][:80]}"
+            return f"⚠️ 索引 {index} 超出範圍"
+        elif action == "clear":
+            _clipboard_hist.clear()
+            return "✅ 剪貼簿歷史已清除"
+    except Exception as e:
+        return f"❌ 剪貼簿歷史失敗：{e}"
+
+
 def execute_download_file(url, save_path=""):
     try:
         import requests
@@ -5005,6 +5636,66 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("password","")),
                 "font_list": lambda: execute_font_list(tool_use.input.get("keyword","")),
                 "wait_seconds": lambda: execute_wait_seconds(tool_use.input["seconds"]),
+                "vision_loop": lambda: execute_vision_loop(
+                    tool_use.input["goal"],
+                    tool_use.input.get("max_steps", 20),
+                    tool_use.input.get("interval", 3.0),
+                    tool_use.input.get("timeout", 120.0)),
+                "alert_monitor": lambda: execute_alert_monitor(
+                    tool_use.input["action"],
+                    tool_use.input.get("name",""),
+                    tool_use.input.get("condition",""),
+                    tool_use.input.get("threshold",""),
+                    tool_use.input.get("target",""),
+                    tool_use.input.get("interval",30),
+                    tool_use.input.get("chat_id", chat_id),
+                    _bot_send=context.bot.send_message),
+                "interval_schedule": lambda: execute_interval_schedule(
+                    tool_use.input["action"],
+                    tool_use.input.get("name",""),
+                    tool_use.input.get("command",""),
+                    tool_use.input.get("every_minutes",60.0),
+                    tool_use.input.get("repeat",0),
+                    tool_use.input.get("duration_hours",0.0)),
+                "wait_for_text": lambda: execute_wait_for_text(
+                    tool_use.input["text"],
+                    tool_use.input.get("timeout",60.0),
+                    tool_use.input.get("interval",2.0),
+                    tool_use.input.get("region","")),
+                "browser_advanced": lambda: execute_browser_advanced(
+                    tool_use.input["action"],
+                    tool_use.input.get("selector",""),
+                    tool_use.input.get("value",""),
+                    tool_use.input.get("name",""),
+                    tool_use.input.get("tab_index",0),
+                    tool_use.input.get("timeout",30.0),
+                    tool_use.input.get("url_pattern","")),
+                "voice_cmd": lambda: execute_voice_cmd(
+                    tool_use.input["action"],
+                    tool_use.input.get("duration",300.0),
+                    tool_use.input.get("language","zh-TW"),
+                    _bot_send=context.bot.send_message,
+                    _chat_id=chat_id),
+                "win_notify_relay": lambda: execute_win_notify_relay(
+                    tool_use.input["action"],
+                    tool_use.input.get("duration",3600.0),
+                    tool_use.input.get("filter_app",""),
+                    _bot_send=context.bot.send_message,
+                    _chat_id=chat_id),
+                "data_process": lambda: execute_data_process(
+                    tool_use.input["action"],
+                    tool_use.input.get("path",""),
+                    tool_use.input.get("output",""),
+                    tool_use.input.get("query",""),
+                    tool_use.input.get("data",""),
+                    tool_use.input.get("paths","")),
+                "wake_on_lan": lambda: execute_wake_on_lan(
+                    tool_use.input["mac"],
+                    tool_use.input.get("broadcast","255.255.255.255"),
+                    tool_use.input.get("port",9)),
+                "clipboard_history": lambda: execute_clipboard_history(
+                    tool_use.input["action"],
+                    tool_use.input.get("index",0)),
             }
 
             if tool_use.name == "send_voice":
