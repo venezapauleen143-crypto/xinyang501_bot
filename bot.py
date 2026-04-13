@@ -2516,7 +2516,12 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
             return {"ok": True, "message": f"滑鼠已移動到 ({x}, {y})", "screenshot": None}
 
         elif action == "type":
-            pyautogui.write(text, interval=0.05)
+            # pyautogui.write 不支援中文，改用剪貼簿貼上
+            import pyperclip, time as _t
+            pyperclip.copy(str(text))
+            _t.sleep(0.2)
+            pyautogui.hotkey("ctrl", "v")
+            _t.sleep(0.1)
             return {"ok": True, "message": f"已輸入文字：{text}", "screenshot": None}
 
         elif action == "press_key":
@@ -2663,7 +2668,11 @@ def execute_ai_plan(goal: str) -> str:
         results = []
         tool_map = {
             "click": lambda a: pyautogui.click(int(a[0]), int(a[1])),
-            "type": lambda a: pyautogui.write(" ".join(str(x) for x in a), interval=0.05),
+            "type": lambda a: (
+                __import__("pyperclip").copy(" ".join(str(x) for x in a)),
+                __import__("time").sleep(0.2),
+                pyautogui.hotkey("ctrl", "v")
+            ),
             "press": lambda a: pyautogui.press(a[0]),
             "hotkey": lambda a: pyautogui.hotkey(*a),
             "open": lambda a: subprocess.Popen(" ".join(str(x) for x in a), shell=True),
