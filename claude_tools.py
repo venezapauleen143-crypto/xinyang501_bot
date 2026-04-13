@@ -4862,6 +4862,83 @@ def defender(action: str, path: str = ""):
         print(f"❌ Defender 操作失敗：{e}")
 
 
+# ── 缺口1：觸發驅動 ─────────────────────────────────
+
+def email_trigger(action, host="", user="", password="", filter_from="",
+                  filter_subject="", duration=300, to="", subject="", body=""):
+    from bot import execute_email_trigger
+    print(execute_email_trigger(action, host, user, password, filter_from,
+                                filter_subject, duration, to, subject, body))
+
+def file_trigger(folder, event, action, pattern="", target="", duration=60):
+    from bot import execute_file_trigger
+    print(execute_file_trigger(folder, event, action, pattern, target, duration))
+
+def webhook_server(action, port=8765, secret=""):
+    from bot import execute_webhook_server
+    print(execute_webhook_server(action, int(port), secret))
+
+# ── 缺口2：應用程式深度控制 ──────────────────────────
+
+def com_auto(app, action, path="", sheet=None, cell="", value="", macro="", to="", subject=""):
+    from bot import execute_com_auto
+    print(execute_com_auto(app, action, path, sheet, cell, value, macro, to, subject))
+
+def dialog_auto(action, button_text="", window_title="", timeout=30):
+    from bot import execute_dialog_auto
+    print(execute_dialog_auto(action, button_text, window_title, int(timeout)))
+
+def ime_switch(action):
+    from bot import execute_ime_switch
+    print(execute_ime_switch(action))
+
+# ── 缺口3：感知能力 ──────────────────────────────────
+
+def wake_word(action, keyword="", duration=5, language="zh-TW"):
+    from bot import execute_wake_word
+    print(execute_wake_word(action, keyword, float(duration), language))
+
+def sound_detect(action, threshold=20, duration=5, output=""):
+    from bot import execute_sound_detect
+    print(execute_sound_detect(action, float(threshold), float(duration), output))
+
+def face_recognize(action, name="", image_path="", output=""):
+    from bot import execute_face_recognize
+    print(execute_face_recognize(action, name, image_path, output))
+
+# ── 缺口4：跨裝置控制 ────────────────────────────────
+
+def http_server(action, port=9876, password=""):
+    from bot import execute_http_server
+    print(execute_http_server(action, int(port), password))
+
+def lan_scan(action, subnet="", host="", port=80):
+    from bot import execute_lan_scan
+    print(execute_lan_scan(action, subnet, host, int(port)))
+
+def serial_port(action, port="", baudrate=9600, data="", timeout=2):
+    from bot import execute_serial_port
+    print(execute_serial_port(action, port, int(baudrate), data, float(timeout)))
+
+def mqtt(action, broker, port=1883, topic="", message="", duration=10, username="", password=""):
+    from bot import execute_mqtt
+    print(execute_mqtt(action, broker, int(port), topic, message, float(duration), username, password))
+
+# ── 缺口5：內容理解與處理 ────────────────────────────
+
+def doc_ai(action, path="", path2="", fields="", question="", url=""):
+    from bot import execute_doc_ai
+    print(execute_doc_ai(action, path, path2, fields, question, url))
+
+def web_monitor(action, url, selector="body", interval=60, duration=300, keyword=""):
+    from bot import execute_web_monitor
+    print(execute_web_monitor(action, url, selector, float(interval), float(duration), keyword))
+
+def audio_transcribe(action, path="", duration=30, language="", output=""):
+    from bot import execute_audio_transcribe
+    print(execute_audio_transcribe(action, path, float(duration), language, output))
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -5131,6 +5208,27 @@ if __name__ == "__main__":
                 if "=" in kv
             )
         ),
+        # 缺口1
+        "email_trigger":     lambda: email_trigger(args[0] if args else "check", *args[1:]),
+        "file_trigger":      lambda: file_trigger(args[0] if args else "", args[1] if len(args)>1 else "any", args[2] if len(args)>2 else "notify"),
+        "webhook_server":    lambda: webhook_server(args[0] if args else "status", *args[1:]),
+        # 缺口2
+        "com_auto":          lambda: com_auto(args[0] if args else "excel", args[1] if len(args)>1 else "list_sheets", *args[2:]),
+        "dialog_auto":       lambda: dialog_auto(args[0] if args else "list_dialogs", *args[1:]),
+        "ime_switch":        lambda: ime_switch(args[0] if args else "status"),
+        # 缺口3
+        "wake_word":         lambda: wake_word(args[0] if args else "listen_once", *args[1:]),
+        "sound_detect":      lambda: sound_detect(args[0] if args else "volume_level", *args[1:]),
+        "face_recognize":    lambda: face_recognize(args[0] if args else "detect", *args[1:]),
+        # 缺口4
+        "http_server":       lambda: http_server(args[0] if args else "status", *args[1:]),
+        "lan_scan":          lambda: lan_scan(args[0] if args else "get_local_ip", *args[1:]),
+        "serial_port":       lambda: serial_port(args[0] if args else "list", *args[1:]),
+        "mqtt":              lambda: mqtt(args[0] if args else "test_connect", args[1] if len(args)>1 else "localhost", *args[2:]),
+        # 缺口5
+        "doc_ai":            lambda: doc_ai(args[0] if args else "summarize", *args[1:]),
+        "web_monitor":       lambda: web_monitor(args[0] if args else "check_once", args[1] if len(args)>1 else "", *args[2:]),
+        "audio_transcribe":  lambda: audio_transcribe(args[0] if args else "transcribe_mic", *args[1:]),
     }
 
     if tool not in tools:
