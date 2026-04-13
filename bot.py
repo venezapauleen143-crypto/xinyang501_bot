@@ -128,7 +128,12 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 
 股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
 
-群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。"""
+群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
+
+桌面自動化規則：
+- open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
+- 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
+- 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。"""
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
@@ -140,7 +145,12 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
 股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
 
-群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。"""
+群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
+
+桌面自動化規則：
+- open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
+- 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
+- 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。"""
 
 TOOLS = [
     {
@@ -2516,11 +2526,53 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
             return {"ok": True, "message": f"滑鼠已移動到 ({x}, {y})", "screenshot": None}
 
         elif action == "type":
-            # pyautogui.write 不支援中文，改用剪貼簿貼上
-            import pyperclip, time as _t
-            pyperclip.copy(str(text))
-            _t.sleep(0.2)
-            pyautogui.hotkey("ctrl", "v")
+            global _last_opened_hwnd
+            import time as _t, ctypes as _ct
+            _text_str = str(text)
+            _injected = False
+
+            # Win32 直接注射：優先用 open_app 記下的 HWND，否則搜尋標題
+            try:
+                import win32gui as _w32g, win32con as _w32c
+                # 候選視窗：先放 open_app 記下的那個
+                _parent_hwnds = []
+                if _last_opened_hwnd and _w32g.IsWindow(_last_opened_hwnd):
+                    _parent_hwnds.append(_last_opened_hwnd)
+                # 再搜標題作備用
+                _KEYS = ['記事本', 'notepad', 'untitled', '無標題', 'wordpad']
+                def _enum_wins(hwnd, _):
+                    if hwnd not in _parent_hwnds and _w32g.IsWindowVisible(hwnd):
+                        t = _w32g.GetWindowText(hwnd).lower()
+                        if any(k in t for k in _KEYS):
+                            _parent_hwnds.append(hwnd)
+                    return True
+                _w32g.EnumWindows(_enum_wins, None)
+                for _ph in _parent_hwnds:
+                    _edit = [None]
+                    def _find_edit_recursive(hwnd, _):
+                        cn = _w32g.GetClassName(hwnd)
+                        if cn in ('RichEditD2DPT', 'Edit', 'RICHEDIT50W'):
+                            _edit[0] = hwnd
+                            return False  # 停止枚舉
+                        return True
+                    try:
+                        _w32g.EnumChildWindows(_ph, _find_edit_recursive, None)
+                    except Exception:
+                        pass
+                    if _edit[0]:
+                        _w32g.SendMessage(_edit[0], _w32c.EM_SETSEL, -1, -1)
+                        _r = _ct.windll.user32.SendMessageW(_edit[0], _w32c.EM_REPLACESEL, True, _text_str)
+                        _injected = True
+                        break
+            except Exception:
+                pass
+
+            if not _injected:
+                import pyperclip
+                pyperclip.copy(_text_str)
+                _t.sleep(0.3)
+                pyautogui.hotkey("ctrl", "v")
+
             _t.sleep(0.1)
             return {"ok": True, "message": f"已輸入文字：{text}", "screenshot": None}
 
@@ -2529,8 +2581,34 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
             return {"ok": True, "message": f"已按下按鍵：{text}", "screenshot": None}
 
         elif action == "open_app":
+            import time as _t2, win32gui as _w32g_oa
+            # 記下開啟前已有的視窗 HWND
+            _before = set()
+            def _snap(h, _): _before.add(h); return True
+            try: _w32g_oa.EnumWindows(_snap, None)
+            except Exception: pass
             subprocess.Popen(app, shell=True)
-            return {"ok": True, "message": f"已開啟：{app}", "screenshot": None}
+            _t2.sleep(2.5)
+            # 找到新出現的視窗
+            _last_opened_hwnd = 0
+            try:
+                _kw = app.lower().replace(".exe", "").split()[-1]
+                _after = []
+                def _new_win(h, _):
+                    if h not in _before and _w32g_oa.IsWindowVisible(h) and _w32g_oa.GetWindowText(h).strip():
+                        _after.append(h)
+                    return True
+                _w32g_oa.EnumWindows(_new_win, None)
+                # 優先找包含 app 關鍵字的新視窗
+                _matched = [h for h in _after if _kw in _w32g_oa.GetWindowText(h).lower()]
+                _last_opened_hwnd = (_matched or _after or [0])[0]
+                if _last_opened_hwnd:
+                    import ctypes as _ct_oa
+                    _ct_oa.windll.user32.SetForegroundWindow(_last_opened_hwnd)
+                    _t2.sleep(0.3)
+            except Exception:
+                pass
+            return {"ok": True, "message": f"已開啟並切換到：{app}，視窗已就緒，可以直接輸入文字", "screenshot": None}
 
         elif action == "scroll":
             scroll_amount = amount if direction == "up" else -amount
@@ -2553,6 +2631,7 @@ import pyperclip
 import pygetwindow as gw
 
 _browser_ctx: dict = {}
+_last_opened_hwnd: int = 0  # open_app 後記住的視窗 HWND，供 type 使用
 
 
 def execute_window_control(action, keyword=""):
@@ -8669,30 +8748,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _dc_last_msg = ""
                 _dc_last_screenshot = None
 
-                for _dc_step in range(10):
-                    _dc_inp = _dc_cur_tu.input
-                    _dc_result = await _loop2.run_in_executor(
-                        None,
-                        lambda _i=_dc_inp: execute_desktop_control(
-                            action=_i["action"],
-                            x=_i.get("x"),
-                            y=_i.get("y"),
-                            text=_i.get("text"),
-                            app=_i.get("app"),
-                            direction=_i.get("direction", "down"),
-                            amount=_i.get("amount", 3)
+                # 統一迴圈：desktop_control 和 simple_tools 都在同一層處理
+                for _dc_step in range(15):
+                    _dc_tool_result = ""
+
+                    if _dc_cur_tu.name == "desktop_control":
+                        _dc_inp = _dc_cur_tu.input
+                        _dc_result = await _loop2.run_in_executor(
+                            None,
+                            lambda _i=_dc_inp: execute_desktop_control(
+                                action=_i["action"],
+                                x=_i.get("x"),
+                                y=_i.get("y"),
+                                text=_i.get("text"),
+                                app=_i.get("app"),
+                                direction=_i.get("direction", "down"),
+                                amount=_i.get("amount", 3)
+                            )
                         )
-                    )
-                    if _dc_result.get("screenshot"):
-                        _dc_last_screenshot = _dc_result["screenshot"]
-                    _dc_last_msg = _dc_result["message"]
-                    # open_app 後等視窗開啟並獲得焦點
-                    if _dc_inp.get("action") == "open_app":
-                        await _asyncio2.sleep(2.0)
+                        if _dc_result.get("screenshot"):
+                            _dc_last_screenshot = _dc_result["screenshot"]
+                        _dc_last_msg = _dc_result["message"]
+                        _dc_tool_result = _dc_last_msg
+                        if _dc_inp.get("action") == "open_app":
+                            await _asyncio2.sleep(2.0)
+                    else:
+                        # simple_tools
+                        tool_use = _dc_cur_tu
+                        _dc_tool_result = await _loop2.run_in_executor(None, simple_tools[tool_use.name])
+                        _dc_last_msg = _dc_tool_result
+
 
                     _dc_messages = _dc_messages + [
                         {"role": "assistant", "content": _dc_cur_resp.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": _dc_cur_tu.id, "content": _dc_last_msg}]}
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": _dc_cur_tu.id, "content": _dc_tool_result}]}
                     ]
                     _dc_next_resp = client.messages.create(
                         model="claude-sonnet-4-6",
@@ -8704,45 +8793,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     if _dc_next_resp.stop_reason == "tool_use":
                         _dc_next_tu = next((b for b in _dc_next_resp.content if b.type == "tool_use"), None)
-                        if _dc_next_tu and _dc_next_tu.name == "desktop_control":
+                        if _dc_next_tu and (_dc_next_tu.name == "desktop_control" or _dc_next_tu.name in simple_tools):
                             _dc_cur_tu = _dc_next_tu
                             _dc_cur_resp = _dc_next_resp
                             continue
-                        elif _dc_next_tu and _dc_next_tu.name in simple_tools:
-                            # 切換到 simple_tools 繼續循環
-                            tool_use = _dc_next_tu
-                            _dc_cur_resp = _dc_next_resp
-                            for _dc_s2 in range(10):
-                                _dc_sr = await _loop2.run_in_executor(None, simple_tools[tool_use.name])
-                                if tool_use.name == "desktop_control" and tool_use.input.get("action") == "open_app":
-                                    await _asyncio2.sleep(2.0)
-                                _dc_messages = _dc_messages + [
-                                    {"role": "assistant", "content": _dc_cur_resp.content},
-                                    {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": _dc_sr}]}
-                                ]
-                                _dc_nr2 = client.messages.create(
-                                    model="claude-sonnet-4-6",
-                                    max_tokens=512,
-                                    system=system,
-                                    tools=TOOLS,
-                                    messages=_dc_messages
-                                )
-                                if _dc_nr2.stop_reason == "tool_use":
-                                    _nt2 = next((b for b in _dc_nr2.content if b.type == "tool_use"), None)
-                                    if _nt2 and _nt2.name in simple_tools:
-                                        tool_use = _nt2
-                                        _dc_cur_resp = _dc_nr2
-                                        continue
-                                _dc_next_resp = _dc_nr2
-                                break
-                            break
 
                     _dc_cur_resp = _dc_next_resp
                     break
 
-                # 如果有截圖，先傳圖
+                # 如果有截圖，先傳圖（失敗不中斷）
                 if _dc_last_screenshot:
-                    await update.message.reply_photo(photo=_dc_last_screenshot, caption="📸 桌面截圖")
+                    try:
+                        await update.message.reply_photo(photo=_dc_last_screenshot, caption="📸 桌面截圖")
+                    except Exception:
+                        pass
                 text_blocks = [b.text for b in _dc_cur_resp.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else _dc_last_msg
                 save_message(chat_id, "assistant", reply)
