@@ -8480,9 +8480,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # 執行工具（lambdas 直接引用外層 tool_use 變數，更新 tool_use 即可）
                     _last_result = await _loop.run_in_executor(None, simple_tools[tool_use.name])
 
-                    # run 動作後等視窗開啟
-                    if tool_use.name == "desktop_control" and tool_use.input.get("action") == "run":
-                        await _asyncio.sleep(1.5)
+                    # open_app 動作後等視窗開啟
+                    if tool_use.name == "desktop_control" and tool_use.input.get("action") == "open_app":
+                        await _asyncio.sleep(2.0)
 
                     # 把結果傳回 Claude
                     _messages = _messages + [
@@ -8661,38 +8661,90 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
             elif tool_use.name == "desktop_control":
-                inp = tool_use.input
-                import asyncio
-                loop = asyncio.get_running_loop()
-                result = await loop.run_in_executor(
-                    None,
-                    lambda: execute_desktop_control(
-                        action=inp["action"],
-                        x=inp.get("x"),
-                        y=inp.get("y"),
-                        text=inp.get("text"),
-                        app=inp.get("app"),
-                        direction=inp.get("direction", "down"),
-                        amount=inp.get("amount", 3)
+                import asyncio as _asyncio2
+                _loop2 = _asyncio2.get_running_loop()
+                _dc_messages = list(history)
+                _dc_cur_resp = response
+                _dc_cur_tu = tool_use
+                _dc_last_msg = ""
+                _dc_last_screenshot = None
+
+                for _dc_step in range(10):
+                    _dc_inp = _dc_cur_tu.input
+                    _dc_result = await _loop2.run_in_executor(
+                        None,
+                        lambda _i=_dc_inp: execute_desktop_control(
+                            action=_i["action"],
+                            x=_i.get("x"),
+                            y=_i.get("y"),
+                            text=_i.get("text"),
+                            app=_i.get("app"),
+                            direction=_i.get("direction", "down"),
+                            amount=_i.get("amount", 3)
+                        )
                     )
-                )
-                tool_result_content = result["message"]
-                # 把截圖或結果回傳給 Claude，讓 Claude 生成回覆
-                response = client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=512,
-                    system=system,
-                    tools=TOOLS,
-                    messages=history + [
-                        {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result_content}]}
+                    if _dc_result.get("screenshot"):
+                        _dc_last_screenshot = _dc_result["screenshot"]
+                    _dc_last_msg = _dc_result["message"]
+                    # open_app 後等視窗開啟並獲得焦點
+                    if _dc_inp.get("action") == "open_app":
+                        await _asyncio2.sleep(2.0)
+
+                    _dc_messages = _dc_messages + [
+                        {"role": "assistant", "content": _dc_cur_resp.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": _dc_cur_tu.id, "content": _dc_last_msg}]}
                     ]
-                )
+                    _dc_next_resp = client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=512,
+                        system=system,
+                        tools=TOOLS,
+                        messages=_dc_messages
+                    )
+
+                    if _dc_next_resp.stop_reason == "tool_use":
+                        _dc_next_tu = next((b for b in _dc_next_resp.content if b.type == "tool_use"), None)
+                        if _dc_next_tu and _dc_next_tu.name == "desktop_control":
+                            _dc_cur_tu = _dc_next_tu
+                            _dc_cur_resp = _dc_next_resp
+                            continue
+                        elif _dc_next_tu and _dc_next_tu.name in simple_tools:
+                            # 切換到 simple_tools 繼續循環
+                            tool_use = _dc_next_tu
+                            _dc_cur_resp = _dc_next_resp
+                            for _dc_s2 in range(10):
+                                _dc_sr = await _loop2.run_in_executor(None, simple_tools[tool_use.name])
+                                if tool_use.name == "desktop_control" and tool_use.input.get("action") == "open_app":
+                                    await _asyncio2.sleep(2.0)
+                                _dc_messages = _dc_messages + [
+                                    {"role": "assistant", "content": _dc_cur_resp.content},
+                                    {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": _dc_sr}]}
+                                ]
+                                _dc_nr2 = client.messages.create(
+                                    model="claude-sonnet-4-6",
+                                    max_tokens=512,
+                                    system=system,
+                                    tools=TOOLS,
+                                    messages=_dc_messages
+                                )
+                                if _dc_nr2.stop_reason == "tool_use":
+                                    _nt2 = next((b for b in _dc_nr2.content if b.type == "tool_use"), None)
+                                    if _nt2 and _nt2.name in simple_tools:
+                                        tool_use = _nt2
+                                        _dc_cur_resp = _dc_nr2
+                                        continue
+                                _dc_next_resp = _dc_nr2
+                                break
+                            break
+
+                    _dc_cur_resp = _dc_next_resp
+                    break
+
                 # 如果有截圖，先傳圖
-                if result.get("screenshot"):
-                    await update.message.reply_photo(photo=result["screenshot"], caption="📸 桌面截圖")
-                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-                reply = text_blocks[0] if text_blocks else result["message"]
+                if _dc_last_screenshot:
+                    await update.message.reply_photo(photo=_dc_last_screenshot, caption="📸 桌面截圖")
+                text_blocks = [b.text for b in _dc_cur_resp.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else _dc_last_msg
                 save_message(chat_id, "assistant", reply)
                 await _send_reply(update, reply)
                 return
@@ -8944,4 +8996,4 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_message))
     print("Bot 已啟動...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
