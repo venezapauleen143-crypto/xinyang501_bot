@@ -963,30 +963,50 @@ def schedule_del(name: str):
 
 # ── 語音辨識 STT ─────────────────────────────────────
 
-def stt(duration=5):
-    import sounddevice as sd
-    import soundfile as sf
-    import speech_recognition as sr
-    import tempfile
-    print(f"🎤 錄音 {duration} 秒，請說話...")
-    sample_rate = 16000
-    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
-    sd.wait()
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        tmp_path = f.name
-    sf.write(tmp_path, recording, sample_rate)
+def stt(duration=5, file_path="", language="zh-TW"):
+    """語音辨識：麥克風錄音或直接辨識音訊檔案（支援 WAV/OGG/MP3）"""
+    import speech_recognition as sr, tempfile
     r = sr.Recognizer()
-    with sr.AudioFile(tmp_path) as source:
-        audio = r.record(source)
-    Path(tmp_path).unlink(missing_ok=True)
     try:
-        text = r.recognize_google(audio, language="zh-TW")
+        if file_path:
+            # 若為非 WAV 格式先用 ffmpeg 轉換
+            p = Path(file_path)
+            if p.suffix.lower() != ".wav":
+                import imageio_ffmpeg, subprocess
+                ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+                wav = tempfile.mktemp(suffix=".wav")
+                subprocess.run([ffmpeg, "-y", "-i", str(p), "-ar", "16000", "-ac", "1", wav], capture_output=True)
+                src_path = wav
+                cleanup = True
+            else:
+                src_path = file_path
+                cleanup = False
+            with sr.AudioFile(src_path) as source:
+                audio = r.record(source)
+            if cleanup:
+                Path(src_path).unlink(missing_ok=True)
+        else:
+            import sounddevice as sd, soundfile as sf
+            sample_rate = 16000
+            print(f"🎤 錄音 {duration} 秒，請說話...")
+            recording = sd.rec(int(int(duration) * sample_rate), samplerate=sample_rate, channels=1, dtype="int16")
+            sd.wait()
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp_path = f.name
+            sf.write(tmp_path, recording, sample_rate)
+            with sr.AudioFile(tmp_path) as source:
+                audio = r.record(source)
+            Path(tmp_path).unlink(missing_ok=True)
+
+        text = r.recognize_google(audio, language=language)
         print(f"✅ 辨識結果：{text}")
         return text
     except sr.UnknownValueError:
         print("❌ 無法辨識語音")
     except sr.RequestError as e:
         print(f"❌ STT 服務錯誤：{e}")
+    except Exception as e:
+        print(f"❌ STT 失敗：{e}")
 
 
 # ── OCR 文字辨識 ──────────────────────────────────────
@@ -4541,7 +4561,7 @@ if __name__ == "__main__":
         "record_stop":   lambda: record_stop(),
         "record_play":   lambda: record_play(args[0]),
         "email":         lambda: send_email(args[0], args[1], " ".join(args[2:])),
-        "stt":           lambda: stt(),
+        "stt":           lambda: stt(args[0] if args and args[0].isdigit() else 5, args[0] if args and not args[0].isdigit() else "", args[1] if len(args)>1 else "zh-TW"),
         "ocr":           lambda: ocr(args[0] if args else ""),
         "workflow_run":  lambda: workflow_run(args[0]),
         "workflow_save": lambda: workflow_save(args[0], " ".join(args[1:])),

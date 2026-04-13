@@ -5896,6 +5896,94 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("你好！我是小牛馬，有什麼可以幫你的？（我還記得我們之前聊過的事 😄）")
 
 
+async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """處理 Telegram 語音訊息：OGG → WAV → STT → Claude → 語音回覆"""
+    try:
+        chat_id = update.effective_chat.id
+        is_owner = update.effective_user.id == OWNER_ID
+        sender_name = "于晏" if is_owner else (update.effective_user.first_name or str(update.effective_user.id))
+
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+
+        # 下載語音檔（OGG OPUS）
+        voice = update.message.voice or update.message.audio
+        if not voice:
+            return
+        voice_file = await context.bot.get_file(voice.file_id)
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp_ogg:
+            ogg_path = tmp_ogg.name
+        await voice_file.download_to_drive(ogg_path)
+
+        # OGG → WAV（用 ffmpeg）
+        import imageio_ffmpeg
+        ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        wav_path = ogg_path.replace(".ogg", ".wav")
+        import subprocess
+        subprocess.run([ffmpeg, "-y", "-i", ogg_path, "-ar", "16000", "-ac", "1", wav_path],
+                       capture_output=True)
+        Path(ogg_path).unlink(missing_ok=True)
+
+        # WAV → 文字（Google STT）
+        import speech_recognition as sr
+        recognizer = sr.Recognizer()
+        user_text = ""
+        try:
+            with sr.AudioFile(wav_path) as source:
+                audio = recognizer.record(source)
+            user_text = recognizer.recognize_google(audio, language="zh-TW")
+        except sr.UnknownValueError:
+            user_text = ""
+        except Exception as e:
+            user_text = ""
+        Path(wav_path).unlink(missing_ok=True)
+
+        if not user_text:
+            await update.message.reply_text("🎤 聽不清楚，請再說一次～")
+            return
+
+        # 顯示辨識結果
+        await update.message.reply_text(f"🎤 你說：{user_text}")
+        log_message("🎤", sender_name, chat_id, user_text)
+
+        # 傳給 Claude 處理（同 handle_message 邏輯）
+        saved_text = f"[{sender_name}]: {user_text}" if update.effective_chat.type in ("group","supergroup") else user_text
+        save_message(chat_id, "user", saved_text)
+        history = load_history(chat_id)[-40:]
+
+        base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
+        memories = load_long_term_memory(chat_id)
+        if memories:
+            mem_text = "\n".join(f"- [{m['id']}] {m['content']}" for m in memories)
+            system = base_system + f"\n\n【長期記憶】\n{mem_text}"
+        else:
+            system = base_system
+
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=system,
+            messages=history
+        )
+
+        reply_text = response.content[0].text if response.content else "..."
+        save_message(chat_id, "assistant", reply_text)
+        log_message("<<", "小牛馬", chat_id, reply_text)
+
+        # 用語音回覆
+        await context.bot.send_chat_action(chat_id=chat_id, action="record_voice")
+        import asyncio, io as _io
+        loop = asyncio.get_running_loop()
+        try:
+            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-CN-YunjianNeural")
+            await update.message.reply_voice(voice=_io.BytesIO(ogg_data))
+        except Exception:
+            await update.message.reply_text(reply_text)
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ 語音處理失敗：{e}")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -6856,5 +6944,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("clear", clear))
     app.add_handler(CommandHandler("memories", memories))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_message))
     print("Bot 已啟動...")
     app.run_polling()
