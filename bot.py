@@ -3114,7 +3114,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_text = update.message.text
 
         is_group = update.effective_chat.type in ("group", "supergroup")
-        sender_name = update.effective_user.first_name or str(update.effective_user.id)
+        is_owner = update.effective_user.id == OWNER_ID
+        sender_name = "于晏" if is_owner else (update.effective_user.first_name or str(update.effective_user.id))
 
         # 群組內只回應有 @ 提及 bot 的訊息
         if is_group:
@@ -3134,7 +3135,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = load_history(chat_id)[-40:]
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-        base_system = SYSTEM_PROMPT_OWNER if update.effective_user.id == OWNER_ID else SYSTEM_PROMPT_DEFAULT
+        base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
 
         # 注入長期記憶
         memories = load_long_term_memory(chat_id)
