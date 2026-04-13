@@ -4938,6 +4938,66 @@ def audio_transcribe(action, path="", duration=30, language="", output=""):
     from bot import execute_audio_transcribe
     print(execute_audio_transcribe(action, path, float(duration), language, output))
 
+# ══════════════════════════════════════════════════════
+# 奧創升級技能集
+# ══════════════════════════════════════════════════════
+
+def osint_search(action, query="", target="", limit=10):
+    from bot import execute_osint_search
+    print(execute_osint_search(action, query, target, int(limit)))
+
+def news_monitor(action, keywords="", interval=300, duration=3600):
+    from bot import execute_news_monitor
+    print(execute_news_monitor(action, keywords, float(interval), float(duration)))
+
+def threat_intel(action, target="", api_key=""):
+    from bot import execute_threat_intel
+    print(execute_threat_intel(action, target, api_key))
+
+def auto_skill(action, goal="", skill_name="", code=""):
+    from bot import execute_auto_skill
+    print(execute_auto_skill(action, goal, skill_name, code))
+
+def smart_home(action, device="", value="", host="", token=""):
+    from bot import execute_smart_home
+    print(execute_smart_home(action, device, value, host, token))
+
+def goal_manager(action, goal="", goal_id="", steps="", priority="normal"):
+    from bot import execute_goal_manager
+    print(execute_goal_manager(action, goal, goal_id, steps, priority))
+
+def auto_trade(action, symbol="", amount=0.0, price=0.0, order_type="market"):
+    from bot import execute_auto_trade
+    print(execute_auto_trade(action, symbol, float(amount), float(price), order_type))
+
+def knowledge_base(action, content="", query="", tag="", kb_id=""):
+    from bot import execute_knowledge_base
+    print(execute_knowledge_base(action, content, query, tag, kb_id))
+
+def emotion_detect(action, text="", image_path=""):
+    from bot import execute_emotion_detect
+    print(execute_emotion_detect(action, text, image_path))
+
+def voice_id(action, name="", audio_path="", duration=5):
+    from bot import execute_voice_id
+    print(execute_voice_id(action, name, audio_path, float(duration)))
+
+def pentest(action, target="", port_range="1-1000", timeout=2):
+    from bot import execute_pentest
+    print(execute_pentest(action, target, port_range, float(timeout)))
+
+def proactive_alert(action, name="", condition="", threshold="", target="", interval=60):
+    from bot import execute_proactive_alert
+    print(execute_proactive_alert(action, name, condition, threshold, target, float(interval)))
+
+def multi_deploy(action, remote_host="", remote_user="", remote_pass="", remote_path="/tmp/niu_bot"):
+    from bot import execute_multi_deploy
+    print(execute_multi_deploy(action, remote_host, remote_user, remote_pass, remote_path))
+
+def self_benchmark(action):
+    from bot import execute_self_benchmark
+    print(execute_self_benchmark(action))
+
 
 # ── 主程式 ──────────────────────────────────────────
 

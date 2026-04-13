@@ -2323,6 +2323,222 @@ TOOLS = [
             },
             "required": ["action"]
         }
+    },
+    # ══════════════════════════════════════════════════
+    # 奧創升級技能集 TOOLS
+    # ══════════════════════════════════════════════════
+    {
+        "name": "osint_search",
+        "description": "OSINT情報蒐集。搜尋網路資訊、新聞、Reddit社群、查詢IP/域名情報、取得頭條新聞。當用戶要查某人/公司/IP/域名的情報，或想搜尋特定資訊時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["web_search","news_search","reddit_search","ip_osint","domain_osint","top_news"],
+                           "description": "web_search=網頁搜尋, news_search=新聞搜尋, reddit_search=Reddit搜尋, ip_osint=IP情報, domain_osint=域名情報, top_news=台灣頭條"},
+                "query": {"type": "string", "description": "搜尋關鍵字（web/news/reddit_search 使用）"},
+                "target": {"type": "string", "description": "目標IP或域名（ip_osint/domain_osint 使用）"},
+                "limit": {"type": "number", "description": "結果數量限制（預設10）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "news_monitor",
+        "description": "新聞監控。查詢最新頭條、搜尋特定關鍵字新聞、開始背景監控新關鍵字新聞。當用戶問新聞/時事/最新消息時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["check","top_headlines","start_watch"],
+                           "description": "check=查詢關鍵字新聞, top_headlines=頭條新聞, start_watch=開始背景監控"},
+                "keywords": {"type": "string", "description": "關鍵字，多個用逗號分隔（如 台積電,AI,台灣）"},
+                "interval": {"type": "number", "description": "監控間隔秒數（start_watch 使用，預設 300）"},
+                "duration": {"type": "number", "description": "監控總時長秒數（start_watch 使用，預設 3600）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "threat_intel",
+        "description": "威脅情報分析。透過 VirusTotal 分析URL/IP/Hash是否惡意，查詢IP濫用記錄，掃描目前電腦的外部連線。用於資安分析。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["check_url","check_ip","check_hash","check_abuse_ip","scan_connections"],
+                           "description": "check_url=分析URL, check_ip=分析IP, check_hash=分析檔案Hash, check_abuse_ip=IP濫用查詢, scan_connections=掃描當前外部連線"},
+                "target": {"type": "string", "description": "分析目標（URL/IP/Hash）"},
+                "api_key": {"type": "string", "description": "VirusTotal/AbuseIPDB API Key（選填，優先用環境變數）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "auto_skill",
+        "description": "自動技能生成與部署。讓AI自動寫新程式技能、測試、部署到bot。列出現有技能清單。當用戶要新增功能或查詢bot有哪些技能時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["generate","test","deploy","list_skills"],
+                           "description": "generate=AI生成技能, test=測試程式碼, deploy=部署技能, list_skills=列出所有技能"},
+                "goal": {"type": "string", "description": "技能功能需求描述（generate 使用）"},
+                "skill_name": {"type": "string", "description": "技能英文名稱（如 send_sms）"},
+                "code": {"type": "string", "description": "要測試或部署的程式碼（test/deploy 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "smart_home",
+        "description": "智慧家居控制。透過 Home Assistant 控制燈光、插座、空調、場景等所有智慧家電。當用戶要控制家電、查詢設備狀態時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["list_devices","turn_on","turn_off","get_state","set_value","run_scene"],
+                           "description": "list_devices=列出所有設備, turn_on=開啟, turn_off=關閉, get_state=查狀態, set_value=設定數值, run_scene=執行場景"},
+                "device": {"type": "string", "description": "設備entity_id（如 light.living_room, switch.fan）或場景名稱"},
+                "value": {"type": "string", "description": "設定值（set_value 使用）"},
+                "host": {"type": "string", "description": "HA主機地址（選填，預設用 HA_HOST 環境變數）"},
+                "token": {"type": "string", "description": "HA長效Token（選填，預設用 HA_TOKEN 環境變數）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "goal_manager",
+        "description": "目標管理系統。設定長期目標、AI自動拆解執行步驟、追蹤進度、查看下一個待執行任務。當用戶有計畫要實現、想追蹤目標時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["add","list","detail","update_status","set_progress","delete","next_task"],
+                           "description": "add=新增目標, list=列出所有, detail=查看詳情, update_status=更新狀態, set_progress=設定進度, delete=刪除, next_task=下一個待辦"},
+                "goal": {"type": "string", "description": "目標描述（add 使用）"},
+                "goal_id": {"type": "string", "description": "目標ID（detail/update/delete/progress 使用）"},
+                "steps": {"type": "string", "description": "執行步驟或新狀態值（add 時可選填，update_status 填新狀態如 in_progress/completed，set_progress 填0-100）"},
+                "priority": {"type": "string", "enum": ["low","normal","high","critical"], "description": "優先級（預設normal）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "auto_trade",
+        "description": "加密貨幣交易。查詢Binance即時價格、帳戶餘額、買賣下單、查看掛單。需要設定 BINANCE_KEY 和 BINANCE_SECRET 才能下單。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["price","balance","buy","sell","open_orders"],
+                           "description": "price=查價格, balance=查餘額, buy=買入, sell=賣出, open_orders=查掛單"},
+                "symbol": {"type": "string", "description": "交易對（如 BTCUSDT, ETHUSDT, BNBUSDT）"},
+                "amount": {"type": "number", "description": "交易數量（buy/sell 使用）"},
+                "price": {"type": "number", "description": "限價（limit order 使用，market order 不需要）"},
+                "order_type": {"type": "string", "enum": ["market","limit"], "description": "訂單類型（預設market市價）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "knowledge_base",
+        "description": "知識庫管理。儲存重要知識/資料/筆記、全文搜尋、查看詳情、統計。當用戶要儲存資訊、查找之前存的知識時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["add","search","get","list","delete","stats"],
+                           "description": "add=新增知識, search=搜尋, get=查看詳情, list=列出所有, delete=刪除, stats=統計"},
+                "content": {"type": "string", "description": "知識內容（add 使用）"},
+                "query": {"type": "string", "description": "搜尋關鍵字（search 使用）"},
+                "tag": {"type": "string", "description": "標籤分類（add 使用，如 科技/財經/個人）"},
+                "kb_id": {"type": "string", "description": "知識ID（get/delete 使用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "emotion_detect",
+        "description": "情緒偵測分析。從文字分析情緒狀態、從螢幕/圖片分析臉部情緒。當用戶想了解情緒狀態、分析對話情緒時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["from_text","from_face"],
+                           "description": "from_text=文字情緒分析, from_face=臉部情緒分析（截圖或指定圖片）"},
+                "text": {"type": "string", "description": "要分析的文字（from_text 使用）"},
+                "image_path": {"type": "string", "description": "圖片路徑（from_face 使用，不填則截圖）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "voice_id",
+        "description": "聲紋辨識。登記聲紋特徵、辨識說話者身份、管理已登記的聲紋資料庫。需要麥克風或音訊檔案。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["enroll","identify","list","delete"],
+                           "description": "enroll=登記新聲紋, identify=辨識說話者, list=列出已登記, delete=刪除聲紋"},
+                "name": {"type": "string", "description": "人物名稱（enroll/delete 使用）"},
+                "audio_path": {"type": "string", "description": "音訊檔路徑（identify 使用）"},
+                "duration": {"type": "number", "description": "錄音秒數（enroll 使用，預設5秒）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "pentest",
+        "description": "安全評估工具（僅用於自己的網路）。埠掃描、SSL憑證檢查、HTTP安全標頭分析、網頁漏洞掃描、密碼強度審計。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["port_scan","ssl_check","http_headers","vuln_scan","password_audit"],
+                           "description": "port_scan=掃描開放埠, ssl_check=SSL憑證, http_headers=安全標頭, vuln_scan=網頁漏洞, password_audit=密碼強度"},
+                "target": {"type": "string", "description": "目標IP/域名/URL（password_audit 填密碼，多個用逗號分隔）"},
+                "port_range": {"type": "string", "description": "埠範圍（port_scan 使用，如 1-1000 或 80,443,3389）"},
+                "timeout": {"type": "number", "description": "連線逾時秒數（預設2）"}
+            },
+            "required": ["action","target"]
+        }
+    },
+    {
+        "name": "proactive_alert",
+        "description": "主動預警系統。設定條件（CPU/記憶體/加密貨幣價格/新聞關鍵字）超過閾值時自動通知。啟動後背景持續監控。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["add","list","delete","toggle","start_all"],
+                           "description": "add=新增預警, list=查看所有, delete=刪除, toggle=啟用/停用, start_all=啟動所有監控"},
+                "name": {"type": "string", "description": "預警名稱"},
+                "condition": {"type": "string", "enum": ["cpu_above","memory_above","price_above","price_below","news_keyword"],
+                              "description": "條件類型"},
+                "threshold": {"type": "string", "description": "閾值（cpu/memory填百分比數字，price填價格）"},
+                "target": {"type": "string", "description": "監控目標（price用交易對如BTCUSDT，news_keyword用關鍵字）"},
+                "interval": {"type": "number", "description": "檢查間隔秒數（預設60）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "multi_deploy",
+        "description": "多機器部署。將bot部署到遠端伺服器、查看遠端bot狀態、同步技能更新到遠端機器、查看遠端日誌。需要SSH存取權限。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["deploy","status","sync","log"],
+                           "description": "deploy=完整部署, status=查看狀態, sync=同步技能並重啟, log=查看日誌"},
+                "remote_host": {"type": "string", "description": "遠端主機IP或域名"},
+                "remote_user": {"type": "string", "description": "SSH用戶名"},
+                "remote_pass": {"type": "string", "description": "SSH密碼"},
+                "remote_path": {"type": "string", "description": "遠端部署路徑（預設 /tmp/niu_bot）"}
+            },
+            "required": ["action","remote_host","remote_user","remote_pass"]
+        }
+    },
+    {
+        "name": "self_benchmark",
+        "description": "自我評估。檢查所有功能健康狀態、統計已部署技能數量、查看記憶體統計。當用戶問bot目前狀態、健康檢查時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["run","skill_count","memory_stats"],
+                           "description": "run=完整健康報告, skill_count=技能清單, memory_stats=記憶統計"}
+            },
+            "required": ["action"]
+        }
     }
 ]
 
@@ -7698,6 +7914,1074 @@ def fetch_image(prompt: str, width: int = 512, height: int = 512):
     return None
 
 
+# ══════════════════════════════════════════════════════
+# 奧創升級技能集 v1.0
+# ══════════════════════════════════════════════════════
+
+def execute_osint_search(action, query="", target="", limit=10):
+    """OSINT情報蒐集：搜尋網路、新聞、社群媒體"""
+    import feedparser
+    results = []
+
+    if action == "web_search":
+        try:
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+            resp = requests.get(url, headers=headers, timeout=10)
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            items = soup.select('.result__body')[:int(limit)]
+            for item in items:
+                title_el = item.select_one('.result__title')
+                snippet_el = item.select_one('.result__snippet')
+                url_el = item.select_one('.result__url')
+                if title_el:
+                    results.append({
+                        "title": title_el.get_text(strip=True),
+                        "url": url_el.get_text(strip=True) if url_el else "",
+                        "snippet": snippet_el.get_text(strip=True) if snippet_el else ""
+                    })
+        except Exception as e:
+            return f"搜尋失敗：{e}"
+        return json.dumps(results, ensure_ascii=False, indent=2) if results else "無結果"
+
+    elif action == "news_search":
+        try:
+            import feedparser
+            url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:int(limit)]:
+                results.append(f"📰 {entry.get('title','')}\n   {entry.get('published','')}\n   {entry.get('link','')[:100]}")
+        except Exception as e:
+            return f"新聞搜尋失敗：{e}"
+        return "\n\n".join(results) if results else "無相關新聞"
+
+    elif action == "reddit_search":
+        try:
+            url = f"https://www.reddit.com/search.json?q={urllib.parse.quote(query)}&limit={limit}&sort=relevance"
+            headers = {"User-Agent": "OsintBot/1.0"}
+            resp = requests.get(url, headers=headers, timeout=10)
+            data = resp.json()
+            for post in data.get("data", {}).get("children", []):
+                p = post["data"]
+                results.append(f"r/{p.get('subreddit','')} | {p.get('title','')} (👍{p.get('score',0)})\n{p.get('url','')}")
+        except Exception as e:
+            return f"Reddit搜尋失敗：{e}"
+        return "\n\n".join(results) if results else "無結果"
+
+    elif action == "ip_osint":
+        try:
+            resp = requests.get(f"http://ip-api.com/json/{target}", timeout=5)
+            d = resp.json()
+            lines = [f"🌐 IP情報：{target}",
+                     f"國家：{d.get('country','')} ({d.get('countryCode','')})",
+                     f"城市：{d.get('city','')} / {d.get('regionName','')}",
+                     f"ISP：{d.get('isp','')}",
+                     f"組織：{d.get('org','')}",
+                     f"時區：{d.get('timezone','')}",
+                     f"座標：{d.get('lat','')}, {d.get('lon','')}"]
+            return "\n".join(lines)
+        except Exception as e:
+            return f"IP查詢失敗：{e}"
+
+    elif action == "domain_osint":
+        try:
+            import socket
+            lines = [f"🔍 域名情報：{target}"]
+            try:
+                ip = socket.gethostbyname(target)
+                lines.append(f"IP：{ip}")
+                resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=5)
+                d = resp.json()
+                lines.append(f"地區：{d.get('country','')} / {d.get('city','')}")
+                lines.append(f"ISP：{d.get('isp','')}")
+            except Exception as e2:
+                lines.append(f"DNS解析失敗：{e2}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"域名查詢失敗：{e}"
+
+    elif action == "top_news":
+        try:
+            import feedparser
+            feed = feedparser.parse("https://news.google.com/rss?hl=zh-TW&gl=TW&ceid=TW:zh-Hant")
+            result = ["📡 Google 台灣頭條新聞："]
+            for entry in feed.entries[:10]:
+                result.append(f"• {entry.get('title','')}")
+            return "\n".join(result)
+        except Exception as e:
+            return f"取得新聞失敗：{e}"
+
+    return f"未知動作：{action}"
+
+
+def execute_news_monitor(action, keywords="", interval=300, duration=3600, chat_id=None, _bot_send=None):
+    """全球新聞監控：持續追蹤關鍵字新聞並即時通知"""
+    import feedparser, threading
+
+    if action == "check":
+        results = []
+        kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+        for kw in kw_list[:5]:
+            try:
+                url = f"https://news.google.com/rss/search?q={urllib.parse.quote(kw)}&hl=zh-TW"
+                feed = feedparser.parse(url)
+                if feed.entries:
+                    results.append(f"【{kw}】")
+                    for entry in feed.entries[:3]:
+                        results.append(f"  • {entry.get('title','')}")
+            except:
+                pass
+        return "\n".join(results) if results else "無相關新聞"
+
+    elif action == "top_headlines":
+        try:
+            cats = [
+                ("台灣", "https://news.google.com/rss?hl=zh-TW&gl=TW&ceid=TW:zh-Hant"),
+                ("科技", "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtZGhLQUFQAQ?hl=zh-TW"),
+            ]
+            result = []
+            for cat, url in cats:
+                feed = feedparser.parse(url)
+                result.append(f"【{cat}】")
+                for e in feed.entries[:4]:
+                    result.append(f"  • {e.get('title','')}")
+            return "\n".join(result)
+        except Exception as e:
+            return f"取得新聞失敗：{e}"
+
+    elif action == "start_watch":
+        seen = set()
+        kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+        start_t = time.time()
+
+        def monitor():
+            while time.time() - start_t < float(duration):
+                for kw in kw_list:
+                    try:
+                        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(kw)}&hl=zh-TW"
+                        feed = feedparser.parse(url)
+                        for entry in feed.entries[:3]:
+                            link = entry.get("link", "")
+                            if link and link not in seen:
+                                seen.add(link)
+                                msg = f"🚨 新聞快報 [{kw}]\n{entry.get('title','')}"
+                                if _bot_send and chat_id:
+                                    import asyncio
+                                    asyncio.run_coroutine_threadsafe(
+                                        _bot_send(chat_id=chat_id, text=msg),
+                                        asyncio.get_event_loop()
+                                    )
+                    except:
+                        pass
+                time.sleep(float(interval))
+
+        threading.Thread(target=monitor, daemon=True).start()
+        return f"✅ 開始監控：{keywords}，每 {interval}秒 檢查一次，持續 {int(float(duration)//3600)} 小時"
+
+    return f"未知動作：{action}"
+
+
+def execute_threat_intel(action, target="", api_key=""):
+    """威脅情報查詢：IP/域名/Hash惡意程度分析"""
+
+    if action in ("check_url", "check_hash", "check_ip"):
+        vt_key = api_key or os.environ.get("VIRUSTOTAL_KEY", "")
+        if not vt_key:
+            return "需要設定環境變數 VIRUSTOTAL_KEY"
+        headers = {"x-apikey": vt_key}
+        try:
+            if action == "check_url":
+                import base64
+                url_id = base64.urlsafe_b64encode(target.encode()).decode().strip("=")
+                resp = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers, timeout=10)
+            elif action == "check_ip":
+                resp = requests.get(f"https://www.virustotal.com/api/v3/ip_addresses/{target}", headers=headers, timeout=10)
+            else:
+                resp = requests.get(f"https://www.virustotal.com/api/v3/files/{target}", headers=headers, timeout=10)
+
+            if resp.status_code == 200:
+                stats = resp.json().get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
+                malicious = stats.get("malicious", 0)
+                suspicious = stats.get("suspicious", 0)
+                total = sum(stats.values()) if stats else 0
+                level = "🔴 高危" if malicious > 3 else ("🟡 可疑" if malicious > 0 else "🟢 安全")
+                return f"威脅分析：{target}\n狀態：{level}\n惡意：{malicious}/{total}\n可疑：{suspicious}/{total}"
+            return f"查詢失敗：HTTP {resp.status_code}"
+        except Exception as e:
+            return f"查詢失敗：{e}"
+
+    elif action == "scan_connections":
+        try:
+            import subprocess
+            result = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=10)
+            lines = [l for l in result.stdout.split("\n") if "ESTABLISHED" in l]
+            external = [l for l in lines if not any(ip in l for ip in ["127.0.0.1", "0.0.0.0", "::1", "[::1]"])]
+            return f"活躍外部連線（{len(external)} 條）：\n" + "\n".join(external[:15])
+        except Exception as e:
+            return f"掃描失敗：{e}"
+
+    elif action == "check_abuse_ip":
+        key = api_key or os.environ.get("ABUSEIPDB_KEY", "")
+        if not key:
+            return "需要設定環境變數 ABUSEIPDB_KEY"
+        try:
+            resp = requests.get(
+                "https://api.abuseipdb.com/api/v2/check",
+                params={"ipAddress": target, "maxAgeInDays": 90},
+                headers={"Key": key, "Accept": "application/json"}, timeout=10
+            )
+            if resp.status_code == 200:
+                d = resp.json().get("data", {})
+                return f"IP威脅：{target}\n濫用信心度：{d.get('abuseConfidenceScore',0)}%\n舉報次數：{d.get('totalReports',0)}\n國家：{d.get('countryCode','')}\nISP：{d.get('isp','')}"
+            return f"查詢失敗：{resp.status_code}"
+        except Exception as e:
+            return f"查詢失敗：{e}"
+
+    return f"未知動作：{action}"
+
+
+def execute_auto_skill(action, goal="", skill_name="", code="", test_input=""):
+    """自動技能生成與部署：用AI寫新技能並部署到bot"""
+
+    if action == "generate":
+        try:
+            from anthropic import Anthropic
+            c = Anthropic()
+            resp = c.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": f"""你是Python專家。請為小牛馬Telegram Bot生成一個新的execute_函數。
+
+技能需求：{goal}
+函數名稱：execute_{skill_name or 'new_skill'}
+
+要求：
+1. 完整錯誤處理
+2. 回傳值必須是字串
+3. 使用已安裝的標準庫（requests, json, os, pathlib等）
+4. 只輸出Python程式碼，不要任何說明
+
+輸出完整函數程式碼："""}]
+            )
+            generated = resp.content[0].text
+            draft = Path(__file__).parent / f"skill_{skill_name or 'draft'}.py"
+            draft.write_text(generated, encoding="utf-8")
+            return f"✅ 技能已生成\n儲存至：{draft}\n\n```python\n{generated[:600]}\n```"
+        except Exception as e:
+            return f"生成失敗：{e}"
+
+    elif action == "test":
+        try:
+            compile(code, "<string>", "exec")
+            return "✅ 程式碼語法正確"
+        except SyntaxError as e:
+            return f"❌ 語法錯誤：{e}"
+
+    elif action == "deploy":
+        try:
+            if not code:
+                draft = Path(__file__).parent / f"skill_{skill_name}.py"
+                if draft.exists():
+                    code = draft.read_text(encoding="utf-8")
+                else:
+                    return "請提供程式碼"
+            bot_path = Path(__file__)
+            content = bot_path.read_text(encoding="utf-8")
+            marker = "\nasync def start("
+            if marker in content:
+                new_content = content.replace(marker, f"\n\n# ── 自動部署：{skill_name} ──\n{code}\n{marker}")
+                bot_path.write_text(new_content, encoding="utf-8")
+                return f"✅ 技能 {skill_name} 已部署，重啟後生效"
+            return "部署失敗：找不到插入點"
+        except Exception as e:
+            return f"部署失敗：{e}"
+
+    elif action == "list_skills":
+        import re
+        content = Path(__file__).read_text(encoding="utf-8")
+        skills = re.findall(r'def execute_(\w+)\(', content)
+        return f"已部署技能：{len(skills)} 個\n" + "\n".join(f"• {s}" for s in sorted(set(skills)))
+
+    return f"未知動作：{action}"
+
+
+def execute_smart_home(action, device="", value="", host="", token=""):
+    """智慧家居控制：Home Assistant API整合"""
+    ha_host = host or os.environ.get("HA_HOST", "http://homeassistant.local:8123")
+    ha_token = token or os.environ.get("HA_TOKEN", "")
+    headers = {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
+
+    if action == "list_devices":
+        try:
+            resp = requests.get(f"{ha_host}/api/states", headers=headers, timeout=10)
+            if resp.status_code == 200:
+                states = resp.json()
+                result = [f"🏠 智慧家居設備（{len(states)} 個）："]
+                for s in states[:25]:
+                    result.append(f"  {s['entity_id']}: {s['state']}")
+                return "\n".join(result)
+            return f"連線失敗 {resp.status_code} — 請設定 HA_HOST 和 HA_TOKEN"
+        except Exception as e:
+            return f"連線失敗：{e}\n請設定環境變數 HA_HOST 和 HA_TOKEN"
+
+    elif action in ("turn_on", "turn_off"):
+        try:
+            domain = device.split(".")[0] if "." in device else "homeassistant"
+            svc = "turn_on" if action == "turn_on" else "turn_off"
+            resp = requests.post(f"{ha_host}/api/services/{domain}/{svc}",
+                                 headers=headers, json={"entity_id": device}, timeout=10)
+            return f"✅ {device} {'開啟' if action=='turn_on' else '關閉'}" if resp.status_code == 200 else f"失敗：{resp.status_code}"
+        except Exception as e:
+            return f"控制失敗：{e}"
+
+    elif action == "get_state":
+        try:
+            resp = requests.get(f"{ha_host}/api/states/{device}", headers=headers, timeout=10)
+            if resp.status_code == 200:
+                s = resp.json()
+                return f"{device}\n狀態：{s['state']}\n屬性：{json.dumps(s.get('attributes',{}), ensure_ascii=False)[:300]}"
+            return f"查詢失敗：{resp.status_code}"
+        except Exception as e:
+            return f"查詢失敗：{e}"
+
+    elif action == "set_value":
+        try:
+            domain = device.split(".")[0] if "." in device else "input_number"
+            resp = requests.post(f"{ha_host}/api/services/{domain}/set_value",
+                                 headers=headers, json={"entity_id": device, "value": value}, timeout=10)
+            return f"✅ {device} 設定為 {value}" if resp.status_code == 200 else f"失敗：{resp.status_code}"
+        except Exception as e:
+            return f"設定失敗：{e}"
+
+    elif action == "run_scene":
+        try:
+            resp = requests.post(f"{ha_host}/api/services/scene/turn_on",
+                                 headers=headers, json={"entity_id": f"scene.{device}"}, timeout=10)
+            return f"✅ 場景 {device} 已啟動" if resp.status_code == 200 else f"失敗：{resp.status_code}"
+        except Exception as e:
+            return f"執行失敗：{e}"
+
+    return f"未知動作：{action}"
+
+
+def execute_goal_manager(action, goal="", goal_id="", steps="", priority="normal"):
+    """目標管理系統：設定長期目標、AI拆解步驟、追蹤執行進度"""
+    GOALS_DB = Path(__file__).parent / "goals.db"
+
+    def init_db():
+        conn = sqlite3.connect(GOALS_DB)
+        conn.execute("""CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            steps TEXT,
+            status TEXT DEFAULT 'pending',
+            priority TEXT DEFAULT 'normal',
+            progress INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.commit()
+        conn.close()
+
+    init_db()
+
+    if action == "add":
+        try:
+            if not steps:
+                from anthropic import Anthropic
+                c = Anthropic()
+                resp = c.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=800,
+                    messages=[{"role": "user", "content": f"將以下目標分解為5-8個具體執行步驟，每步驟一行，格式：1. 步驟\n\n目標：{goal}"}]
+                )
+                steps = resp.content[0].text
+            conn = sqlite3.connect(GOALS_DB)
+            cur = conn.execute("INSERT INTO goals (title, steps, priority) VALUES (?, ?, ?)", (goal, steps, priority))
+            gid = cur.lastrowid
+            conn.commit()
+            conn.close()
+            return f"✅ 目標建立 (ID:{gid})\n{goal}\n\n步驟：\n{steps}"
+        except Exception as e:
+            return f"建立失敗：{e}"
+
+    elif action == "list":
+        conn = sqlite3.connect(GOALS_DB)
+        rows = conn.execute("SELECT id, title, status, priority, progress FROM goals ORDER BY id DESC").fetchall()
+        conn.close()
+        if not rows:
+            return "目前沒有任何目標"
+        icons = {"pending": "⏳", "in_progress": "🔄", "completed": "✅", "failed": "❌"}
+        return "📋 目標清單：\n" + "\n".join(f"  {icons.get(r[2],'❓')} [{r[0]}] {r[1]} ({r[3]}) {r[4]}%" for r in rows)
+
+    elif action == "detail":
+        conn = sqlite3.connect(GOALS_DB)
+        row = conn.execute("SELECT * FROM goals WHERE id=?", (goal_id,)).fetchone()
+        conn.close()
+        if not row:
+            return f"找不到目標 {goal_id}"
+        return f"目標[{row[0]}]：{row[1]}\n狀態：{row[3]} | 優先：{row[4]} | 進度：{row[5]}%\n\n步驟：\n{row[2]}"
+
+    elif action == "update_status":
+        conn = sqlite3.connect(GOALS_DB)
+        conn.execute("UPDATE goals SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (steps, goal_id))
+        conn.commit()
+        conn.close()
+        return f"✅ 目標 {goal_id} 狀態 → {steps}"
+
+    elif action == "set_progress":
+        conn = sqlite3.connect(GOALS_DB)
+        conn.execute("UPDATE goals SET progress=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (int(steps or 0), goal_id))
+        conn.commit()
+        conn.close()
+        return f"✅ 目標 {goal_id} 進度 → {steps}%"
+
+    elif action == "delete":
+        conn = sqlite3.connect(GOALS_DB)
+        conn.execute("DELETE FROM goals WHERE id=?", (goal_id,))
+        conn.commit()
+        conn.close()
+        return f"✅ 目標 {goal_id} 已刪除"
+
+    elif action == "next_task":
+        conn = sqlite3.connect(GOALS_DB)
+        row = conn.execute("SELECT * FROM goals WHERE status IN ('pending','in_progress') ORDER BY priority DESC, id ASC LIMIT 1").fetchone()
+        conn.close()
+        if not row:
+            return "所有目標已完成或無目標"
+        return f"🤖 下一個待執行目標：\n[{row[0]}] {row[1]}\n\n步驟：\n{row[2][:500] if row[2] else '待規劃'}"
+
+    return f"未知動作：{action}"
+
+
+def execute_auto_trade(action, symbol="", amount=0.0, price=0.0, order_type="market", api_key="", api_secret=""):
+    """加密貨幣自動交易：Binance API"""
+    bk = api_key or os.environ.get("BINANCE_KEY", "")
+    bs = api_secret or os.environ.get("BINANCE_SECRET", "")
+
+    if action == "price":
+        try:
+            sym = symbol.upper().replace("/", "").replace("-", "")
+            resp = requests.get(f"https://api.binance.com/api/v3/ticker/24hr?symbol={sym}", timeout=5)
+            if resp.status_code == 200:
+                d = resp.json()
+                chg = float(d.get("priceChangePercent", "0"))
+                arrow = "▲" if chg >= 0 else "▼"
+                return f"{sym} 行情：\n價格：{d.get('lastPrice','')} USDT\n24h：{arrow} {chg}%\n高：{d.get('highPrice','')} | 低：{d.get('lowPrice','')} | 量：{d.get('volume','')}"
+            return f"查詢失敗：{resp.status_code}"
+        except Exception as e:
+            return f"查詢失敗：{e}"
+
+    elif action == "balance":
+        if not bk or not bs:
+            return "需要設定 BINANCE_KEY 和 BINANCE_SECRET"
+        try:
+            import hmac, hashlib
+            ts = int(time.time() * 1000)
+            params = f"timestamp={ts}"
+            sig = hmac.new(bs.encode(), params.encode(), hashlib.sha256).hexdigest()
+            resp = requests.get(f"https://api.binance.com/api/v3/account?{params}&signature={sig}",
+                                headers={"X-MBX-APIKEY": bk}, timeout=10)
+            if resp.status_code == 200:
+                non_zero = [b for b in resp.json().get("balances", []) if float(b["free"]) > 0.0001]
+                return "💰 帳戶餘額：\n" + "\n".join(f"  {b['asset']}: {b['free']}" for b in non_zero[:15])
+            return f"查詢失敗：{resp.text}"
+        except Exception as e:
+            return f"查詢失敗：{e}"
+
+    elif action in ("buy", "sell"):
+        if not bk or not bs:
+            return "需要設定 BINANCE_KEY 和 BINANCE_SECRET 才能下單"
+        try:
+            import hmac, hashlib
+            sym = symbol.upper().replace("/", "").replace("-", "")
+            side = "BUY" if action == "buy" else "SELL"
+            ts = int(time.time() * 1000)
+            params = f"symbol={sym}&side={side}&type={order_type.upper()}&quantity={amount}&timestamp={ts}"
+            if order_type.lower() == "limit" and float(price) > 0:
+                params += f"&price={price}&timeInForce=GTC"
+            sig = hmac.new(bs.encode(), params.encode(), hashlib.sha256).hexdigest()
+            resp = requests.post(f"https://api.binance.com/api/v3/order?{params}&signature={sig}",
+                                 headers={"X-MBX-APIKEY": bk}, timeout=10)
+            if resp.status_code == 200:
+                d = resp.json()
+                return f"✅ 訂單成功\nID: {d.get('orderId','')}\n{side} {amount} {sym} @ {order_type}\n狀態：{d.get('status','')}"
+            return f"下單失敗：{resp.text}"
+        except Exception as e:
+            return f"下單失敗：{e}"
+
+    elif action == "open_orders":
+        if not bk or not bs:
+            return "需要設定 BINANCE_KEY 和 BINANCE_SECRET"
+        try:
+            import hmac, hashlib
+            ts = int(time.time() * 1000)
+            sym_part = f"&symbol={symbol.upper()}" if symbol else ""
+            params = f"timestamp={ts}{sym_part}"
+            sig = hmac.new(bs.encode(), params.encode(), hashlib.sha256).hexdigest()
+            resp = requests.get(f"https://api.binance.com/api/v3/openOrders?{params}&signature={sig}",
+                                headers={"X-MBX-APIKEY": bk}, timeout=10)
+            if resp.status_code == 200:
+                orders = resp.json()
+                if not orders:
+                    return "目前無掛單"
+                return f"掛單列表（{len(orders)}筆）：\n" + "\n".join(
+                    f"  [{o['orderId']}] {o['side']} {o['origQty']} {o['symbol']} @ {o['price']}" for o in orders[:10])
+            return f"查詢失敗：{resp.text}"
+        except Exception as e:
+            return f"查詢失敗：{e}"
+
+    return f"未知動作：{action}"
+
+
+def execute_knowledge_base(action, content="", query="", tag="", kb_id=""):
+    """知識庫：儲存、全文搜尋、管理結構化知識"""
+    KB_DB = Path(__file__).parent / "knowledge_base.db"
+
+    def init_kb():
+        conn = sqlite3.connect(KB_DB)
+        conn.execute("""CREATE TABLE IF NOT EXISTS knowledge (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            summary TEXT,
+            tags TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.commit()
+        conn.close()
+
+    init_kb()
+
+    if action == "add":
+        try:
+            summary = content[:150] if len(content) > 150 else content
+            conn = sqlite3.connect(KB_DB)
+            cur = conn.execute("INSERT INTO knowledge (content, summary, tags) VALUES (?, ?, ?)",
+                               (content, summary, tag))
+            kid = cur.lastrowid
+            conn.commit()
+            conn.close()
+            return f"✅ 知識儲存 (ID:{kid})\n標籤：{tag}\n摘要：{summary[:100]}"
+        except Exception as e:
+            return f"儲存失敗：{e}"
+
+    elif action == "search":
+        try:
+            conn = sqlite3.connect(KB_DB)
+            rows = conn.execute(
+                "SELECT id, summary, tags, created_at FROM knowledge WHERE content LIKE ? OR tags LIKE ? ORDER BY id DESC LIMIT 10",
+                (f"%{query}%", f"%{query}%")
+            ).fetchall()
+            conn.close()
+            if not rows:
+                return f"找不到「{query}」相關知識"
+            return f"🔍 找到 {len(rows)} 筆：\n" + "\n".join(f"  [{r[0]}] {r[1][:100]} [{r[2]}]" for r in rows)
+        except Exception as e:
+            return f"搜尋失敗：{e}"
+
+    elif action == "get":
+        conn = sqlite3.connect(KB_DB)
+        row = conn.execute("SELECT * FROM knowledge WHERE id=?", (kb_id,)).fetchone()
+        conn.close()
+        if not row:
+            return f"找不到知識 {kb_id}"
+        return f"[{row[0]}] {row[3] or '無標籤'} | {row[4]}\n\n{row[1]}"
+
+    elif action == "list":
+        conn = sqlite3.connect(KB_DB)
+        rows = conn.execute("SELECT id, summary, tags, created_at FROM knowledge ORDER BY id DESC LIMIT 20").fetchall()
+        total = conn.execute("SELECT COUNT(*) FROM knowledge").fetchone()[0]
+        conn.close()
+        if not rows:
+            return "知識庫空白"
+        return f"📚 知識庫（共{total}條）：\n" + "\n".join(f"  [{r[0]}] {r[1][:80]} [{r[2]}]" for r in rows)
+
+    elif action == "delete":
+        conn = sqlite3.connect(KB_DB)
+        conn.execute("DELETE FROM knowledge WHERE id=?", (kb_id,))
+        conn.commit()
+        conn.close()
+        return f"✅ 知識 {kb_id} 已刪除"
+
+    elif action == "stats":
+        conn = sqlite3.connect(KB_DB)
+        total = conn.execute("SELECT COUNT(*) FROM knowledge").fetchone()[0]
+        tags = conn.execute("SELECT tags, COUNT(*) FROM knowledge GROUP BY tags ORDER BY COUNT(*) DESC LIMIT 10").fetchall()
+        conn.close()
+        return f"📊 知識庫統計\n總條目：{total}\n\n標籤分佈：\n" + "\n".join(f"  {t[0] or '無標籤'}: {t[1]}條" for t in tags)
+
+    return f"未知動作：{action}"
+
+
+def execute_emotion_detect(action, text="", image_path=""):
+    """情緒偵測：從文字/臉部偵測情緒狀態"""
+
+    if action == "from_text":
+        try:
+            pos_words = ["開心","高興","棒","好","讚","喜歡","愛","感謝","謝謝","哈哈","😊","😄","👍","❤️","爽","讚讚"]
+            neg_words = ["難過","生氣","討厭","煩","累","痛","哭","傷心","憤怒","失望","😢","😡","😤","💔","爛","幹"]
+            pos = sum(1 for w in pos_words if w in text)
+            neg = sum(1 for w in neg_words if w in text)
+            basic = "正面" if pos > neg else ("負面" if neg > pos else "中性")
+
+            from anthropic import Anthropic
+            c = Anthropic()
+            resp = c.messages.create(
+                model="claude-haiku-4-5-20251001", max_tokens=200,
+                messages=[{"role": "user", "content": f"分析情緒（一行一項）：主要情緒、強度1-10、建議回應\n文字：{text}"}]
+            )
+            return f"情緒分析\n規則：{basic}（正面{pos}負面{neg}）\n\nAI分析：\n{resp.content[0].text}"
+        except Exception as e:
+            return f"分析失敗：{e}"
+
+    elif action == "from_face":
+        try:
+            import base64, io as _io
+            from PIL import Image as PILImg
+            if image_path:
+                img = PILImg.open(image_path)
+            else:
+                import pyautogui
+                img = pyautogui.screenshot()
+            buf = _io.BytesIO()
+            img.save(buf, format="JPEG")
+            b64 = base64.b64encode(buf.getvalue()).decode()
+
+            from anthropic import Anthropic
+            c = Anthropic()
+            resp = c.messages.create(
+                model="claude-sonnet-4-6", max_tokens=300,
+                messages=[{"role": "user", "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                    {"type": "text", "text": "分析圖片中人臉情緒：臉數、每張臉的情緒（開心/悲傷/憤怒/驚訝/中性）、整體氛圍"}
+                ]}]
+            )
+            return f"臉部情緒分析：\n{resp.content[0].text}"
+        except Exception as e:
+            return f"臉部分析失敗：{e}"
+
+    return f"未知動作：{action}"
+
+
+def execute_voice_id(action, name="", audio_path="", duration=5):
+    """聲紋辨識：登記/辨識說話者身份"""
+    VOICE_DIR = Path(__file__).parent / "voice_profiles"
+    VOICE_DIR.mkdir(exist_ok=True)
+    META_FILE = Path(__file__).parent / "voice_profiles.json"
+
+    def load_meta():
+        return json.loads(META_FILE.read_text("utf-8")) if META_FILE.exists() else {}
+
+    def save_meta(d):
+        META_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), "utf-8")
+
+    if action == "enroll":
+        try:
+            import sounddevice as sd
+            import scipy.io.wavfile as wf
+            import numpy as np
+            sr = 16000
+            rec = sd.rec(int(float(duration) * sr), samplerate=sr, channels=1)
+            sd.wait()
+            p = VOICE_DIR / f"{name}.wav"
+            wf.write(str(p), sr, rec)
+            meta = load_meta()
+            meta[name] = str(p)
+            save_meta(meta)
+            return f"✅ {name} 聲紋已登記"
+        except ImportError:
+            return "需要安裝：pip install sounddevice scipy"
+        except Exception as e:
+            return f"登記失敗：{e}"
+
+    elif action == "identify":
+        try:
+            import librosa
+            import numpy as np
+            meta = load_meta()
+            if not meta:
+                return "尚未登記任何聲紋"
+            if not audio_path:
+                return "請提供音訊檔案路徑"
+            q_audio, _ = librosa.load(audio_path, sr=16000)
+            q_mfcc = librosa.feature.mfcc(y=q_audio, sr=16000, n_mfcc=13).mean(axis=1)
+            best, best_score = None, float('inf')
+            for person, path in meta.items():
+                p_audio, _ = librosa.load(path, sr=16000)
+                p_mfcc = librosa.feature.mfcc(y=p_audio, sr=16000, n_mfcc=13).mean(axis=1)
+                score = np.linalg.norm(q_mfcc - p_mfcc)
+                if score < best_score:
+                    best_score, best = score, person
+            conf = max(0, 100 - int(best_score * 10))
+            return f"聲紋辨識：{best}（信心度 {conf}%）"
+        except ImportError:
+            return "需要安裝：pip install librosa"
+        except Exception as e:
+            return f"辨識失敗：{e}"
+
+    elif action == "list":
+        meta = load_meta()
+        return "已登記聲紋：\n" + "\n".join(f"• {n}" for n in meta) if meta else "尚未登記任何聲紋"
+
+    elif action == "delete":
+        meta = load_meta()
+        if name in meta:
+            Path(meta[name]).unlink(missing_ok=True)
+            del meta[name]
+            save_meta(meta)
+            return f"✅ {name} 聲紋已刪除"
+        return f"找不到 {name}"
+
+    return f"未知動作：{action}"
+
+
+def execute_pentest(action, target="", port_range="1-1000", timeout=2):
+    """滲透測試：針對自己網路的安全評估工具"""
+    import socket, threading
+
+    if action == "port_scan":
+        open_ports = []
+        try:
+            target_ip = socket.gethostbyname(target)
+        except:
+            target_ip = target
+        if "-" in str(port_range):
+            start, end = map(int, str(port_range).split("-"))
+            ports = list(range(start, min(end + 1, start + 500)))
+        else:
+            ports = [int(p) for p in str(port_range).split(",")]
+
+        def scan(port):
+            try:
+                s = socket.socket()
+                s.settimeout(float(timeout))
+                if s.connect_ex((target_ip, port)) == 0:
+                    try:
+                        svc = socket.getservbyport(port)
+                    except:
+                        svc = "unknown"
+                    open_ports.append((port, svc))
+                s.close()
+            except:
+                pass
+
+        threads = [threading.Thread(target=scan, args=(p,)) for p in ports]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=1)
+        open_ports.sort()
+        return f"🔍 埠掃描 {target_ip}\n開放：{len(open_ports)} 個\n" + "\n".join(f"  {p}/tcp {s}" for p, s in open_ports[:20])
+
+    elif action == "ssl_check":
+        import ssl
+        try:
+            ctx = ssl.create_default_context()
+            with ctx.wrap_socket(socket.socket(), server_hostname=target) as s:
+                s.settimeout(5)
+                s.connect((target, 443))
+                cert = s.getpeercert()
+            import datetime
+            exp = datetime.datetime.strptime(cert['notAfter'], '%b %d %H:%M:%S %Y %Z')
+            days = (exp - datetime.datetime.utcnow()).days
+            return f"SSL憑證：{target}\n到期：{cert['notAfter']}\n剩餘：{days}天\n{'⚠️ 即將到期！' if days < 30 else '✅ 有效'}"
+        except Exception as e:
+            return f"SSL檢查失敗：{e}"
+
+    elif action == "http_headers":
+        try:
+            url = f"https://{target}" if not target.startswith("http") else target
+            resp = requests.get(url, timeout=5, verify=False, allow_redirects=False)
+            sec_headers = ["Strict-Transport-Security", "X-Content-Type-Options", "X-Frame-Options",
+                           "Content-Security-Policy", "X-XSS-Protection", "Referrer-Policy"]
+            result = [f"🔒 安全標頭：{target}"]
+            for h in sec_headers:
+                if h in resp.headers:
+                    result.append(f"  ✅ {h}")
+                else:
+                    result.append(f"  ❌ 缺少 {h}")
+            return "\n".join(result)
+        except Exception as e:
+            return f"分析失敗：{e}"
+
+    elif action == "vuln_scan":
+        try:
+            base = f"https://{target}" if not target.startswith("http") else target
+            paths = [".env", ".git/config", "wp-config.php", "phpinfo.php", "admin/", "backup.sql", ".DS_Store"]
+            found = []
+            for path in paths:
+                try:
+                    r = requests.get(f"{base}/{path}", timeout=3, verify=False, allow_redirects=False)
+                    if r.status_code == 200:
+                        found.append(f"  ⚠️ /{path} 可存取！")
+                except:
+                    pass
+            if found:
+                return f"🚨 發現 {len(found)} 個潛在漏洞：\n" + "\n".join(found)
+            return f"✅ {target} 未發現常見敏感路徑暴露"
+        except Exception as e:
+            return f"掃描失敗：{e}"
+
+    elif action == "password_audit":
+        import re
+        results = []
+        for pwd in target.split(","):
+            pwd = pwd.strip()
+            score = 0
+            issues = []
+            if len(pwd) >= 12: score += 2
+            elif len(pwd) >= 8: score += 1
+            else: issues.append("太短")
+            if re.search(r'[A-Z]', pwd): score += 1
+            else: issues.append("缺大寫")
+            if re.search(r'[a-z]', pwd): score += 1
+            else: issues.append("缺小寫")
+            if re.search(r'\d', pwd): score += 1
+            else: issues.append("缺數字")
+            if re.search(r'[!@#$%^&*]', pwd): score += 2
+            else: issues.append("缺符號")
+            strength = ["極弱","弱","普通","強","極強"][min(score//2, 4)]
+            results.append(f"'{pwd[:3]}***': {strength}({score}/7) {' '.join(issues)}")
+        return "密碼強度審計：\n" + "\n".join(results)
+
+    return f"未知動作：{action}"
+
+
+def execute_proactive_alert(action, name="", condition="", threshold="", target="",
+                             interval=60, chat_id=None, _bot_send=None):
+    """主動預警系統：持續監控條件並自動通知"""
+    import threading
+    ALERTS_FILE = Path(__file__).parent / "proactive_alerts.json"
+
+    def load_alerts():
+        return json.loads(ALERTS_FILE.read_text("utf-8")) if ALERTS_FILE.exists() else {}
+
+    def save_alerts(d):
+        ALERTS_FILE.write_text(json.dumps(d, ensure_ascii=False, indent=2), "utf-8")
+
+    if action == "add":
+        alerts = load_alerts()
+        alerts[name] = {"condition": condition, "threshold": threshold, "target": target,
+                        "interval": interval, "active": True, "triggered": 0}
+        save_alerts(alerts)
+        return f"✅ 預警 '{name}' 建立\n條件：{condition} {threshold}\n目標：{target}\n間隔：{interval}秒"
+
+    elif action == "list":
+        alerts = load_alerts()
+        if not alerts:
+            return "無預警設定"
+        return "🚨 預警清單：\n" + "\n".join(
+            f"  {'🟢' if a.get('active') else '🔴'} [{n}] {a['condition']} {a.get('threshold','')} (觸發{a.get('triggered',0)}次)"
+            for n, a in alerts.items())
+
+    elif action == "delete":
+        alerts = load_alerts()
+        if name in alerts:
+            del alerts[name]
+            save_alerts(alerts)
+            return f"✅ 預警 '{name}' 已刪除"
+        return f"找不到 '{name}'"
+
+    elif action == "toggle":
+        alerts = load_alerts()
+        if name in alerts:
+            alerts[name]["active"] = not alerts[name].get("active", True)
+            save_alerts(alerts)
+            return f"✅ 預警 '{name}' {'啟用' if alerts[name]['active'] else '停用'}"
+        return f"找不到 '{name}'"
+
+    elif action == "start_all":
+        alerts = load_alerts()
+
+        def monitor_loop():
+            while True:
+                current = load_alerts()
+                for aname, acfg in current.items():
+                    if not acfg.get("active"):
+                        continue
+                    try:
+                        msg = None
+                        cond = acfg["condition"]
+                        thresh = acfg.get("threshold", "")
+                        tgt = acfg.get("target", "")
+
+                        if cond == "cpu_above":
+                            import psutil
+                            val = psutil.cpu_percent(interval=1)
+                            if val > float(thresh):
+                                msg = f"🚨 CPU {val}% > {thresh}%"
+                        elif cond == "memory_above":
+                            import psutil
+                            val = psutil.virtual_memory().percent
+                            if val > float(thresh):
+                                msg = f"🚨 記憶體 {val}% > {thresh}%"
+                        elif cond == "price_above":
+                            r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={tgt}", timeout=5)
+                            val = float(r.json().get("price", 0))
+                            if val > float(thresh):
+                                msg = f"📈 {tgt} 價格 {val} > {thresh}"
+                        elif cond == "price_below":
+                            r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={tgt}", timeout=5)
+                            val = float(r.json().get("price", 0))
+                            if val < float(thresh):
+                                msg = f"📉 {tgt} 價格 {val} < {thresh}"
+                        elif cond == "news_keyword":
+                            import feedparser
+                            feed = feedparser.parse(f"https://news.google.com/rss/search?q={urllib.parse.quote(tgt)}&hl=zh-TW")
+                            if feed.entries:
+                                msg = f"📰 新聞 [{tgt}]\n{feed.entries[0].get('title','')}"
+
+                        if msg and _bot_send and chat_id:
+                            import asyncio
+                            asyncio.run_coroutine_threadsafe(
+                                _bot_send(chat_id=chat_id, text=f"[預警:{aname}] {msg}"),
+                                asyncio.get_event_loop()
+                            )
+                            cur_alerts = load_alerts()
+                            if aname in cur_alerts:
+                                cur_alerts[aname]["triggered"] = cur_alerts[aname].get("triggered", 0) + 1
+                                save_alerts(cur_alerts)
+                    except:
+                        pass
+                time.sleep(float(interval) if interval else 60)
+
+        threading.Thread(target=monitor_loop, daemon=True).start()
+        return f"✅ 已啟動 {len(alerts)} 個預警監控"
+
+    return f"未知動作：{action}"
+
+
+def execute_multi_deploy(action, remote_host="", remote_user="", remote_pass="", remote_path="/tmp/niu_bot"):
+    """多機器部署：將bot部署到遠端伺服器同步運行"""
+    try:
+        import paramiko
+    except ImportError:
+        return "需要安裝 paramiko: pip install paramiko"
+
+    def get_ssh():
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(remote_host, username=remote_user, password=remote_pass, timeout=15)
+        return ssh
+
+    if action == "deploy":
+        try:
+            ssh = get_ssh()
+            sftp = ssh.open_sftp()
+            bot_path = Path(__file__)
+            env_path = bot_path.parent / ".env"
+
+            # 建立目錄
+            ssh.exec_command(f"mkdir -p {remote_path}")
+            time.sleep(0.5)
+            sftp.put(str(bot_path), f"{remote_path}/bot.py")
+            if env_path.exists():
+                sftp.put(str(env_path), f"{remote_path}/.env")
+            sftp.close()
+
+            for cmd in [
+                "pip install python-telegram-bot anthropic requests python-dotenv feedparser -q",
+                f"pkill -f '{remote_path}/bot.py' 2>/dev/null; true",
+                f"nohup python {remote_path}/bot.py > {remote_path}/bot.log 2>&1 &"
+            ]:
+                ssh.exec_command(cmd)
+                time.sleep(1)
+            ssh.close()
+            return f"✅ Bot 已部署到 {remote_host}:{remote_path}"
+        except Exception as e:
+            return f"部署失敗：{e}"
+
+    elif action == "status":
+        try:
+            ssh = get_ssh()
+            _, stdout, _ = ssh.exec_command(f"pgrep -f '{remote_path}/bot.py' && echo RUNNING || echo STOPPED")
+            status = stdout.read().decode().strip()
+            ssh.close()
+            return f"{remote_host} Bot：{status}"
+        except Exception as e:
+            return f"查詢失敗：{e}"
+
+    elif action == "sync":
+        try:
+            ssh = get_ssh()
+            sftp = ssh.open_sftp()
+            sftp.put(str(Path(__file__)), f"{remote_path}/bot.py")
+            sftp.close()
+            ssh.exec_command(f"pkill -f '{remote_path}/bot.py'; sleep 1; nohup python {remote_path}/bot.py > {remote_path}/bot.log 2>&1 &")
+            ssh.close()
+            return f"✅ 技能已同步到 {remote_host} 並重啟"
+        except Exception as e:
+            return f"同步失敗：{e}"
+
+    elif action == "log":
+        try:
+            ssh = get_ssh()
+            _, stdout, _ = ssh.exec_command(f"tail -50 {remote_path}/bot.log")
+            log = stdout.read().decode()
+            ssh.close()
+            return f"遠端日誌 ({remote_host}):\n{log[-2000:]}"
+        except Exception as e:
+            return f"讀取日誌失敗：{e}"
+
+    return f"未知動作：{action}"
+
+
+def execute_self_benchmark(action):
+    """自我評估：測試各功能健康狀態並產生報告"""
+    if action == "run":
+        tests = {
+            "網路連線": lambda: requests.get("https://google.com", timeout=3).status_code == 200,
+            "Claude API Key": lambda: bool(os.environ.get("ANTHROPIC_API_KEY", "")),
+            "Telegram Token": lambda: bool(os.environ.get("BOT_TOKEN", "")),
+            "資料庫": lambda: sqlite3.connect(Path(__file__).parent / "memory.db").execute("SELECT 1").fetchone() is not None,
+            "截圖功能": lambda: bool(__import__("pyautogui").screenshot()),
+            "HuggingFace Key": lambda: bool(os.environ.get("HF_TOKEN", "")),
+            "知識庫": lambda: (Path(__file__).parent / "knowledge_base.db").exists(),
+            "目標管理": lambda: (Path(__file__).parent / "goals.db").exists(),
+            "Binance Key": lambda: bool(os.environ.get("BINANCE_KEY", "")),
+            "HA Token": lambda: bool(os.environ.get("HA_TOKEN", "")),
+            "VirusTotal Key": lambda: bool(os.environ.get("VIRUSTOTAL_KEY", "")),
+            "預警設定": lambda: (Path(__file__).parent / "proactive_alerts.json").exists(),
+        }
+        passed = 0
+        lines = ["🤖 自我評估報告\n"]
+        for name, test in tests.items():
+            try:
+                ok = test()
+                lines.append(f"  {'✅' if ok else '⚠️'} {name}")
+                if ok:
+                    passed += 1
+            except Exception as e:
+                lines.append(f"  ❌ {name}: {str(e)[:30]}")
+        score = int(passed / len(tests) * 100)
+        lines.insert(1, f"健康度：{score}% ({passed}/{len(tests)})")
+        return "\n".join(lines)
+
+    elif action == "skill_count":
+        import re
+        content = Path(__file__).read_text(encoding="utf-8")
+        skills = sorted(set(re.findall(r'def execute_(\w+)\(', content)))
+        return f"技能函數總數：{len(skills)}\n\n" + "\n".join(f"• {s}" for s in skills)
+
+    elif action == "memory_stats":
+        db = Path(__file__).parent / "memory.db"
+        if not db.exists():
+            return "資料庫不存在"
+        conn = sqlite3.connect(db)
+        hist = conn.execute("SELECT COUNT(*) FROM chat_history").fetchone()[0]
+        memo = conn.execute("SELECT COUNT(*) FROM long_term_memory").fetchone()[0]
+        conn.close()
+        kb_db = Path(__file__).parent / "knowledge_base.db"
+        kb_count = 0
+        if kb_db.exists():
+            c2 = sqlite3.connect(kb_db)
+            kb_count = c2.execute("SELECT COUNT(*) FROM knowledge").fetchone()[0]
+            c2.close()
+        return f"記憶統計：\n對話歷史：{hist} 條\n長期記憶：{memo} 條\n知識庫：{kb_count} 條"
+
+    return f"未知動作：{action}"
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("你好！我是小牛馬，有什麼可以幫你的？（我還記得我們之前聊過的事 😄）")
 
@@ -8407,6 +9691,86 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     font_color=tool_use.input.get("font_color",[255,255,255]),
                     font_size=tool_use.input.get("font_size",60),
                     subtitle=tool_use.input.get("subtitle",True)),
+                # ══ 奧創升級技能 ══
+                "osint_search": lambda: execute_osint_search(
+                    tool_use.input["action"],
+                    tool_use.input.get("query",""),
+                    tool_use.input.get("target",""),
+                    tool_use.input.get("limit",10)),
+                "news_monitor": lambda: execute_news_monitor(
+                    tool_use.input["action"],
+                    tool_use.input.get("keywords",""),
+                    tool_use.input.get("interval",300),
+                    tool_use.input.get("duration",3600),
+                    chat_id=chat_id,
+                    _bot_send=context.bot.send_message),
+                "threat_intel": lambda: execute_threat_intel(
+                    tool_use.input["action"],
+                    tool_use.input.get("target",""),
+                    tool_use.input.get("api_key","")),
+                "auto_skill": lambda: execute_auto_skill(
+                    tool_use.input["action"],
+                    tool_use.input.get("goal",""),
+                    tool_use.input.get("skill_name",""),
+                    tool_use.input.get("code",""),
+                    tool_use.input.get("test_input","")),
+                "smart_home": lambda: execute_smart_home(
+                    tool_use.input["action"],
+                    tool_use.input.get("device",""),
+                    tool_use.input.get("value",""),
+                    tool_use.input.get("host",""),
+                    tool_use.input.get("token","")),
+                "goal_manager": lambda: execute_goal_manager(
+                    tool_use.input["action"],
+                    tool_use.input.get("goal",""),
+                    tool_use.input.get("goal_id",""),
+                    tool_use.input.get("steps",""),
+                    tool_use.input.get("priority","normal")),
+                "auto_trade": lambda: execute_auto_trade(
+                    tool_use.input["action"],
+                    tool_use.input.get("symbol",""),
+                    tool_use.input.get("amount",0.0),
+                    tool_use.input.get("price",0.0),
+                    tool_use.input.get("order_type","market"),
+                    tool_use.input.get("api_key",""),
+                    tool_use.input.get("api_secret","")),
+                "knowledge_base": lambda: execute_knowledge_base(
+                    tool_use.input["action"],
+                    tool_use.input.get("content",""),
+                    tool_use.input.get("query",""),
+                    tool_use.input.get("tag",""),
+                    tool_use.input.get("kb_id","")),
+                "emotion_detect": lambda: execute_emotion_detect(
+                    tool_use.input["action"],
+                    tool_use.input.get("text",""),
+                    tool_use.input.get("image_path","")),
+                "voice_id": lambda: execute_voice_id(
+                    tool_use.input["action"],
+                    tool_use.input.get("name",""),
+                    tool_use.input.get("audio_path",""),
+                    tool_use.input.get("duration",5)),
+                "pentest": lambda: execute_pentest(
+                    tool_use.input["action"],
+                    tool_use.input.get("target",""),
+                    tool_use.input.get("port_range","1-1000"),
+                    tool_use.input.get("timeout",2)),
+                "proactive_alert": lambda: execute_proactive_alert(
+                    tool_use.input["action"],
+                    tool_use.input.get("name",""),
+                    tool_use.input.get("condition",""),
+                    tool_use.input.get("threshold",""),
+                    tool_use.input.get("target",""),
+                    tool_use.input.get("interval",60),
+                    chat_id=chat_id,
+                    _bot_send=context.bot.send_message),
+                "multi_deploy": lambda: execute_multi_deploy(
+                    tool_use.input["action"],
+                    tool_use.input.get("remote_host",""),
+                    tool_use.input.get("remote_user",""),
+                    tool_use.input.get("remote_pass",""),
+                    tool_use.input.get("remote_path","/tmp/niu_bot")),
+                "self_benchmark": lambda: execute_self_benchmark(
+                    tool_use.input["action"]),
             }
 
             if tool_use.name == "send_voice":
