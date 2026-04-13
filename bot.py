@@ -5763,8 +5763,7 @@ def execute_ai_video(prompt: str, provider: str = "replicate",
 
             headers = {
                 "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Prefer": "wait"
+                "Content-Type": "application/json"
             }
 
             payload: dict = {"version": mdl} if "/" not in mdl else {}
@@ -5780,16 +5779,18 @@ def execute_ai_video(prompt: str, provider: str = "replicate",
                 f"https://api.replicate.com/v1/models/{mdl}/predictions" if "/" in mdl
                 else f"https://api.replicate.com/v1/predictions",
                 json={"input": inputs, **({"version": mdl} if "/" not in mdl else {})},
-                headers=headers, timeout=30
+                headers=headers, timeout=120
             )
             r.raise_for_status()
             pred = r.json()
+            if "id" not in pred:
+                return f"❌ Replicate 回傳異常：{pred}"
             pred_id = pred["id"]
             pred_url = f"https://api.replicate.com/v1/predictions/{pred_id}"
 
-            # 輪詢結果（最多等 5 分鐘）
+            # 輪詢結果（最多等 10 分鐘，每 10 秒一次）
             for _ in range(60):
-                time.sleep(5)
+                time.sleep(10)
                 resp = requests.get(pred_url, headers=headers, timeout=15)
                 resp.raise_for_status()
                 data = resp.json()
@@ -5804,7 +5805,7 @@ def execute_ai_video(prompt: str, provider: str = "replicate",
                     err = data.get("error", "未知錯誤")
                     return f"❌ Replicate 生成失敗：{err}"
 
-            return "❌ Replicate 逾時（超過 5 分鐘）"
+            return "❌ Replicate 逾時（超過 10 分鐘）"
 
         # ── Runway ─────────────────────────────────────────────────
         elif provider == "runway":
@@ -6493,6 +6494,16 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(f"❌ 語音處理失敗：{e}")
 
 
+async def _send_reply(update: Update, text: str):
+    """發送訊息，超過 4096 字自動分段"""
+    MAX = 4000
+    if len(text) <= MAX:
+        await update.message.reply_text(text)
+    else:
+        for i in range(0, len(text), MAX):
+            await update.message.reply_text(text[i:i+MAX])
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -7012,7 +7023,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply = f"🔊 語音訊息已傳送"
                 except Exception as e:
                     reply = f"語音生成失敗：{e}\n\n{text}"
-                    await update.message.reply_text(reply)
+                    await _send_reply(update, reply)
                 save_message(chat_id, "assistant", text)
                 return
 
@@ -7044,7 +7055,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         )
                 reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "video_gen":
@@ -7085,7 +7096,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "sysres_chart":
@@ -7101,7 +7112,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "chart":
@@ -7119,7 +7130,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     reply = out_path
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "screen_stream":
@@ -7133,7 +7144,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_photo(photo=img_bytes, caption=f"📸 {i}/{len(screenshots)}")
                 reply = f"串流完成，共傳送 {len(screenshots)} 張截圖"
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name in simple_tools:
@@ -7153,7 +7164,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else tool_result
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "screen_vision":
@@ -7175,7 +7186,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else analysis
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "find_image_on_screen":
@@ -7199,7 +7210,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else result
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "browser_control":
@@ -7233,7 +7244,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else tool_result_text
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "long_term_memory":
@@ -7266,7 +7277,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else tool_result
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "get_stock":
@@ -7335,7 +7346,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else result["message"]
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "manage_schedule":
@@ -7364,7 +7375,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
                 reply = text_blocks[0] if text_blocks else tool_result
                 save_message(chat_id, "assistant", reply)
-                await update.message.reply_text(reply)
+                await _send_reply(update, reply)
                 return
 
             elif tool_use.name == "generate_image":
@@ -7393,7 +7404,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = text_blocks[0]
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬", chat_id, reply)
-        await update.message.reply_text(reply)
+        await _send_reply(update, reply)
 
     except Exception as e:
         logging.error(f"handle_message error: {e}", exc_info=True)
