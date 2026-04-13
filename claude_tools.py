@@ -171,6 +171,42 @@ tools:
   printer_jobs                  列出列印佇列
   net_share <list|connect|disconnect> [共享路徑] [磁碟代號] [帳號] [密碼]  網路芳鄰
   font_list [關鍵字]            列出系統字型
+  volume_get                    查詢系統音量
+  volume_set <0-100>            設定系統音量
+  volume_mute [true|false]      靜音/取消靜音
+  brightness_get                查詢螢幕亮度
+  brightness_set <0-100>        設定螢幕亮度
+  resolution_list               查詢螢幕解析度
+  media_control <動作>          媒體控制（play_pause/next/prev/stop/volume_up/volume_down/mute）
+  audio_devices                 列出音訊裝置
+  audio_switch <裝置名稱>       切換音訊輸出裝置
+  software_list [關鍵字]        列出已安裝軟體
+  software_install <名稱>       安裝軟體（winget）
+  software_uninstall <名稱>     卸載軟體
+  startup_list                  列出開機自啟動程式
+  startup_add <名稱> <指令>     新增開機自啟動
+  startup_remove <名稱>         移除開機自啟動
+  env_get [變數名]              查詢環境變數
+  env_set <名稱> <值> [true]    設定環境變數（true=永久）
+  user_list                     列出使用者帳戶
+  user_create <帳號> <密碼>     建立使用者
+  user_delete <帳號>            刪除使用者
+  win_update <list|install|check>  Windows 更新管理
+  device_list [關鍵字]          裝置管理員列表
+  device_toggle <名稱> [true|false]  啟用/停用裝置
+  netadapter_list               列出網路介面卡
+  netadapter_toggle <名稱> [true|false]  啟用/停用網路卡
+  dns_get                       查詢 DNS 設定
+  dns_set <介面> <DNS1> [DNS2]  設定 DNS
+  ip_config <介面> <IP> [遮罩] [閘道]  設定靜態 IP
+  hosts_list                    列出 hosts 設定
+  hosts_add <IP> <domain>       新增 hosts
+  hosts_remove <domain>         移除 hosts
+  net_traffic [秒數]            監控網路流量
+  if_then <條件類型> <條件值> <指令> [秒數]  條件式自動化
+  window_arrange <side_by_side|quad|stack|maximize_all>  多視窗排列
+  region_ocr <x> <y> <w> <h> [語言]  指定區域 OCR
+  window_screenshot <視窗標題關鍵字> [輸出路徑]  指定視窗截圖
 """
 
 import sys
@@ -3150,6 +3186,531 @@ def font_list(keyword: str = ""):
         print(f"❌ 字型列表失敗：{e}")
 
 
+# ── 音量控制 ─────────────────────────────────────────
+
+def volume_get():
+    try:
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        muted = volume.GetMute()
+        level = round(volume.GetMasterVolumeLevelScalar() * 100)
+        print(f"🔊 音量：{level}%  {'（靜音）' if muted else ''}")
+    except Exception as e:
+        print(f"❌ 音量查詢失敗：{e}")
+
+def volume_set(level: int):
+    try:
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume.SetMasterVolumeLevelScalar(max(0.0, min(1.0, level / 100)), None)
+        print(f"✅ 音量已設定為 {level}%")
+    except Exception as e:
+        print(f"❌ 設定音量失敗：{e}")
+
+def volume_mute(mute: bool = True):
+    try:
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume.SetMute(1 if mute else 0, None)
+        print(f"✅ {'靜音' if mute else '取消靜音'}")
+    except Exception as e:
+        print(f"❌ 靜音操作失敗：{e}")
+
+
+# ── 螢幕亮度/解析度 ──────────────────────────────────
+
+def brightness_get():
+    try:
+        import screen_brightness_control as sbc
+        b = sbc.get_brightness()
+        print(f"💡 亮度：{b}%")
+    except Exception as e:
+        print(f"❌ 亮度查詢失敗：{e}")
+
+def brightness_set(level: int):
+    try:
+        import screen_brightness_control as sbc
+        sbc.set_brightness(max(0, min(100, level)))
+        print(f"✅ 亮度已設定為 {level}%")
+    except Exception as e:
+        print(f"❌ 設定亮度失敗：{e}")
+
+def resolution_list():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-CimInstance -ClassName Win32_VideoController | Select-Object CurrentHorizontalResolution,CurrentVerticalResolution,CurrentRefreshRate | Format-List"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout.strip())
+    except Exception as e:
+        print(f"❌ 解析度查詢失敗：{e}")
+
+
+# ── 媒體播放控制 ─────────────────────────────────────
+
+def media_control(action: str):
+    """action: play_pause / next / prev / stop / volume_up / volume_down / mute"""
+    try:
+        import keyboard as kb
+        key_map = {
+            "play_pause": "play/pause media",
+            "next": "next track",
+            "prev": "previous track",
+            "stop": "stop media",
+            "volume_up": "volume up",
+            "volume_down": "volume down",
+            "mute": "volume mute",
+        }
+        key = key_map.get(action)
+        if not key:
+            print(f"❌ 未知動作：{action}，可用：{list(key_map.keys())}")
+            return
+        kb.send(key)
+        print(f"✅ 媒體控制：{action}")
+    except Exception as e:
+        print(f"❌ 媒體控制失敗：{e}")
+
+
+# ── 音訊裝置切換 ─────────────────────────────────────
+
+def audio_devices():
+    try:
+        from pycaw.pycaw import AudioUtilities
+        devices = AudioUtilities.GetAllDevices()
+        for i, d in enumerate(devices):
+            print(f"[{i}] {d.FriendlyName}")
+    except Exception as e:
+        print(f"❌ 音訊裝置查詢失敗：{e}")
+
+def audio_switch(device_name: str):
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            f"Get-AudioDevice -List | Where-Object {{$_.Name -like '*{device_name}*'}} | Set-AudioDevice"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or f"✅ 已切換至：{device_name}")
+    except Exception as e:
+        print(f"❌ 切換音訊裝置失敗（需安裝 AudioDeviceCmdlets）：{e}")
+
+
+# ── 已安裝軟體管理 ───────────────────────────────────
+
+def software_list(keyword: str = ""):
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-Package | Select-Object Name,Version | Sort-Object Name | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        lines = r.stdout.strip().splitlines()
+        if keyword:
+            lines = [l for l in lines if keyword.lower() in l.lower()]
+        print("\n".join(lines[:50]))
+        if len(lines) > 50:
+            print(f"...（共 {len(lines)} 個）")
+    except Exception as e:
+        print(f"❌ 軟體列表查詢失敗：{e}")
+
+def software_install(name: str):
+    try:
+        r = subprocess.run(["powershell.exe", "-Command", f"winget install --id '{name}' --silent --accept-source-agreements --accept-package-agreements"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+        print(r.stdout or r.stderr or f"安裝完成：{name}")
+    except Exception as e:
+        print(f"❌ 安裝失敗：{e}")
+
+def software_uninstall(name: str):
+    try:
+        r = subprocess.run(["powershell.exe", "-Command", f"winget uninstall --name '{name}' --silent"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+        print(r.stdout or r.stderr or f"✅ 已卸載：{name}")
+    except Exception as e:
+        print(f"❌ 卸載失敗：{e}")
+
+
+# ── 開機自啟動管理 ───────────────────────────────────
+
+def startup_list():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-CimInstance Win32_StartupCommand | Select-Object Name,Command,Location | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout.strip() or "（無開機自啟動程式）")
+    except Exception as e:
+        print(f"❌ 查詢失敗：{e}")
+
+def startup_add(name: str, command: str):
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, name, 0, winreg.REG_SZ, command)
+        winreg.CloseKey(key)
+        print(f"✅ 已新增開機自啟動：{name}")
+    except Exception as e:
+        print(f"❌ 新增失敗：{e}")
+
+def startup_remove(name: str):
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE)
+        winreg.DeleteValue(key, name)
+        winreg.CloseKey(key)
+        print(f"✅ 已移除開機自啟動：{name}")
+    except Exception as e:
+        print(f"❌ 移除失敗：{e}")
+
+
+# ── 環境變數管理 ─────────────────────────────────────
+
+def env_get(name: str = ""):
+    try:
+        if name:
+            val = os.environ.get(name, "（未設定）")
+            print(f"{name} = {val}")
+        else:
+            for k, v in sorted(os.environ.items()):
+                print(f"{k} = {v[:80]}")
+    except Exception as e:
+        print(f"❌ 環境變數查詢失敗：{e}")
+
+def env_set(name: str, value: str, permanent: bool = False):
+    try:
+        os.environ[name] = value
+        if permanent:
+            r = subprocess.run(["powershell.exe", "-Command",
+                f"[System.Environment]::SetEnvironmentVariable('{name}','{value}','User')"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print(f"✅ 環境變數已永久設定：{name} = {value}")
+        else:
+            print(f"✅ 環境變數已設定（本次）：{name} = {value}")
+    except Exception as e:
+        print(f"❌ 設定環境變數失敗：{e}")
+
+
+# ── 使用者帳戶管理 ───────────────────────────────────
+
+def user_list():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-LocalUser | Select-Object Name,Enabled,LastLogon | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout.strip())
+    except Exception as e:
+        print(f"❌ 查詢失敗：{e}")
+
+def user_create(username: str, password: str):
+    try:
+        ps = f"New-LocalUser -Name '{username}' -Password (ConvertTo-SecureString '{password}' -AsPlainText -Force) -FullName '{username}'"
+        r = subprocess.run(["powershell.exe", "-Command", ps],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or f"✅ 使用者已建立：{username}")
+    except Exception as e:
+        print(f"❌ 建立使用者失敗：{e}")
+
+def user_delete(username: str):
+    try:
+        r = subprocess.run(["powershell.exe", "-Command", f"Remove-LocalUser -Name '{username}'"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or f"✅ 使用者已刪除：{username}")
+    except Exception as e:
+        print(f"❌ 刪除使用者失敗：{e}")
+
+
+# ── Windows 更新 ─────────────────────────────────────
+
+def win_update(action: str = "list"):
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Get-WindowsUpdate -AcceptAll 2>$null | Select-Object Title,Size | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+            print(r.stdout or "（需安裝 PSWindowsUpdate 模組）\n執行：Install-Module PSWindowsUpdate -Force")
+        elif action == "install":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Install-WindowsUpdate -AcceptAll -AutoReboot:$false 2>&1"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
+            print(r.stdout or "✅ 更新完成")
+        elif action == "check":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "(New-Object -ComObject Microsoft.Update.AutoUpdate).DetectNow()"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            print("✅ 已觸發 Windows Update 檢查")
+    except Exception as e:
+        print(f"❌ Windows 更新失敗：{e}")
+
+
+# ── 裝置管理員 ───────────────────────────────────────
+
+def device_list(keyword: str = ""):
+    try:
+        ps = "Get-PnpDevice | Select-Object Status,Class,FriendlyName | Format-Table -AutoSize"
+        r = subprocess.run(["powershell.exe", "-Command", ps],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        lines = r.stdout.strip().splitlines()
+        if keyword:
+            lines = [l for l in lines if keyword.lower() in l.lower()]
+        print("\n".join(lines[:50]))
+    except Exception as e:
+        print(f"❌ 裝置查詢失敗：{e}")
+
+def device_toggle(name: str, enable: bool = True):
+    try:
+        action = "Enable" if enable else "Disable"
+        r = subprocess.run(["powershell.exe", "-Command",
+            f"{action}-PnpDevice -FriendlyName '*{name}*' -Confirm:$false"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or f"✅ 裝置已{'啟用' if enable else '停用'}：{name}")
+    except Exception as e:
+        print(f"❌ 裝置操作失敗：{e}")
+
+
+# ── 網路介面卡控制 ───────────────────────────────────
+
+def netadapter_list():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-NetAdapter | Select-Object Name,Status,MacAddress,LinkSpeed | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout.strip())
+    except Exception as e:
+        print(f"❌ 查詢失敗：{e}")
+
+def netadapter_toggle(name: str, enable: bool = True):
+    try:
+        action = "Enable" if enable else "Disable"
+        r = subprocess.run(["powershell.exe", "-Command", f"{action}-NetAdapter -Name '{name}' -Confirm:$false"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or f"✅ 網路卡已{'啟用' if enable else '停用'}：{name}")
+    except Exception as e:
+        print(f"❌ 網路卡操作失敗：{e}")
+
+
+# ── DNS/IP 設定 ──────────────────────────────────────
+
+def dns_get():
+    try:
+        r = subprocess.run(["powershell.exe", "-Command",
+            "Get-DnsClientServerAddress | Select-Object InterfaceAlias,ServerAddresses | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout.strip())
+    except Exception as e:
+        print(f"❌ 查詢失敗：{e}")
+
+def dns_set(interface: str, dns1: str, dns2: str = ""):
+    try:
+        servers = f"'{dns1}'" + (f",'{dns2}'" if dns2 else "")
+        r = subprocess.run(["powershell.exe", "-Command",
+            f"Set-DnsClientServerAddress -InterfaceAlias '{interface}' -ServerAddresses ({servers})"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or f"✅ DNS 已設定：{dns1}{', '+dns2 if dns2 else ''}")
+    except Exception as e:
+        print(f"❌ DNS 設定失敗：{e}")
+
+def ip_config(interface: str, ip: str, mask: str = "255.255.255.0", gateway: str = ""):
+    try:
+        ps = f"New-NetIPAddress -InterfaceAlias '{interface}' -IPAddress '{ip}' -PrefixLength 24 -DefaultGateway '{gateway}'"
+        r = subprocess.run(["powershell.exe", "-Command", ps],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        print(r.stdout or f"✅ IP 已設定：{ip}")
+    except Exception as e:
+        print(f"❌ IP 設定失敗：{e}")
+
+
+# ── Hosts 檔案編輯 ───────────────────────────────────
+
+HOSTS_PATH = r"C:\Windows\System32\drivers\etc\hosts"
+
+def hosts_list():
+    try:
+        content = Path(HOSTS_PATH).read_text(encoding="utf-8", errors="replace")
+        lines = [l for l in content.splitlines() if l.strip() and not l.strip().startswith("#")]
+        print("\n".join(lines) or "（無自訂 hosts）")
+    except Exception as e:
+        print(f"❌ 讀取 hosts 失敗：{e}")
+
+def hosts_add(ip: str, domain: str):
+    try:
+        content = Path(HOSTS_PATH).read_text(encoding="utf-8", errors="replace")
+        entry = f"\n{ip}\t{domain}"
+        if domain in content:
+            print(f"⚠️ {domain} 已存在 hosts 中")
+            return
+        with open(HOSTS_PATH, "a", encoding="utf-8") as f:
+            f.write(entry)
+        print(f"✅ 已新增：{ip} → {domain}")
+    except Exception as e:
+        print(f"❌ 新增 hosts 失敗（需管理員權限）：{e}")
+
+def hosts_remove(domain: str):
+    try:
+        content = Path(HOSTS_PATH).read_text(encoding="utf-8", errors="replace")
+        lines = [l for l in content.splitlines() if domain not in l]
+        Path(HOSTS_PATH).write_text("\n".join(lines), encoding="utf-8")
+        print(f"✅ 已移除：{domain}")
+    except Exception as e:
+        print(f"❌ 移除 hosts 失敗（需管理員權限）：{e}")
+
+
+# ── 網路流量監控 ─────────────────────────────────────
+
+def net_traffic(duration: int = 5):
+    try:
+        import psutil, time as t
+        before = psutil.net_io_counters(pernic=False)
+        t.sleep(duration)
+        after = psutil.net_io_counters(pernic=False)
+        sent = (after.bytes_sent - before.bytes_sent) / duration / 1024
+        recv = (after.bytes_recv - before.bytes_recv) / duration / 1024
+        print(f"📡 網路流量（{duration}秒平均）\n上傳：{sent:.1f} KB/s\n下載：{recv:.1f} KB/s")
+        print("\n各網路介面：")
+        per_nic = psutil.net_io_counters(pernic=True)
+        for name, stats in per_nic.items():
+            print(f"  {name}: ↑{stats.bytes_sent/1024/1024:.1f}MB ↓{stats.bytes_recv/1024/1024:.1f}MB")
+    except Exception as e:
+        print(f"❌ 網路流量監控失敗：{e}")
+
+
+# ── 條件式自動化 ─────────────────────────────────────
+
+def if_then(condition_type: str, condition_value: str, action_cmd: str, duration: float = 300.0):
+    """
+    condition_type: cpu_above / mem_above / file_exists / time_is / process_running
+    condition_value: 數值或字串
+    action_cmd: shell 指令
+    """
+    try:
+        import psutil, time as t
+        print(f"🤖 條件式自動化啟動：if [{condition_type}={condition_value}] → [{action_cmd}]")
+        end = t.time() + duration
+        triggered = False
+        while t.time() < end:
+            met = False
+            if condition_type == "cpu_above":
+                met = psutil.cpu_percent(interval=1) > float(condition_value)
+            elif condition_type == "mem_above":
+                met = psutil.virtual_memory().percent > float(condition_value)
+            elif condition_type == "file_exists":
+                met = Path(condition_value).exists()
+            elif condition_type == "time_is":
+                met = datetime.now().strftime("%H:%M") == condition_value
+            elif condition_type == "process_running":
+                met = any(p.name().lower() == condition_value.lower() for p in psutil.process_iter())
+            if met and not triggered:
+                subprocess.run(action_cmd, shell=True)
+                triggered = True
+                print(f"✅ [{datetime.now().strftime('%H:%M:%S')}] 條件觸發，已執行：{action_cmd}")
+                break
+            t.sleep(2)
+        if not triggered:
+            print(f"⏰ 監控結束，條件未觸發")
+    except Exception as e:
+        print(f"❌ 條件式自動化失敗：{e}")
+
+
+# ── 多視窗排列 ───────────────────────────────────────
+
+def window_arrange(layout: str = "side_by_side"):
+    """layout: side_by_side / quad / stack / maximize_all"""
+    try:
+        import win32gui, win32con
+        sw = pyautogui.size().width
+        sh = pyautogui.size().height
+        hwnds = []
+        def _enum(hwnd, _):
+            if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowText(hwnd):
+                hwnds.append(hwnd)
+        win32gui.EnumWindows(_enum, None)
+        hwnds = [h for h in hwnds if win32gui.GetWindowText(h).strip()][:8]
+        if layout == "side_by_side" and len(hwnds) >= 2:
+            w = sw // 2
+            win32gui.MoveWindow(hwnds[0], 0, 0, w, sh, True)
+            win32gui.MoveWindow(hwnds[1], w, 0, w, sh, True)
+            print(f"✅ 左右分割：{win32gui.GetWindowText(hwnds[0])} | {win32gui.GetWindowText(hwnds[1])}")
+        elif layout == "quad" and len(hwnds) >= 4:
+            w, h = sw // 2, sh // 2
+            positions = [(0,0),(w,0),(0,h),(w,h)]
+            for i, (x,y) in enumerate(positions):
+                win32gui.MoveWindow(hwnds[i], x, y, w, h, True)
+            print(f"✅ 四格排列完成")
+        elif layout == "stack":
+            h = sh // len(hwnds)
+            for i, hwnd in enumerate(hwnds[:4]):
+                win32gui.MoveWindow(hwnd, 0, i * h, sw, h, True)
+            print(f"✅ 堆疊排列完成")
+        elif layout == "maximize_all":
+            for hwnd in hwnds:
+                win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
+            print(f"✅ 已最大化 {len(hwnds)} 個視窗")
+    except Exception as e:
+        print(f"❌ 視窗排列失敗：{e}")
+
+
+# ── 指定區域 OCR ─────────────────────────────────────
+
+def region_ocr(x: int, y: int, w: int, h: int, lang: str = "ch_tra"):
+    try:
+        import easyocr, numpy as np
+        from PIL import Image
+        img = pyautogui.screenshot(region=(x, y, w, h))
+        reader = easyocr.Reader([lang, "en"], gpu=False)
+        results = reader.readtext(np.array(img))
+        text = "\n".join(r[1] for r in results)
+        print(text or "（未辨識到文字）")
+    except Exception as e:
+        print(f"❌ 區域 OCR 失敗：{e}")
+
+
+# ── 指定視窗截圖 ─────────────────────────────────────
+
+def window_screenshot(title_keyword: str, output: str = ""):
+    try:
+        import win32gui, win32ui, win32con
+        from ctypes import windll
+        import numpy as np
+        from PIL import Image
+        hwnd = None
+        def _find(h, _):
+            nonlocal hwnd
+            if title_keyword.lower() in win32gui.GetWindowText(h).lower():
+                hwnd = h
+        win32gui.EnumWindows(_find, None)
+        if not hwnd:
+            print(f"❌ 找不到視窗：{title_keyword}")
+            return
+        win32gui.SetForegroundWindow(hwnd)
+        rect = win32gui.GetWindowRect(hwnd)
+        x, y, x2, y2 = rect
+        w, h = x2 - x, y2 - y
+        hwndDC = win32gui.GetWindowDC(hwnd)
+        mfcDC = win32ui.CreateDCFromHandle(hwndDC)
+        saveDC = mfcDC.CreateCompatibleDC()
+        saveBitMap = win32ui.CreateBitmap()
+        saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
+        saveDC.SelectObject(saveBitMap)
+        windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 3)
+        bmpinfo = saveBitMap.GetInfo()
+        bmpstr = saveBitMap.GetBitmapBits(True)
+        img = Image.frombuffer("RGB", (bmpinfo["bmWidth"], bmpinfo["bmHeight"]), bmpstr, "raw", "BGRX", 0, 1)
+        out = output or str(Path.home() / "Desktop" / f"win_{title_keyword[:10]}_{datetime.now().strftime('%H%M%S')}.png")
+        img.save(out)
+        win32gui.DeleteObject(saveBitMap.GetHandle())
+        saveDC.DeleteDC(); mfcDC.DeleteDC()
+        win32gui.ReleaseDC(hwnd, hwndDC)
+        print(f"✅ 視窗截圖已存：{out}")
+    except Exception as e:
+        print(f"❌ 視窗截圖失敗：{e}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -3329,6 +3890,42 @@ if __name__ == "__main__":
         "printer_jobs":    lambda: printer_jobs(),
         "net_share":       lambda: net_share(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "Z:", args[3] if len(args)>3 else "", args[4] if len(args)>4 else ""),
         "font_list":       lambda: font_list(args[0] if args else ""),
+        "volume_get":      lambda: volume_get(),
+        "volume_set":      lambda: volume_set(int(args[0])),
+        "volume_mute":     lambda: volume_mute(args[0].lower() != "false" if args else True),
+        "brightness_get":  lambda: brightness_get(),
+        "brightness_set":  lambda: brightness_set(int(args[0])),
+        "resolution_list": lambda: resolution_list(),
+        "media_control":   lambda: media_control(args[0]),
+        "audio_devices":   lambda: audio_devices(),
+        "audio_switch":    lambda: audio_switch(" ".join(args)),
+        "software_list":   lambda: software_list(args[0] if args else ""),
+        "software_install":lambda: software_install(" ".join(args)),
+        "software_uninstall": lambda: software_uninstall(" ".join(args)),
+        "startup_list":    lambda: startup_list(),
+        "startup_add":     lambda: startup_add(args[0], " ".join(args[1:])),
+        "startup_remove":  lambda: startup_remove(args[0]),
+        "env_get":         lambda: env_get(args[0] if args else ""),
+        "env_set":         lambda: env_set(args[0], args[1], len(args)>2 and args[2].lower()=="true"),
+        "user_list":       lambda: user_list(),
+        "user_create":     lambda: user_create(args[0], args[1]),
+        "user_delete":     lambda: user_delete(args[0]),
+        "win_update":      lambda: win_update(args[0] if args else "list"),
+        "device_list":     lambda: device_list(args[0] if args else ""),
+        "device_toggle":   lambda: device_toggle(args[0], len(args)<2 or args[1].lower()!="false"),
+        "netadapter_list": lambda: netadapter_list(),
+        "netadapter_toggle": lambda: netadapter_toggle(args[0], len(args)<2 or args[1].lower()!="false"),
+        "dns_get":         lambda: dns_get(),
+        "dns_set":         lambda: dns_set(args[0], args[1], args[2] if len(args)>2 else ""),
+        "ip_config":       lambda: ip_config(args[0], args[1], args[2] if len(args)>2 else "255.255.255.0", args[3] if len(args)>3 else ""),
+        "hosts_list":      lambda: hosts_list(),
+        "hosts_add":       lambda: hosts_add(args[0], args[1]),
+        "hosts_remove":    lambda: hosts_remove(args[0]),
+        "net_traffic":     lambda: net_traffic(int(args[0]) if args else 5),
+        "if_then":         lambda: if_then(args[0], args[1], " ".join(args[2:-1]) if len(args)>3 else args[2], float(args[-1]) if len(args)>3 else 300.0),
+        "window_arrange":  lambda: window_arrange(args[0] if args else "side_by_side"),
+        "region_ocr":      lambda: region_ocr(int(args[0]), int(args[1]), int(args[2]), int(args[3]), args[4] if len(args)>4 else "ch_tra"),
+        "window_screenshot": lambda: window_screenshot(args[0], args[1] if len(args)>1 else ""),
     }
 
     if tool not in tools:
