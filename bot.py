@@ -1397,7 +1397,7 @@ TOOLS = [
             "properties": {
                 "action": {"type": "string", "enum": ["speak","list_voices"]},
                 "text": {"type": "string"},
-                "voice": {"type": "string", "description": "語音名稱，如 zh-TW-HsiaoChenNeural（女）或 zh-TW-HsiaoChenNeural（男）"}
+                "voice": {"type": "string", "description": "語音名稱，如 zh-TW-YunJheNeural（女）或 zh-TW-YunJheNeural（男）"}
             },
             "required": ["action"]
         }
@@ -1409,7 +1409,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "要轉換成語音的文字內容"},
-                "voice": {"type": "string", "description": "語音名稱，預設 zh-TW-HsiaoChenNeural（女聲）。男聲用 zh-TW-HsiaoChenNeural"}
+                "voice": {"type": "string", "description": "語音名稱，預設 zh-TW-YunJheNeural（女聲）。男聲用 zh-TW-YunJheNeural"}
             },
             "required": ["text"]
         }
@@ -1929,7 +1929,7 @@ TOOLS = [
                 "image": {"type": "string", "description": "背景圖片路徑（tts_video使用，選填）"},
                 "duration": {"type": "number", "description": "時長秒數（text_video/screen_record）或每張停留秒數（slideshow）"},
                 "fps": {"type": "number", "description": "幀率（選填，預設24）"},
-                "voice": {"type": "string", "description": "TTS聲音（tts_video，預設zh-TW-HsiaoChenNeural）"},
+                "voice": {"type": "string", "description": "TTS聲音（tts_video，預設zh-TW-YunJheNeural）"},
                 "bg_color": {"type": "array", "description": "背景顏色RGB（text_video）"},
                 "font_color": {"type": "array", "description": "字體顏色RGB（text_video）"},
                 "font_size": {"type": "number", "description": "字體大小（text_video）"},
@@ -3176,59 +3176,78 @@ def execute_system_tools(action, **kwargs):
         return f"❌ 失敗：{e}"
 
 
-def clean_for_tts(text: str) -> str:
-    """清理文字讓 TTS 更口語自然：去除 emoji、Markdown、特殊符號、多餘標點"""
+def clean_for_tts(text: str, max_chars: int = 200) -> str:
+    """清理文字讓 TTS 更口語自然：去除 emoji、Markdown、URL、符號，限制長度"""
     import re
+
+    # 移除 URL
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(r"www\.\S+", "", text)
 
     # 移除 emoji（精確範圍，不影響中文字）
     emoji_pattern = re.compile(
         "["
-        "\U0001F600-\U0001F64F"   # 表情符號
-        "\U0001F300-\U0001F5FF"   # 符號與圖形
-        "\U0001F680-\U0001F6FF"   # 交通與地圖
-        "\U0001F700-\U0001F9FF"   # 其他補充符號
-        "\U0001FA00-\U0001FAFF"   # 西洋棋、擴展符號
-        "\u2600-\u26FF"           # 雜項符號
-        "\u2700-\u27BF"           # 裝飾符號
-        "\u2300-\u23FF"           # 技術符號
-        "\u25A0-\u25FF"           # 幾何形狀
-        "\u2B00-\u2BFF"           # 補充箭頭
-        "\uFE00-\uFE0F"           # 變體選擇符
-        "\u200B-\u200D\uFEFF"     # 零寬字符
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F700-\U0001F9FF"
+        "\U0001FA00-\U0001FAFF"
+        "\u2600-\u26FF"
+        "\u2700-\u27BF"
+        "\u2300-\u23FF"
+        "\u25A0-\u25FF"
+        "\u2B00-\u2BFF"
+        "\uFE00-\uFE0F"
+        "\u200B-\u200D\uFEFF"
         "]+", flags=re.UNICODE
     )
     text = emoji_pattern.sub("", text)
 
-    # 移除 Markdown 格式符號
-    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text)   # **粗體** *斜體*
-    text = re.sub(r"_{1,2}(.*?)_{1,2}", r"\1", text)       # __底線__
-    text = re.sub(r"`{1,3}.*?`{1,3}", "", text, flags=re.DOTALL)  # `程式碼`
-    text = re.sub(r"~~(.*?)~~", r"\1", text)               # ~~刪除線~~
-    text = re.sub(r"#{1,6}\s*", "", text)                  # ## 標題
-    text = re.sub(r">\s*", "", text)                       # > 引用
-    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text) # [連結](url)
-    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)            # ![圖片](url)
+    # 移除 Markdown 格式
+    text = re.sub(r"`{1,3}.*?`{1,3}", "", text, flags=re.DOTALL)  # 程式碼塊優先移除
+    text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text)
+    text = re.sub(r"_{1,2}(.*?)_{1,2}", r"\1", text)
+    text = re.sub(r"~~(.*?)~~", r"\1", text)
+    text = re.sub(r"#{1,6}\s*", "", text)
+    text = re.sub(r">\s*", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
 
-    # 移除特殊 ASCII 符號（保留中英數字和常用標點）
-    text = re.sub(r"[|\\/<>{}=+\[\]~^@#$%&*_]", "", text)
+    # 移除表格、程式碼行、路徑
+    text = re.sub(r"\|.*?\|", "", text)                          # 表格
+    text = re.sub(r"[A-Za-z]:\\[^\s，。！？]*", "", text)        # Windows 路徑
+    text = re.sub(r"/[a-zA-Z0-9_/.-]{5,}", "", text)            # Unix 路徑
 
-    # 將數字列表符號「1. 2. 」→ 保留，但移除前綴破折號「- 」
-    text = re.sub(r"^\s*[-•·]\s+", "", text, flags=re.MULTILINE)
+    # 移除特殊符號
+    text = re.sub(r"[|\\/<>{}=+\[\]~^@#$%&*_`]", "", text)
 
-    # 多個連續標點只保留一個
+    # 移除列表符號
+    text = re.sub(r"^\s*[-•·✅❌]\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+[.)]\s*", "", text, flags=re.MULTILINE)
+
+    # 標點正規化
     text = re.sub(r"[!！]{2,}", "！", text)
     text = re.sub(r"[?？]{2,}", "？", text)
     text = re.sub(r"[,，]{2,}", "，", text)
     text = re.sub(r"[.。]{2,}", "。", text)
-    text = re.sub(r"\.{3,}", "，", text)  # ... → 停頓
+    text = re.sub(r"\.{2,}", "，", text)
 
-    # 移除行首行尾多餘空白，合併多個空行
-    lines = [line.strip() for line in text.splitlines()]
-    lines = [l for l in lines if l]
-    text = "，".join(lines) if lines else text
+    # 合併空行，去除空白行
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    text = "，".join(lines)
 
-    # 移除殘留的多餘空白
+    # 去除多餘空白
     text = re.sub(r"\s{2,}", " ", text).strip()
+
+    # 截斷到 max_chars，在句子邊界截斷
+    if len(text) > max_chars:
+        cut = text[:max_chars]
+        for sep in ["。", "！", "？", "，", " "]:
+            idx = cut.rfind(sep)
+            if idx > max_chars // 2:
+                cut = cut[:idx + 1]
+                break
+        text = cut
 
     return text
 
@@ -3245,7 +3264,7 @@ def _wrap_ssml(text: str, voice: str, rate: str = "-5%", pitch: str = "-2Hz") ->
     )
 
 
-def generate_voice_ogg(text: str, voice: str = "zh-TW-HsiaoChenNeural") -> bytes:
+def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
     """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）"""
     text = clean_for_tts(text)
     import edge_tts, asyncio, tempfile, subprocess as sp
@@ -3277,7 +3296,7 @@ def generate_voice_ogg(text: str, voice: str = "zh-TW-HsiaoChenNeural") -> bytes
     return data
 
 
-def execute_tts_advanced(action, text="", voice="zh-TW-HsiaoChenNeural"):
+def execute_tts_advanced(action, text="", voice="zh-TW-YunJheNeural"):
     try:
         import edge_tts, asyncio
         if action == "speak":
@@ -6314,7 +6333,7 @@ def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> st
         elif mode == "tts_video":
             text      = kwargs.get("text", "")
             img_path  = kwargs.get("image", "")
-            voice     = kwargs.get("voice", "zh-TW-HsiaoChenNeural")
+            voice     = kwargs.get("voice", "zh-TW-YunJheNeural")
             subtitle  = kwargs.get("subtitle", True)
             if not text:
                 return "❌ 請提供 text 參數"
@@ -7687,7 +7706,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         import asyncio, io as _io
         loop = asyncio.get_running_loop()
         try:
-            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-TW-HsiaoChenNeural")
+            ogg_data = await loop.run_in_executor(None, generate_voice_ogg, reply_text, "zh-TW-YunJheNeural")
             await update.message.reply_voice(voice=_io.BytesIO(ogg_data))
         except Exception:
             await update.message.reply_text(reply_text)
@@ -8076,7 +8095,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["action"], **{k:v for k,v in tool_use.input.items() if k!="action"}),
                 "tts_advanced": lambda: execute_tts_advanced(
                     tool_use.input["action"], tool_use.input.get("text",""),
-                    tool_use.input.get("voice","zh-TW-HsiaoChenNeural")),
+                    tool_use.input.get("voice","zh-TW-YunJheNeural")),
                 "todo_list": lambda: execute_todo(
                     tool_use.input["action"], tool_use.input.get("task",""),
                     tool_use.input.get("id",0)),
@@ -8308,7 +8327,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     image=tool_use.input.get("image",""),
                     duration=tool_use.input.get("duration",5),
                     fps=tool_use.input.get("fps",24),
-                    voice=tool_use.input.get("voice","zh-TW-HsiaoChenNeural"),
+                    voice=tool_use.input.get("voice","zh-TW-YunJheNeural"),
                     bg_color=tool_use.input.get("bg_color",[30,30,40]),
                     font_color=tool_use.input.get("font_color",[255,255,255]),
                     font_size=tool_use.input.get("font_size",60),
@@ -8319,7 +8338,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 import asyncio
                 loop = asyncio.get_running_loop()
                 text = tool_use.input["text"]
-                voice = tool_use.input.get("voice", "zh-TW-HsiaoChenNeural")
+                voice = tool_use.input.get("voice", "zh-TW-YunJheNeural")
                 await update.message.reply_chat_action("record_voice")
                 try:
                     ogg_data = await loop.run_in_executor(None, generate_voice_ogg, text, voice)
@@ -8382,7 +8401,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     image=tool_use.input.get("image", ""),
                     duration=tool_use.input.get("duration", 5),
                     fps=tool_use.input.get("fps", 24),
-                    voice=tool_use.input.get("voice", "zh-TW-HsiaoChenNeural"),
+                    voice=tool_use.input.get("voice", "zh-TW-YunJheNeural"),
                     bg_color=tool_use.input.get("bg_color", [30, 30, 40]),
                     font_color=tool_use.input.get("font_color", [255, 255, 255]),
                     font_size=tool_use.input.get("font_size", 60),
