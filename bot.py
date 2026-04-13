@@ -8459,21 +8459,49 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             elif tool_use.name in simple_tools:
-                import asyncio
-                loop = asyncio.get_running_loop()
-                tool_result = await loop.run_in_executor(None, simple_tools[tool_use.name])
-                response = client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=512,
-                    system=system,
-                    tools=TOOLS,
-                    messages=history + [
-                        {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                import asyncio as _asyncio
+                _loop = _asyncio.get_running_loop()
+
+                # 多步驟工具循環（最多10步），支援「打開記事本→輸入文字」等連續動作
+                _messages = list(history)
+                _cur_resp = response
+                _last_result = ""
+
+                for _step in range(10):
+                    # 執行工具（lambdas 直接引用外層 tool_use 變數，更新 tool_use 即可）
+                    _last_result = await _loop.run_in_executor(None, simple_tools[tool_use.name])
+
+                    # run 動作後等視窗開啟
+                    if tool_use.name == "desktop_control" and tool_use.input.get("action") == "run":
+                        await _asyncio.sleep(1.5)
+
+                    # 把結果傳回 Claude
+                    _messages = _messages + [
+                        {"role": "assistant", "content": _cur_resp.content},
+                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": _last_result}]}
                     ]
-                )
-                text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-                reply = text_blocks[0] if text_blocks else tool_result
+                    _next_resp = client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=512,
+                        system=system,
+                        tools=TOOLS,
+                        messages=_messages
+                    )
+
+                    # Claude 還要繼續呼叫 simple_tools？繼續循環
+                    if _next_resp.stop_reason == "tool_use":
+                        _next_tool = next((b for b in _next_resp.content if b.type == "tool_use"), None)
+                        if _next_tool and _next_tool.name in simple_tools:
+                            tool_use = _next_tool   # 更新 tool_use，lambdas 自動捕捉新值
+                            _cur_resp = _next_resp
+                            continue
+
+                    # 結束循環
+                    _cur_resp = _next_resp
+                    break
+
+                text_blocks = [b.text for b in _cur_resp.content if hasattr(b, "text")]
+                reply = text_blocks[0] if text_blocks else _last_result
                 save_message(chat_id, "assistant", reply)
                 await _send_reply(update, reply)
                 return
