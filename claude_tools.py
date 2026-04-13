@@ -2585,6 +2585,123 @@ def video_to_gif(path: str, start: float = 0, duration: float = 5.0, output: str
 
 # ── 影片生成 ─────────────────────────────────────────
 
+def ai_video(prompt: str, provider: str = "replicate", model: str = "",
+             image_url: str = "", duration: float = 5, output: str = ""):
+    """
+    用 AI API 生成影片
+    provider: replicate / runway / kling
+    需要 .env 或環境變數中對應的 API Key
+    """
+    import requests, time, traceback, os
+    from pathlib import Path
+    from dotenv import load_dotenv
+    load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
+
+    out = output or str(Path.home() / "Desktop" / f"ai_video_{int(time.time())}.mp4")
+
+    def _download(url, dest):
+        r = requests.get(url, timeout=120, stream=True)
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(8192):
+                f.write(chunk)
+        return dest
+
+    try:
+        if provider == "replicate":
+            api_key = os.getenv("REPLICATE_API_TOKEN", "")
+            if not api_key:
+                print("❌ 缺少 REPLICATE_API_TOKEN，請在 .env 加入"); return
+            mdl = model or ("stability-ai/stable-video-diffusion" if image_url else "minimax/video-01")
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            inputs = {"prompt": prompt}
+            if image_url: inputs["image"] = image_url
+            if duration:  inputs["duration"] = int(duration)
+            r = requests.post(
+                f"https://api.replicate.com/v1/models/{mdl}/predictions",
+                json={"input": inputs}, headers=headers, timeout=30
+            )
+            r.raise_for_status()
+            pred_id = r.json()["id"]
+            for _ in range(60):
+                time.sleep(5)
+                resp = requests.get(f"https://api.replicate.com/v1/predictions/{pred_id}",
+                                    headers=headers, timeout=15)
+                data = resp.json()
+                if data.get("status") == "succeeded":
+                    url = data["output"]
+                    if isinstance(url, list): url = url[0]
+                    _download(url, out)
+                    print(f"✅ Replicate 影片已生成：{out}")
+                    return
+                elif data.get("status") == "failed":
+                    print(f"❌ Replicate 失敗：{data.get('error')}")
+                    return
+            print("❌ Replicate 逾時")
+
+        elif provider == "runway":
+            api_key = os.getenv("RUNWAY_API_KEY", "")
+            if not api_key:
+                print("❌ 缺少 RUNWAY_API_KEY，請在 .env 加入"); return
+            import runwayml
+            client = runwayml.RunwayML(api_key=api_key)
+            if image_url:
+                task = client.image_to_video.create(
+                    model="gen4_turbo", prompt_image=image_url,
+                    prompt_text=prompt, duration=int(min(duration, 10)), ratio="1280:720")
+            else:
+                task = client.text_to_video.create(
+                    model="gen4_turbo", prompt_text=prompt,
+                    duration=int(min(duration, 10)), ratio="1280:720")
+            for _ in range(60):
+                time.sleep(5)
+                t = client.tasks.retrieve(task.id)
+                if t.status == "SUCCEEDED":
+                    _download(t.output[0], out)
+                    print(f"✅ Runway 影片已生成：{out}"); return
+                elif t.status in ("FAILED", "CANCELLED"):
+                    print(f"❌ Runway 失敗：{t.failure_reason}"); return
+            print("❌ Runway 逾時")
+
+        elif provider == "kling":
+            import jwt as _jwt
+            access_key = os.getenv("KLING_ACCESS_KEY", "")
+            secret_key = os.getenv("KLING_SECRET_KEY", "")
+            if not access_key or not secret_key:
+                print("❌ 缺少 KLING_ACCESS_KEY / KLING_SECRET_KEY"); return
+            def _token():
+                return _jwt.encode({"iss": access_key, "exp": int(time.time())+1800,
+                                    "nbf": int(time.time())-5}, secret_key, algorithm="HS256")
+            hdrs = {"Authorization": f"Bearer {_token()}", "Content-Type": "application/json"}
+            body = {"model_name": "kling-v1", "prompt": prompt,
+                    "duration": str(int(min(duration, 10))), "aspect_ratio": "16:9"}
+            if image_url: body["image_url"] = image_url
+            ep = "image2video" if image_url else "text2video"
+            r = requests.post(f"https://api.klingai.com/v1/videos/{ep}",
+                              json=body, headers=hdrs, timeout=30)
+            r.raise_for_status()
+            d = r.json()
+            if d.get("code") != 0:
+                print(f"❌ Kling 錯誤：{d.get('message')}"); return
+            task_id = d["data"]["task_id"]
+            for _ in range(60):
+                time.sleep(5)
+                hdrs["Authorization"] = f"Bearer {_token()}"
+                resp = requests.get(f"https://api.klingai.com/v1/videos/{ep}/{task_id}",
+                                    headers=hdrs, timeout=15)
+                dd = resp.json().get("data", {})
+                if dd.get("task_status") == "succeed":
+                    _download(dd["task_result"]["videos"][0]["url"], out)
+                    print(f"✅ Kling 影片已生成：{out}"); return
+                elif dd.get("task_status") == "failed":
+                    print(f"❌ Kling 失敗：{dd.get('task_status_msg')}"); return
+            print("❌ Kling 逾時")
+        else:
+            print(f"❌ 未知 provider：{provider}")
+    except Exception as e:
+        print(f"❌ AI 影片生成失敗：{e}\n{traceback.format_exc()}")
+
+
 def video_gen(mode: str = "slideshow", output: str = "", **kwargs):
     """
     生成影片
@@ -4998,6 +5115,14 @@ if __name__ == "__main__":
         # 用法：video_gen <mode> [output] [key=value ...]
         # mode: slideshow / text_video / tts_video / screen_record
         # 例：video_gen text_video "" text="你好世界" duration=5
+        "ai_video":          lambda: ai_video(
+            " ".join(args[:1]) if args else "",
+            args[1] if len(args) > 1 else "replicate",
+            args[2] if len(args) > 2 else "",
+            args[3] if len(args) > 3 else "",
+            float(args[4]) if len(args) > 4 else 5,
+            args[5] if len(args) > 5 else ""
+        ),
         "video_gen":         lambda: video_gen(
             args[0] if args else "text_video",
             args[1] if len(args) > 1 else "",

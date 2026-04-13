@@ -1893,6 +1893,26 @@ TOOLS = [
         }
     },
     {
+        "name": "ai_video",
+        "description": "用 AI API 生成影片（Replicate / Runway / Kling）。需要對應的 API Key 在 .env 中。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "影片描述文字"},
+                "provider": {
+                    "type": "string",
+                    "enum": ["replicate", "runway", "kling"],
+                    "description": "AI 服務商（replicate=最多模型, runway=高品質, kling=快影）"
+                },
+                "model": {"type": "string", "description": "模型名稱（replicate 用，如 minimax/video-01）"},
+                "image_url": {"type": "string", "description": "起始圖片 URL（image-to-video，選填）"},
+                "duration": {"type": "number", "description": "影片秒數（預設 5）"},
+                "output": {"type": "string", "description": "輸出路徑（選填，預設桌面）"}
+            },
+            "required": ["prompt", "provider"]
+        }
+    },
+    {
         "name": "video_gen",
         "description": "生成影片：投影片、文字動畫、TTS語音影片、螢幕錄影。",
         "input_schema": {
@@ -5710,6 +5730,194 @@ def execute_video_process(action, path, second=0, start=0, end=0, output=""):
         return f"❌ 影片處理失敗：{e}"
 
 
+def execute_ai_video(prompt: str, provider: str = "replicate",
+                     model: str = "", image_url: str = "",
+                     duration: float = 5, output: str = "") -> str:
+    """
+    用 AI API 生成影片
+    provider: replicate / runway / kling
+    需要 .env 中對應的 API Key
+    """
+    import requests, time, traceback
+    from pathlib import Path
+
+    out = output or str(Path.home() / "Desktop" / f"ai_video_{int(time.time())}.mp4")
+
+    def _download(url: str, dest: str) -> str:
+        r = requests.get(url, timeout=120, stream=True)
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(8192):
+                f.write(chunk)
+        return dest
+
+    try:
+        # ── Replicate ──────────────────────────────────────────────
+        if provider == "replicate":
+            api_key = os.getenv("REPLICATE_API_TOKEN", "")
+            if not api_key:
+                return "❌ 缺少 REPLICATE_API_TOKEN，請在 .env 加入"
+
+            # 預設模型：minimax/video-01（Hailuo，高品質文字轉影片）
+            mdl = model or ("stability-ai/stable-video-diffusion" if image_url else "minimax/video-01")
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Prefer": "wait"
+            }
+
+            payload: dict = {"version": mdl} if "/" not in mdl else {}
+            # 用 model 端點
+            inputs: dict = {"prompt": prompt}
+            if image_url:
+                inputs["image"] = image_url
+            if duration:
+                inputs["duration"] = int(duration)
+
+            # Replicate v1 API
+            r = requests.post(
+                f"https://api.replicate.com/v1/models/{mdl}/predictions" if "/" in mdl
+                else f"https://api.replicate.com/v1/predictions",
+                json={"input": inputs, **({"version": mdl} if "/" not in mdl else {})},
+                headers=headers, timeout=30
+            )
+            r.raise_for_status()
+            pred = r.json()
+            pred_id = pred["id"]
+            pred_url = f"https://api.replicate.com/v1/predictions/{pred_id}"
+
+            # 輪詢結果（最多等 5 分鐘）
+            for _ in range(60):
+                time.sleep(5)
+                resp = requests.get(pred_url, headers=headers, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+                status = data.get("status")
+                if status == "succeeded":
+                    video_url = data.get("output")
+                    if isinstance(video_url, list):
+                        video_url = video_url[0]
+                    _download(video_url, out)
+                    return f"✅ Replicate 影片已生成：{out}"
+                elif status == "failed":
+                    err = data.get("error", "未知錯誤")
+                    return f"❌ Replicate 生成失敗：{err}"
+
+            return "❌ Replicate 逾時（超過 5 分鐘）"
+
+        # ── Runway ─────────────────────────────────────────────────
+        elif provider == "runway":
+            api_key = os.getenv("RUNWAY_API_KEY", "")
+            if not api_key:
+                return "❌ 缺少 RUNWAY_API_KEY，請在 .env 加入"
+            try:
+                import runwayml
+            except ImportError:
+                return "❌ 請先安裝：pip install runwayml"
+
+            client = runwayml.RunwayML(api_key=api_key)
+
+            if image_url:
+                task = client.image_to_video.create(
+                    model="gen4_turbo",
+                    prompt_image=image_url,
+                    prompt_text=prompt,
+                    duration=int(min(duration, 10)),
+                    ratio="1280:720"
+                )
+            else:
+                # Runway Gen-4 需要圖片，改用 gen3a_turbo text-to-video
+                task = client.text_to_video.create(
+                    model="gen4_turbo",
+                    prompt_text=prompt,
+                    duration=int(min(duration, 10)),
+                    ratio="1280:720"
+                )
+
+            task_id = task.id
+            # 輪詢
+            for _ in range(60):
+                time.sleep(5)
+                t = client.tasks.retrieve(task_id)
+                if t.status == "SUCCEEDED":
+                    _download(t.output[0], out)
+                    return f"✅ Runway 影片已生成：{out}"
+                elif t.status in ("FAILED", "CANCELLED"):
+                    return f"❌ Runway 生成失敗：{t.failure_reason}"
+            return "❌ Runway 逾時"
+
+        # ── Kling（快影/可靈）────────────────────────────────────────
+        elif provider == "kling":
+            import hmac, hashlib, base64, json as _json
+            access_key = os.getenv("KLING_ACCESS_KEY", "")
+            secret_key = os.getenv("KLING_SECRET_KEY", "")
+            if not access_key or not secret_key:
+                return "❌ 缺少 KLING_ACCESS_KEY / KLING_SECRET_KEY，請在 .env 加入"
+
+            # 生成 JWT
+            import jwt as _jwt
+            payload_jwt = {
+                "iss": access_key,
+                "exp": int(time.time()) + 1800,
+                "nbf": int(time.time()) - 5
+            }
+            token = _jwt.encode(payload_jwt, secret_key, algorithm="HS256")
+            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+            # 建立任務
+            body: dict = {
+                "model_name": "kling-v1",
+                "prompt": prompt,
+                "duration": str(int(min(duration, 10))),
+                "aspect_ratio": "16:9"
+            }
+            if image_url:
+                body["image_url"] = image_url
+
+            endpoint = "image2video" if image_url else "text2video"
+            r = requests.post(
+                f"https://api.klingai.com/v1/videos/{endpoint}",
+                json=body, headers=headers, timeout=30
+            )
+            r.raise_for_status()
+            data = r.json()
+            if data.get("code") != 0:
+                return f"❌ Kling API 錯誤：{data.get('message')}"
+
+            task_id = data["data"]["task_id"]
+
+            # 輪詢
+            for _ in range(60):
+                time.sleep(5)
+                # 重新生成 token
+                payload_jwt["exp"] = int(time.time()) + 1800
+                token = _jwt.encode(payload_jwt, secret_key, algorithm="HS256")
+                headers["Authorization"] = f"Bearer {token}"
+
+                resp = requests.get(
+                    f"https://api.klingai.com/v1/videos/{endpoint}/{task_id}",
+                    headers=headers, timeout=15
+                )
+                resp.raise_for_status()
+                d = resp.json().get("data", {})
+                status = d.get("task_status")
+                if status == "succeed":
+                    video_url = d["task_result"]["videos"][0]["url"]
+                    _download(video_url, out)
+                    return f"✅ Kling 影片已生成：{out}"
+                elif status == "failed":
+                    return f"❌ Kling 生成失敗：{d.get('task_status_msg')}"
+
+            return "❌ Kling 逾時"
+
+        else:
+            return f"❌ 未知 provider：{provider}，可用：replicate / runway / kling"
+
+    except Exception as e:
+        return f"❌ AI 影片生成失敗：{e}\n{traceback.format_exc()}"
+
+
 def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> str:
     """
     生成影片
@@ -6769,6 +6977,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["action"], tool_use.input.get("fps",0.5),
                     tool_use.input.get("duration",60.0), tool_use.input.get("quality",50),
                     _bot_send=context.bot.send_photo, _chat_id=chat_id),
+                "ai_video": lambda: execute_ai_video(
+                    tool_use.input["prompt"],
+                    tool_use.input.get("provider", "replicate"),
+                    tool_use.input.get("model", ""),
+                    tool_use.input.get("image_url", ""),
+                    tool_use.input.get("duration", 5),
+                    tool_use.input.get("output", "")),
                 "video_gen": lambda: execute_video_gen(
                     tool_use.input["mode"],
                     tool_use.input.get("output",""),
@@ -6799,6 +7014,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply = f"語音生成失敗：{e}\n\n{text}"
                     await update.message.reply_text(reply)
                 save_message(chat_id, "assistant", text)
+                return
+
+            elif tool_use.name == "ai_video":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                provider = tool_use.input.get("provider", "replicate")
+                provider_names = {"replicate": "Replicate", "runway": "Runway", "kling": "Kling"}
+                await update.message.reply_text(
+                    f"🎬 AI 影片生成中（{provider_names.get(provider, provider)}），"
+                    f"通常需要 1-3 分鐘，請稍候..."
+                )
+                out_path = await loop.run_in_executor(None, lambda: execute_ai_video(
+                    tool_use.input["prompt"],
+                    provider,
+                    tool_use.input.get("model", ""),
+                    tool_use.input.get("image_url", ""),
+                    tool_use.input.get("duration", 5),
+                    tool_use.input.get("output", ""),
+                ))
+                if out_path and out_path.startswith("✅") and Path(out_path.split("：")[-1].strip()).exists():
+                    video_file = out_path.split("：")[-1].strip()
+                    await update.message.reply_chat_action("upload_video")
+                    with open(video_file, "rb") as f:
+                        await update.message.reply_video(
+                            video=f,
+                            caption=f"🎬 {provider_names.get(provider, provider)} 影片",
+                            supports_streaming=True,
+                        )
+                reply = out_path
+                save_message(chat_id, "assistant", reply)
+                await update.message.reply_text(reply)
                 return
 
             elif tool_use.name == "video_gen":
