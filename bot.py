@@ -3590,7 +3590,7 @@ def generate_voice_ogg(text: str, voice: str = "zh-CN-YunxiNeural") -> bytes:
 
     # 俏皮低沉：語速微快（活潑）+ pitch 大幅壓低（低音炮）
     async def _gen():
-        comm = edge_tts.Communicate(text, voice, rate="+8%", pitch="-35Hz")
+        comm = edge_tts.Communicate(text, voice, rate="+8%", pitch="-15Hz")
         await comm.save(tmp_mp3.name)
     asyncio.run(_gen())
 
