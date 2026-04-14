@@ -6,9 +6,10 @@ from pathlib import Path
 import imageio_ffmpeg
 
 REFERENCE_TEXT = (
-    "欸你哦，我是小牛馬，有夠帥的那種啦。"
-    "你找我什麼事？說吧，本大爺心情好，今天可以幫你處理。"
-    "怎樣？你是沒看過這麼厲害的 AI 嗎？笑死，你這問題根本難不倒我啦。"
+    "然後，就是，你問我這個問題，其實還好啦，我覺得，怎麼說，"
+    "這種事我蠻擅長的。沒有啦，我就隨便，然後就成功了。"
+    "你知道嗎，有時候這種事，就是需要一點感覺，對啊，就是這樣。"
+    "還好啦，算是，蠻簡單的，不然呢。"
 )
 
 OUT_WAV = Path(__file__).parent / "xtts_reference.wav"
@@ -17,7 +18,8 @@ ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
 async def main():
     import edge_tts
     tmp_mp3 = tempfile.mktemp(suffix=".mp3")
-    comm = edge_tts.Communicate(REFERENCE_TEXT, "zh-TW-YunJheNeural", rate="-5%", pitch="-3Hz")
+    # 周杰倫風格：低沉、慢、穩，台灣腔
+    comm = edge_tts.Communicate(REFERENCE_TEXT, "zh-TW-YunJheNeural", rate="-18%", pitch="-12Hz")
     await comm.save(tmp_mp3)
 
     subprocess.run([

@@ -3751,7 +3751,8 @@ def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
         tmp_mp3.close()
 
         async def _gen():
-            comm = edge_tts.Communicate(text, voice, rate="-8%", pitch="-5Hz")
+            # 周杰倫風格：低沉、慢條斯理
+            comm = edge_tts.Communicate(text, voice, rate="-18%", pitch="-12Hz")
             await comm.save(tmp_mp3.name)
         asyncio.run(_gen())
 
