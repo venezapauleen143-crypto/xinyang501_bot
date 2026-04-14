@@ -285,6 +285,71 @@ TOOLS = [
         }
     },
     {
+        "name": "get_fundamentals",
+        "description": "查詢股票深度基本面：ROE、EPS成長、毛利率、負債比、股東權益報酬、分析師評級與目標價、近幾季財報趨勢。當用戶問公司體質、值不值得投資、基本面分析時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代號，同 get_stock"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "get_market_sentiment",
+        "description": "查詢市場情緒指標：恐慌貪婪指數（Fear & Greed Index）、VIX 波動率、市場概況。當用戶問現在市場情緒、是否恐慌、適不適合進場時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "get_etf",
+        "description": "查詢 ETF 資訊：持股明細、費用率、歷史績效、配息紀錄。當用戶問 ETF 怎麼選、哪支好、要買哪支 ETF 時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "ETF 代號，如 0050.TW、VOO、SPY、QQQ、0056.TW"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "get_earnings",
+        "description": "查詢近幾季財報趨勢：營收、EPS 實際 vs 預期、年增率。當用戶問財報、EPS、營收成長時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代號"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "get_candlestick_chart",
+        "description": "產生股票 K 線圖並傳送圖片，包含成交量、MA均線、自動辨識型態（頭肩頂、雙底、突破等）。當用戶要看 K 線圖、走勢圖時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代號"},
+                "period": {"type": "string", "enum": ["1mo", "3mo", "6mo", "1y"], "description": "期間，預設 3mo"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "compare_stocks",
+        "description": "比較多支股票的表現：漲跌幅、本益比、ROE、市值等關鍵指標並排比較。當用戶問哪支比較好、要比較兩支股票時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbols": {"type": "array", "items": {"type": "string"}, "description": "要比較的股票代號列表，最多5支"},
+                "metrics": {"type": "array", "items": {"type": "string", "enum": ["price", "pe", "roe", "margin", "growth", "all"]}, "description": "比較項目，預設 all"}
+            },
+            "required": ["symbols"]
+        }
+    },
+    {
         "name": "ddg_search",
         "description": "DuckDuckGo 快速網路搜尋，適合搜尋中文內容、中國相關話題、最新時事、任何需要查資料的問題。比 osint_search 更快更穩。當用戶問不知道答案的問題、需要查最新資訊、詢問中國相關話題時優先使用此工具。",
         "input_schema": {
@@ -2981,6 +3046,369 @@ def fetch_stock_advanced(symbol: str, indicators: list = None) -> str:
         return "\n".join(result)
     except Exception as e:
         return f"進階技術分析失敗：{e}"
+
+
+def fetch_fundamentals(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        name = info.get("longName") or info.get("shortName") or symbol
+        currency = info.get("currency", "")
+
+        # 基本面指標
+        roe = info.get("returnOnEquity")
+        roa = info.get("returnOnAssets")
+        profit_margin = info.get("profitMargins")
+        gross_margin = info.get("grossMargins")
+        operating_margin = info.get("operatingMargins")
+        debt_equity = info.get("debtToEquity")
+        current_ratio = info.get("currentRatio")
+        eps = info.get("trailingEps")
+        eps_fwd = info.get("forwardEps")
+        pe = info.get("trailingPE")
+        pe_fwd = info.get("forwardPE")
+        pb = info.get("priceToBook")
+        rev_growth = info.get("revenueGrowth")
+        earn_growth = info.get("earningsGrowth")
+        dividend_yield = info.get("dividendYield")
+
+        # 分析師評級
+        target_mean = info.get("targetMeanPrice")
+        target_high = info.get("targetHighPrice")
+        target_low = info.get("targetLowPrice")
+        recommend = info.get("recommendationKey", "")
+        recommend_map = {"strong_buy": "強力買進 💚", "buy": "買進 🟢", "hold": "持有 🟡",
+                         "sell": "賣出 🔴", "strong_sell": "強力賣出 ❌"}
+        recommend_str = recommend_map.get(recommend, recommend)
+        num_analysts = info.get("numberOfAnalystOpinions", 0)
+
+        lines = [f"📋 {name} ({symbol}) 深度基本面\n"]
+
+        lines.append("── 獲利能力 ──")
+        if roe: lines.append(f"ROE（股東權益報酬）：{roe*100:.1f}%")
+        if roa: lines.append(f"ROA（資產報酬）：{roa*100:.1f}%")
+        if gross_margin: lines.append(f"毛利率：{gross_margin*100:.1f}%")
+        if operating_margin: lines.append(f"營業利益率：{operating_margin*100:.1f}%")
+        if profit_margin: lines.append(f"淨利率：{profit_margin*100:.1f}%")
+
+        lines.append("\n── 估值 ──")
+        if pe: lines.append(f"本益比（P/E）：{pe:.1f}")
+        if pe_fwd: lines.append(f"預估本益比：{pe_fwd:.1f}")
+        if pb: lines.append(f"股價淨值比（P/B）：{pb:.2f}")
+        if eps: lines.append(f"EPS（過去12月）：{eps:.2f} {currency}")
+        if eps_fwd: lines.append(f"EPS 預估：{eps_fwd:.2f} {currency}")
+
+        lines.append("\n── 成長性 ──")
+        if rev_growth: lines.append(f"營收年增率：{rev_growth*100:+.1f}%")
+        if earn_growth: lines.append(f"獲利年增率：{earn_growth*100:+.1f}%")
+
+        lines.append("\n── 財務健康 ──")
+        if debt_equity: lines.append(f"負債股權比：{debt_equity:.1f}%")
+        if current_ratio: lines.append(f"流動比率：{current_ratio:.2f}")
+        if dividend_yield: lines.append(f"殖利率：{dividend_yield*100:.2f}%")
+
+        if target_mean and num_analysts:
+            lines.append(f"\n── 分析師（{num_analysts} 位）──")
+            lines.append(f"評級：{recommend_str}")
+            lines.append(f"目標價：{target_low:.2f} ~ {target_high:.2f}（均值 {target_mean:.2f} {currency}）")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"基本面查詢失敗：{e}"
+
+
+def fetch_market_sentiment() -> str:
+    try:
+        import yfinance as yf
+        # VIX
+        vix_hist = yf.Ticker("^VIX").history(period="5d")
+        vix = vix_hist["Close"].iloc[-1] if not vix_hist.empty else None
+        vix_prev = vix_hist["Close"].iloc[-2] if len(vix_hist) > 1 else vix
+
+        if vix:
+            if vix >= 40: vix_note = "極度恐慌 😱"
+            elif vix >= 30: vix_note = "高度恐慌 😰"
+            elif vix >= 20: vix_note = "輕度緊張 😟"
+            elif vix >= 12: vix_note = "正常 😐"
+            else: vix_note = "市場過度樂觀 😎"
+
+        # Fear & Greed Index (CNN)
+        try:
+            fg_resp = requests.get(
+                "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
+                headers={"User-Agent": "Mozilla/5.0"}, timeout=8
+            )
+            fg_data = fg_resp.json()
+            fg_score = fg_data["fear_and_greed"]["score"]
+            fg_rating = fg_data["fear_and_greed"]["rating"]
+            fg_prev = fg_data["fear_and_greed"]["previous_close"]
+            fg_str = f"{fg_score:.0f}/100 — {fg_rating}"
+            fg_change = fg_score - fg_prev
+        except Exception:
+            fg_str = "無法取得"
+            fg_change = 0
+
+        # S&P500 and Nasdaq 當日走勢
+        sp_hist = yf.Ticker("^GSPC").history(period="5d")
+        ndx_hist = yf.Ticker("^IXIC").history(period="5d")
+        sp_chg = ((sp_hist["Close"].iloc[-1] / sp_hist["Close"].iloc[-2]) - 1) * 100 if len(sp_hist) > 1 else 0
+        ndx_chg = ((ndx_hist["Close"].iloc[-1] / ndx_hist["Close"].iloc[-2]) - 1) * 100 if len(ndx_hist) > 1 else 0
+
+        lines = ["🌡 市場情緒儀表板\n"]
+        if vix:
+            vix_chg = vix - vix_prev if vix_prev else 0
+            lines.append(f"VIX 波動率：{vix:.2f}（{vix_note}）{vix_chg:+.2f}")
+        lines.append(f"恐慌貪婪指數：{fg_str}（{fg_change:+.1f}）")
+        lines.append(f"\nS&P 500：{sp_chg:+.2f}%")
+        lines.append(f"Nasdaq：{ndx_chg:+.2f}%")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"市場情緒查詢失敗：{e}"
+
+
+def fetch_etf(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        name = info.get("longName") or info.get("shortName") or symbol
+        currency = info.get("currency", "")
+
+        hist = ticker.history(period="1y")
+        if hist.empty:
+            return f"找不到 ETF「{symbol}」"
+
+        current = hist["Close"].iloc[-1]
+        ret_1m = ((hist["Close"].iloc[-1] / hist["Close"].iloc[-22]) - 1) * 100 if len(hist) > 22 else None
+        ret_3m = ((hist["Close"].iloc[-1] / hist["Close"].iloc[-66]) - 1) * 100 if len(hist) > 66 else None
+        ret_1y = ((hist["Close"].iloc[-1] / hist["Close"].iloc[0]) - 1) * 100 if len(hist) > 5 else None
+
+        expense = info.get("annualReportExpenseRatio")
+        div_yield = info.get("dividendYield") or info.get("yield")
+        total_assets = info.get("totalAssets")
+        category = info.get("category", "")
+
+        # 前10大持股
+        try:
+            holdings = ticker.funds_data.top_holdings
+            top_str = ""
+            if holdings is not None and not holdings.empty:
+                top_items = []
+                for _, row in holdings.head(5).iterrows():
+                    n = row.get("Name") or row.get("name") or ""
+                    w = row.get("holdingPercent") or row.get("weight") or 0
+                    top_items.append(f"  {n}（{w*100:.1f}%）")
+                if top_items:
+                    top_str = "\n前5大持股：\n" + "\n".join(top_items)
+        except Exception:
+            top_str = ""
+
+        lines = [f"📦 {name} ({symbol})\n現價：{current:.2f} {currency}\n"]
+        if category: lines.append(f"類型：{category}")
+        if total_assets: lines.append(f"規模：{total_assets/1e9:.1f}B {currency}")
+        if expense: lines.append(f"費用率：{expense*100:.2f}%")
+        if div_yield: lines.append(f"配息殖利率：{div_yield*100:.2f}%")
+        lines.append("\n── 績效 ──")
+        if ret_1m: lines.append(f"近1月：{ret_1m:+.2f}%")
+        if ret_3m: lines.append(f"近3月：{ret_3m:+.2f}%")
+        if ret_1y: lines.append(f"近1年：{ret_1y:+.2f}%")
+        if top_str: lines.append(top_str)
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"ETF 查詢失敗：{e}"
+
+
+def fetch_earnings(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        name = info.get("longName") or info.get("shortName") or symbol
+
+        lines = [f"📊 {name} ({symbol}) 財報趨勢\n"]
+
+        # 季度財報
+        try:
+            qe = ticker.quarterly_earnings
+            if qe is not None and not qe.empty:
+                lines.append("── 近幾季 EPS ──")
+                for idx, row in qe.head(6).iterrows():
+                    actual = row.get("Actual") or row.get("actual", 0)
+                    estimate = row.get("Estimate") or row.get("estimate", 0)
+                    beat = actual - estimate if estimate else 0
+                    beat_str = f"超預期 {beat:+.2f}" if beat > 0 else (f"低於預期 {beat:+.2f}" if beat < 0 else "符合預期")
+                    lines.append(f"  {idx}：EPS {actual:.2f}（預期 {estimate:.2f}）{beat_str}")
+        except Exception:
+            pass
+
+        # 年度財報趨勢
+        try:
+            fin = ticker.financials
+            if fin is not None and not fin.empty:
+                lines.append("\n── 年度財務 ──")
+                rev_row = fin.loc["Total Revenue"] if "Total Revenue" in fin.index else None
+                ni_row = fin.loc["Net Income"] if "Net Income" in fin.index else None
+                cols = fin.columns[:4]
+                if rev_row is not None:
+                    vals = [f"{rev_row[c]/1e9:.1f}B" for c in cols if c in rev_row.index]
+                    lines.append(f"  營收：{' → '.join(vals)}")
+                if ni_row is not None:
+                    vals = [f"{ni_row[c]/1e9:.1f}B" for c in cols if c in ni_row.index]
+                    lines.append(f"  淨利：{' → '.join(vals)}")
+        except Exception:
+            pass
+
+        # 下次財報日
+        try:
+            cal = ticker.calendar
+            if cal is not None:
+                ed = cal.get("Earnings Date") or cal.get("earningsDate")
+                if ed is not None:
+                    if hasattr(ed, '__iter__'):
+                        ed = list(ed)[0]
+                    lines.append(f"\n下次財報日：{str(ed)[:10]}")
+        except Exception:
+            pass
+
+        return "\n".join(lines) if len(lines) > 1 else f"找不到 {symbol} 的財報資料"
+    except Exception as e:
+        return f"財報查詢失敗：{e}"
+
+
+def generate_candlestick(symbol: str, period: str = "3mo") -> tuple[bytes | None, str]:
+    """回傳 (PNG bytes, 型態分析文字)"""
+    try:
+        import yfinance as yf
+        import mplfinance as mpf
+        import tempfile, ta as ta_lib
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=period)
+        if hist.empty:
+            return None, f"找不到「{symbol}」資料"
+
+        name = ticker.info.get("shortName") or symbol
+        close = hist["Close"]
+        ma20 = close.rolling(20).mean()
+        ma60 = close.rolling(60).mean()
+
+        add_plots = [
+            mpf.make_addplot(ma20, color="orange", width=1.2, label="MA20"),
+            mpf.make_addplot(ma60, color="purple", width=1.2, label="MA60"),
+        ]
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            out_path = f.name
+
+        mpf.plot(
+            hist, type="candle", style="charles",
+            title=f"{name} ({symbol})",
+            ylabel="Price", volume=True,
+            addplot=add_plots,
+            savefig=dict(fname=out_path, dpi=150, bbox_inches="tight"),
+            figsize=(12, 7)
+        )
+
+        # 型態辨識
+        patterns = []
+        c = close.values
+        n = len(c)
+        if n >= 20:
+            recent = c[-20:]
+            peak_idx = recent.argmax()
+            trough_idx = recent.argmin()
+            # 簡單型態判斷
+            if c[-1] > ma20.iloc[-1] > ma60.iloc[-1]:
+                patterns.append("多頭排列（MA20>MA60，趨勢向上）📈")
+            elif c[-1] < ma20.iloc[-1] < ma60.iloc[-1]:
+                patterns.append("空頭排列（MA20<MA60，趨勢向下）📉")
+            if peak_idx < 5 and c[-1] < recent[peak_idx] * 0.95:
+                patterns.append("近期高點已過，回落中")
+            if trough_idx < 5 and c[-1] > recent[trough_idx] * 1.05:
+                patterns.append("近期低點反彈，留意支撐")
+            # 突破判斷
+            resistance = max(c[-20:-5])
+            support = min(c[-20:-5])
+            if c[-1] > resistance:
+                patterns.append(f"突破近期壓力 {resistance:.2f} ⚡")
+            elif c[-1] < support:
+                patterns.append(f"跌破近期支撐 {support:.2f} ⚠️")
+
+        pattern_str = "\n".join(patterns) if patterns else "無明顯型態訊號"
+
+        with open(out_path, "rb") as f:
+            img_bytes = f.read()
+        Path(out_path).unlink(missing_ok=True)
+        return img_bytes, pattern_str
+    except Exception as e:
+        return None, f"K線圖生成失敗：{e}"
+
+
+def compare_stocks(symbols: list, metrics: list = None) -> str:
+    try:
+        import yfinance as yf
+        if metrics is None or "all" in metrics:
+            metrics = ["price", "pe", "roe", "margin", "growth"]
+
+        rows = []
+        for sym in symbols[:5]:
+            try:
+                info = yf.Ticker(sym).info
+                hist = yf.Ticker(sym).history(period="1mo")
+                ret_1m = ((hist["Close"].iloc[-1] / hist["Close"].iloc[0]) - 1) * 100 if len(hist) > 1 else None
+                row = {
+                    "symbol": sym,
+                    "name": (info.get("shortName") or sym)[:15],
+                    "price": info.get("currentPrice") or info.get("regularMarketPrice"),
+                    "ret_1m": ret_1m,
+                    "pe": info.get("trailingPE"),
+                    "pb": info.get("priceToBook"),
+                    "roe": info.get("returnOnEquity"),
+                    "margin": info.get("profitMargins"),
+                    "rev_growth": info.get("revenueGrowth"),
+                    "earn_growth": info.get("earningsGrowth"),
+                    "div_yield": info.get("dividendYield"),
+                    "mkt_cap": info.get("marketCap"),
+                }
+                rows.append(row)
+            except Exception:
+                rows.append({"symbol": sym, "name": sym})
+
+        if not rows:
+            return "無法取得比較資料"
+
+        lines = [f"📊 股票比較：{' vs '.join(symbols[:5])}\n"]
+
+        def fmt(v, pct=False, mult=100):
+            if v is None: return "N/A"
+            if pct: return f"{v*mult:+.1f}%"
+            return f"{v:.2f}"
+
+        for r in rows:
+            sym = r["symbol"]
+            name = r.get("name", sym)
+            mc = r.get("mkt_cap")
+            mc_str = f"{mc/1e12:.2f}T" if mc and mc >= 1e12 else (f"{mc/1e9:.1f}B" if mc else "N/A")
+            lines.append(f"── {name} ({sym}) ──")
+            if "price" in metrics and r.get("price"):
+                lines.append(f"  現價：{r['price']:.2f}　近1月：{fmt(r.get('ret_1m'), False)+'%' if r.get('ret_1m') else 'N/A'}")
+            lines.append(f"  市值：{mc_str}")
+            if "pe" in metrics:
+                lines.append(f"  P/E：{fmt(r.get('pe'))}　P/B：{fmt(r.get('pb'))}")
+            if "roe" in metrics and r.get("roe"):
+                lines.append(f"  ROE：{r['roe']*100:.1f}%")
+            if "margin" in metrics and r.get("margin"):
+                lines.append(f"  淨利率：{r['margin']*100:.1f}%")
+            if "growth" in metrics:
+                lines.append(f"  營收成長：{fmt(r.get('rev_growth'), True)}　獲利成長：{fmt(r.get('earn_growth'), True)}")
+            if r.get("div_yield"):
+                lines.append(f"  殖利率：{r['div_yield']*100:.2f}%")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"股票比較失敗：{e}"
 
 
 def fetch_macro(indicator: str) -> str:
@@ -11106,6 +11534,84 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["query"],
                     tool_use.input.get("region", "zh-tw"),
                     tool_use.input.get("max_results", 5))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_fundamentals":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_fundamentals, tool_use.input["symbol"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_market_sentiment":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_market_sentiment)
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_etf":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_etf, tool_use.input["symbol"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_earnings":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_earnings, tool_use.input["symbol"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_candlestick_chart":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                img_bytes, pattern_str = await loop.run_in_executor(None, generate_candlestick,
+                    tool_use.input["symbol"], tool_use.input.get("period", "3mo"))
+                if img_bytes:
+                    import io
+                    await update.message.reply_photo(photo=io.BytesIO(img_bytes), caption=f"型態分析：\n{pattern_str}")
+                tool_result = pattern_str
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "compare_stocks":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, compare_stocks,
+                    tool_use.input["symbols"], tool_use.input.get("metrics"))
                 response = client.messages.create(
                     model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
                     messages=history + [
