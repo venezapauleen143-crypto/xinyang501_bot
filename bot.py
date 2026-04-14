@@ -3665,6 +3665,54 @@ def clean_for_tts(text: str, max_chars: int = 200) -> str:
 _XTTS_PORT = 5678
 _xtts_server_proc = None
 
+_RVC_PORT = 5679
+_rvc_server_proc = None
+
+def _ensure_rvc_server():
+    """確保 RVC 伺服器在跑，若沒在跑就啟動它"""
+    global _rvc_server_proc
+    import urllib.request
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{_RVC_PORT}/health", timeout=1)
+        return True
+    except Exception:
+        pass
+    rvc_script = str(Path(__file__).parent / "rvc_server.py")
+    if not Path(rvc_script).exists():
+        return False
+    try:
+        _rvc_server_proc = subprocess.Popen(
+            [r"C:\Python311\python.exe", rvc_script],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        import time
+        for _ in range(30):
+            time.sleep(2)
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{_RVC_PORT}/health", timeout=1)
+                return True
+            except Exception:
+                pass
+    except Exception as e:
+        logging.error(f"RVC 伺服器啟動失敗：{e}")
+    return False
+
+def _rvc_convert_wav(wav_bytes: bytes) -> bytes | None:
+    """將 WAV bytes 傳給 RVC 伺服器轉換成周杰倫聲音，失敗回傳 None"""
+    import urllib.request
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{_RVC_PORT}/convert",
+            data=wav_bytes,
+            headers={"Content-Type": "audio/wav"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read()
+    except Exception as e:
+        logging.warning(f"RVC 轉換失敗：{e}")
+        return None
+
 def _ensure_xtts_server():
     """確保 XTTS 伺服器在跑，若沒在跑就啟動它"""
     global _xtts_server_proc
@@ -3734,7 +3782,11 @@ def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
         wav_bytes = _xtts_generate_wav(text)
 
     if wav_bytes:
-        # WAV → OGG OPUS
+        # XTTS WAV → RVC 周杰倫 → OGG OPUS
+        if _ensure_rvc_server():
+            rvc_wav = _rvc_convert_wav(wav_bytes)
+            if rvc_wav:
+                wav_bytes = rvc_wav
         tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp_wav.write(wav_bytes)
         tmp_wav.close()
@@ -3745,24 +3797,45 @@ def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
         ], capture_output=True)
         Path(tmp_wav.name).unlink(missing_ok=True)
     else:
-        # ── Fallback：edge_tts ────────────────────────────
+        # ── Fallback：edge_tts + RVC 周杰倫 ──────────────────────────
         import edge_tts, asyncio
         tmp_mp3 = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         tmp_mp3.close()
+        tmp_wav2 = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp_wav2.close()
 
         async def _gen():
-            # 周杰倫風格：低沉、慢條斯理
             comm = edge_tts.Communicate(text, voice, rate="-18%", pitch="-12Hz")
             await comm.save(tmp_mp3.name)
         asyncio.run(_gen())
 
+        # MP3 → WAV（RVC 需要 WAV）
         sp.run([
             ffmpeg_exe, "-y", "-i", tmp_mp3.name,
+            "-ar", "44100", "-ac", "1",
+            tmp_wav2.name
+        ], capture_output=True)
+        Path(tmp_mp3.name).unlink(missing_ok=True)
+
+        # WAV → RVC 周杰倫
+        final_wav = Path(tmp_wav2.name).read_bytes()
+        if _ensure_rvc_server():
+            rvc_wav = _rvc_convert_wav(final_wav)
+            if rvc_wav:
+                final_wav = rvc_wav
+
+        # WAV → OGG OPUS（加低音 EQ）
+        tmp_wav3 = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp_wav3.write(final_wav)
+        tmp_wav3.close()
+        sp.run([
+            ffmpeg_exe, "-y", "-i", tmp_wav3.name,
             "-af", "equalizer=f=80:width_type=o:width=2:g=6,equalizer=f=150:width_type=o:width=2:g=4",
             "-c:a", "libopus", "-b:a", "96k",
             tmp_ogg.name
         ], capture_output=True)
-        Path(tmp_mp3.name).unlink(missing_ok=True)
+        Path(tmp_wav2.name).unlink(missing_ok=True)
+        Path(tmp_wav3.name).unlink(missing_ok=True)
 
     data = Path(tmp_ogg.name).read_bytes()
     Path(tmp_ogg.name).unlink(missing_ok=True)
