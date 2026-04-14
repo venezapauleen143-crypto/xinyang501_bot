@@ -279,9 +279,22 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "source": {"type": "string", "enum": ["yahoo_tw", "cnyes", "yahoo_us", "all"], "description": "新聞來源：yahoo_tw=Yahoo奇摩財經, cnyes=鉅亨網, yahoo_us=Yahoo Finance US, all=全部"},
+                "source": {"type": "string", "enum": ["yahoo_tw", "cnyes", "udn", "moneydj", "ctee", "yahoo_us", "all"], "description": "新聞來源：yahoo_tw=Yahoo奇摩財經, cnyes=鉅亨網, udn=聯合財經網, moneydj=MoneyDJ, ctee=工商時報, yahoo_us=Yahoo Finance US, all=全部"},
                 "count": {"type": "integer", "description": "顯示幾則，預設 5，最多 10"}
             }
+        }
+    },
+    {
+        "name": "ddg_search",
+        "description": "DuckDuckGo 快速網路搜尋，適合搜尋中文內容、中國相關話題、最新時事、任何需要查資料的問題。比 osint_search 更快更穩。當用戶問不知道答案的問題、需要查最新資訊、詢問中國相關話題時優先使用此工具。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字，可用中文或英文"},
+                "region": {"type": "string", "description": "搜尋地區語言，預設 zh-tw（繁中），可用 zh-cn（簡中）、us-en（英文）", "enum": ["zh-tw", "zh-cn", "us-en", "wt-wt"]},
+                "max_results": {"type": "integer", "description": "最多幾筆結果，預設 5，最多 10"}
+            },
+            "required": ["query"]
         }
     },
     {
@@ -2856,6 +2869,9 @@ def fetch_finance_news(source: str = "all", count: int = 5) -> str:
         feeds = {
             "yahoo_tw": ("Yahoo奇摩財經", "https://tw.stock.yahoo.com/rss"),
             "cnyes":    ("鉅亨網",        "https://feeds.feedburner.com/cnyes"),
+            "udn":      ("聯合財經網",    "https://udn.com/rssfeed/news/2/6644?ch=news"),
+            "moneydj":  ("MoneyDJ",      "https://www.moneydj.com/KMDJ/RssNew/RssNewList.aspx?index=1&param="),
+            "ctee":     ("工商時報",      "https://www.ctee.com.tw/feeds/latest"),
             "yahoo_us": ("Yahoo Finance", "https://finance.yahoo.com/news/rssindex"),
         }
         sources = list(feeds.keys()) if source == "all" else [source]
@@ -2875,11 +2891,30 @@ def fetch_finance_news(source: str = "all", count: int = 5) -> str:
                     title = entry.get("title", "無標題")
                     lines.append(f"{i}. {title}")
                 results.append("\n".join(lines))
-            except Exception as e:
+            except Exception:
                 results.append(f"📰 {label}：抓取失敗")
         return "\n\n".join(results) if results else "無法取得新聞"
     except Exception as e:
         return f"財經新聞失敗：{e}"
+
+
+def execute_ddg_search(query: str, region: str = "zh-tw", max_results: int = 5) -> str:
+    try:
+        from duckduckgo_search import DDGS
+        max_results = min(max(max_results, 1), 10)
+        results = []
+        with DDGS() as ddgs:
+            for r in ddgs.text(query, region=region, max_results=max_results):
+                title = r.get("title", "")
+                body = r.get("body", "")
+                href = r.get("href", "")
+                # 跳過大陸域名（.cn）避免超時
+                if ".cn/" in href and "taiwan" not in href.lower():
+                    pass
+                results.append(f"🔍 {title}\n   {body[:120]}\n   {href}")
+        return "\n\n".join(results) if results else "無搜尋結果"
+    except Exception as e:
+        return f"DuckDuckGo 搜尋失敗：{e}"
 
 
 def fetch_stock_advanced(symbol: str, indicators: list = None) -> str:
@@ -11056,6 +11091,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 loop = asyncio.get_running_loop()
                 tool_result = await loop.run_in_executor(None, fetch_finance_news,
                     tool_use.input.get("source", "all"), tool_use.input.get("count", 5))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "ddg_search":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, execute_ddg_search,
+                    tool_use.input["query"],
+                    tool_use.input.get("region", "zh-tw"),
+                    tool_use.input.get("max_results", 5))
                 response = client.messages.create(
                     model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
                     messages=history + [
