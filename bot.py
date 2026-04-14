@@ -2569,7 +2569,8 @@ TOOLS = [
                            "description": "run=完整健康報告, skill_count=技能清單, memory_stats=記憶統計"}
             },
             "required": ["action"]
-        }
+        },
+        "cache_control": {"type": "ephemeral"}
     }
 ]
 
@@ -3787,7 +3788,7 @@ def _xtts_generate_wav(text: str) -> bytes | None:
         return None
 
 
-def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
+def generate_voice_ogg(text: str, voice: str = "zh-CN-YunxiNeural") -> bytes:
     """生成語音並回傳 OGG OPUS bytes（Telegram voice message 格式）
     優先使用 XTTS v2（更自然人聲），失敗自動 fallback 到 edge_tts
     """
@@ -3805,60 +3806,36 @@ def generate_voice_ogg(text: str, voice: str = "zh-TW-YunJheNeural") -> bytes:
         wav_bytes = _xtts_generate_wav(text)
 
     if wav_bytes:
-        # XTTS WAV → RVC 周杰倫 → OGG OPUS
-        if _ensure_rvc_server():
-            rvc_wav = _rvc_convert_wav(wav_bytes)
-            if rvc_wav:
-                wav_bytes = rvc_wav
+        # XTTS WAV → OGG OPUS（加低音 EQ）
         tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp_wav.write(wav_bytes)
         tmp_wav.close()
         sp.run([
             ffmpeg_exe, "-y", "-i", tmp_wav.name,
+            "-af", "equalizer=f=80:width_type=o:width=2:g=6,equalizer=f=150:width_type=o:width=2:g=4",
             "-c:a", "libopus", "-b:a", "96k",
             tmp_ogg.name
         ], capture_output=True)
         Path(tmp_wav.name).unlink(missing_ok=True)
     else:
-        # ── Fallback：edge_tts + RVC 周杰倫 ──────────────────────────
+        # ── Fallback：edge_tts ──────────────────────────────
         import edge_tts, asyncio
         tmp_mp3 = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         tmp_mp3.close()
-        tmp_wav2 = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        tmp_wav2.close()
 
         async def _gen():
-            comm = edge_tts.Communicate(text, voice, rate="-18%", pitch="-12Hz")
+            comm = edge_tts.Communicate(text, voice, rate="-10%", pitch="-15Hz")
             await comm.save(tmp_mp3.name)
         asyncio.run(_gen())
 
-        # MP3 → WAV（RVC 需要 WAV）
+        # MP3 → OGG OPUS（加低音 EQ）
         sp.run([
             ffmpeg_exe, "-y", "-i", tmp_mp3.name,
-            "-ar", "44100", "-ac", "1",
-            tmp_wav2.name
-        ], capture_output=True)
-        Path(tmp_mp3.name).unlink(missing_ok=True)
-
-        # WAV → RVC 周杰倫
-        final_wav = Path(tmp_wav2.name).read_bytes()
-        if _ensure_rvc_server():
-            rvc_wav = _rvc_convert_wav(final_wav)
-            if rvc_wav:
-                final_wav = rvc_wav
-
-        # WAV → OGG OPUS（加低音 EQ）
-        tmp_wav3 = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        tmp_wav3.write(final_wav)
-        tmp_wav3.close()
-        sp.run([
-            ffmpeg_exe, "-y", "-i", tmp_wav3.name,
             "-af", "equalizer=f=80:width_type=o:width=2:g=6,equalizer=f=150:width_type=o:width=2:g=4",
             "-c:a", "libopus", "-b:a", "96k",
             tmp_ogg.name
         ], capture_output=True)
-        Path(tmp_wav2.name).unlink(missing_ok=True)
-        Path(tmp_wav3.name).unlink(missing_ok=True)
+        Path(tmp_mp3.name).unlink(missing_ok=True)
 
     data = Path(tmp_ogg.name).read_bytes()
     Path(tmp_ogg.name).unlink(missing_ok=True)
@@ -9574,7 +9551,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 群組訊息加上發話者名字，讓 Claude 分清楚誰在說話
         saved_text = f"[{sender_name}]: {user_text}" if is_group else user_text
         save_message(chat_id, "user", saved_text)
-        history = load_history(chat_id)[-40:]
+        history = load_history(chat_id)[-20:]
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
@@ -9595,14 +9572,63 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             system = base_system
 
-        import asyncio as _aio
-        response = await _aio.get_running_loop().run_in_executor(None, lambda: client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            system=system,
-            tools=TOOLS,
-            messages=history
-        ))
+        # ── Prompt Caching：靜態 system + TOOLS 快取，動態記憶不快取 ──
+        system_blocks = [{"type": "text", "text": base_system, "cache_control": {"type": "ephemeral"}}]
+        if memories:
+            system_blocks.append({"type": "text", "text": f"\n\n【長期記憶】以下是你記住的重要資訊，回覆時請參考：\n{mem_text}"})
+
+        import asyncio as _aio, queue as _queue, threading as _threading
+
+        _chunk_q = _queue.Queue()
+
+        def _call_api():
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=1024,
+                system=system_blocks,
+                tools=TOOLS,
+                messages=history
+            ) as stream:
+                for text in stream.text_stream:
+                    _chunk_q.put(text)
+                final = stream.get_final_message()
+            _chunk_q.put(None)  # sentinel
+            return final
+
+        loop = _aio.get_running_loop()
+        api_future = loop.run_in_executor(None, _call_api)
+
+        # 邊收 chunks 邊建構回覆，工具呼叫不顯示串流
+        streamed_text = ""
+        sent_msg = None
+        last_edit_len = 0
+        EDIT_THRESHOLD = 40  # 每累積 40 字元 edit 一次
+
+        while True:
+            try:
+                chunk = _chunk_q.get(timeout=0.05)
+            except _queue.Empty:
+                chunk = _queue.Empty  # 標記沒拿到
+
+            if chunk is None:
+                break
+            if chunk is _queue.Empty:
+                await _aio.sleep(0)
+                continue
+
+            streamed_text += chunk
+            # 達到門檻就 edit（避免 Telegram rate limit）
+            if len(streamed_text) - last_edit_len >= EDIT_THRESHOLD:
+                if sent_msg is None:
+                    sent_msg = await update.message.reply_text(streamed_text)
+                else:
+                    try:
+                        await sent_msg.edit_text(streamed_text)
+                    except Exception:
+                        pass
+                last_edit_len = len(streamed_text)
+
+        response = await api_future
         # 處理工具呼叫
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
@@ -10717,7 +10743,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = text_blocks[0]
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬", chat_id, reply)
-        await _fr(reply)
+        # 若 streaming 已送出部分訊息，直接 edit 最終完整內容
+        if sent_msg is not None:
+            try:
+                final_text = reply if is_owner else _fix_group_reply(reply, sender_name)
+                await sent_msg.edit_text(final_text)
+            except Exception:
+                await _fr(reply)
+        else:
+            await _fr(reply)
 
     except Exception as e:
         logging.error(f"handle_message error: {e}", exc_info=True)
