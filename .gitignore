@@ -5,3 +5,11 @@ __pycache__/
 #*.log  # messages.log 不上傳但 bot_output.log 也不需要
 bot_output.log
 memory.db
+*.log
+bot.lock
+*.pt
+*.pth
+*.index
+*.partial
+rvc_models/
+xtts_reference.wav
