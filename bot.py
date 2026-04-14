@@ -251,6 +251,78 @@ TOOLS = [
         }
     },
     {
+        "name": "get_crypto",
+        "description": "查詢加密貨幣即時價格、24h漲跌、市值、交易量、歷史高點。當用戶問比特幣、以太幣、加密幣行情時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "coin": {"type": "string", "description": "幣種 CoinGecko ID 或常見縮寫，如 bitcoin/BTC、ethereum/ETH、solana/SOL、dogecoin/DOGE"},
+                "vs_currency": {"type": "string", "enum": ["usd", "twd"], "description": "計價幣種，預設 usd"}
+            },
+            "required": ["coin"]
+        }
+    },
+    {
+        "name": "get_forex",
+        "description": "查詢外匯即時匯率。當用戶問美元、日圓、歐元、台幣、人民幣等匯率時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pair": {"type": "string", "description": "貨幣對 yfinance 格式，如 USDTWD=X（美元/台幣）、USDJPY=X（美元/日圓）、EURUSD=X（歐元/美元）、USDCNY=X（美元/人民幣）、GBPUSD=X（英鎊/美元）"}
+            },
+            "required": ["pair"]
+        }
+    },
+    {
+        "name": "get_finance_news",
+        "description": "抓取最新財經新聞頭條。當用戶詢問財經新聞、市場動態、股市消息、財經頭條時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "source": {"type": "string", "enum": ["yahoo_tw", "cnyes", "yahoo_us", "all"], "description": "新聞來源：yahoo_tw=Yahoo奇摩財經, cnyes=鉅亨網, yahoo_us=Yahoo Finance US, all=全部"},
+                "count": {"type": "integer", "description": "顯示幾則，預設 5，最多 10"}
+            }
+        }
+    },
+    {
+        "name": "get_stock_advanced",
+        "description": "股票進階技術分析：MACD、布林通道（BB）、KD隨機指標。當用戶問 MACD、布林通道、KD、進階技術分析時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代號，同 get_stock"},
+                "indicators": {"type": "array", "items": {"type": "string", "enum": ["macd", "bb", "kd"]}, "description": "要計算的指標，可多選，預設全部"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "get_macro",
+        "description": "查詢總體經濟指標：美國CPI通膨、失業率、GDP成長率、短期利率。當用戶問總經、通膨、Fed利率、經濟數據時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "indicator": {"type": "string", "enum": ["cpi", "unemployment", "fed_rate", "gdp", "nonfarm"], "description": "cpi=通膨年增率, unemployment=失業率, fed_rate=短期利率, gdp=GDP成長率, nonfarm=非農就業說明"}
+            },
+            "required": ["indicator"]
+        }
+    },
+    {
+        "name": "portfolio",
+        "description": "個人投資組合管理：新增持股、刪除持股、查看總損益與報酬率。當用戶要管理自己的股票持倉、追蹤損益時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["add", "remove", "view", "clear"], "description": "add=新增持股, remove=刪除, view=查看損益, clear=清空"},
+                "chat_id": {"type": "integer", "description": "聊天室 ID"},
+                "symbol": {"type": "string", "description": "股票代號（add/remove 用）"},
+                "shares": {"type": "number", "description": "持有數量（add 用）"},
+                "cost": {"type": "number", "description": "買入均價（add 用）"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "desktop_control",
         "description": "控制電腦桌面，支援多螢幕。當用戶要求截圖、點擊、移動滑鼠、輸入文字、按鍵、開啟程式、查看螢幕資訊時使用此工具。",
         "input_schema": {
@@ -2706,6 +2778,310 @@ def fetch_stock(symbol: str, period: str = "1mo") -> str:
 
     except Exception as e:
         return f"查詢「{symbol}」失敗：{str(e)}"
+
+
+def fetch_crypto(coin: str, vs_currency: str = "usd") -> str:
+    try:
+        ticker_map = {
+            "btc": "bitcoin", "eth": "ethereum", "sol": "solana",
+            "bnb": "binancecoin", "xrp": "ripple", "doge": "dogecoin",
+            "ada": "cardano", "dot": "polkadot", "matic": "matic-network",
+            "avax": "avalanche-2", "link": "chainlink", "uni": "uniswap",
+            "ltc": "litecoin", "bch": "bitcoin-cash", "atom": "cosmos",
+            "trx": "tron", "etc": "ethereum-classic", "shib": "shiba-inu",
+        }
+        coin_id = ticker_map.get(coin.lower(), coin.lower())
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}?localization=false&tickers=false&community_data=false&developer_data=false"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if "error" in data:
+            return f"找不到幣種「{coin}」，請確認名稱"
+        md = data["market_data"]
+        name = data["name"]
+        sym = data["symbol"].upper()
+        cur = vs_currency
+        price = md["current_price"][cur]
+        ch24 = md["price_change_percentage_24h"] or 0
+        ch7d = md["price_change_percentage_7d"] or 0
+        mcap = md["market_cap"][cur]
+        vol = md["total_volume"][cur]
+        hi24 = md["high_24h"][cur]
+        lo24 = md["low_24h"][cur]
+        ath = md["ath"][cur]
+        ath_chg = md["ath_change_percentage"][cur] or 0
+        cur_label = cur.upper()
+        arrow = "▲" if ch24 >= 0 else "▼"
+        mc_str = f"{mcap/1e12:.2f}T" if mcap >= 1e12 else f"{mcap/1e9:.2f}B"
+        return (
+            f"🪙 {name} ({sym})\n"
+            f"💰 現價：{price:,.4f} {cur_label}  {arrow} {abs(ch24):.2f}% (24h)\n"
+            f"📅 7日漲跌：{ch7d:+.2f}%\n"
+            f"📊 24h 高低：{lo24:,.4f} ~ {hi24:,.4f}\n"
+            f"💎 市值：{mc_str} {cur_label}\n"
+            f"📦 24h 交易量：{vol/1e9:.2f}B {cur_label}\n"
+            f"🏔 歷史高點：{ath:,.4f}（距高 {ath_chg:.1f}%）"
+        )
+    except Exception as e:
+        return f"查詢加密幣「{coin}」失敗：{e}"
+
+
+def fetch_forex(pair: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(pair)
+        hist = ticker.history(period="5d")
+        if hist.empty:
+            return f"找不到匯率「{pair}」，請確認格式（如 USDTWD=X）"
+        info = ticker.info
+        current = hist["Close"].iloc[-1]
+        prev = hist["Close"].iloc[-2] if len(hist) > 1 else current
+        change = current - prev
+        change_pct = (change / prev * 100) if prev else 0
+        arrow = "▲" if change >= 0 else "▼"
+        name = info.get("shortName", pair)
+        return (
+            f"💱 {name}\n"
+            f"匯率：{current:.4f}  {arrow} {abs(change):.4f} ({change_pct:+.2f}%)\n"
+            f"近5日高：{hist['High'].max():.4f}\n"
+            f"近5日低：{hist['Low'].min():.4f}"
+        )
+    except Exception as e:
+        return f"查詢匯率「{pair}」失敗：{e}"
+
+
+def fetch_finance_news(source: str = "all", count: int = 5) -> str:
+    try:
+        import feedparser
+        count = min(max(count, 1), 10)
+        feeds = {
+            "yahoo_tw": ("Yahoo奇摩財經", "https://tw.stock.yahoo.com/rss"),
+            "cnyes":    ("鉅亨網",        "https://feeds.feedburner.com/cnyes"),
+            "yahoo_us": ("Yahoo Finance", "https://finance.yahoo.com/news/rssindex"),
+        }
+        sources = list(feeds.keys()) if source == "all" else [source]
+        results = []
+        for src in sources:
+            if src not in feeds:
+                continue
+            label, url = feeds[src]
+            try:
+                feed = feedparser.parse(url)
+                items = feed.entries[:count]
+                if not items:
+                    results.append(f"📰 {label}：暫無資料")
+                    continue
+                lines = [f"📰 {label}"]
+                for i, entry in enumerate(items, 1):
+                    title = entry.get("title", "無標題")
+                    lines.append(f"{i}. {title}")
+                results.append("\n".join(lines))
+            except Exception as e:
+                results.append(f"📰 {label}：抓取失敗")
+        return "\n\n".join(results) if results else "無法取得新聞"
+    except Exception as e:
+        return f"財經新聞失敗：{e}"
+
+
+def fetch_stock_advanced(symbol: str, indicators: list = None) -> str:
+    try:
+        import yfinance as yf
+        import ta as ta_lib
+        if indicators is None:
+            indicators = ["macd", "bb", "kd"]
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="6mo")
+        if hist.empty:
+            return f"找不到「{symbol}」的資料"
+        name = ticker.info.get("longName") or ticker.info.get("shortName") or symbol
+        close = hist["Close"]
+        high = hist["High"]
+        low = hist["Low"]
+        current = close.iloc[-1]
+        result = [f"📊 {name} ({symbol}) 進階技術分析\n現價：{current:.2f}\n"]
+        if "macd" in indicators:
+            macd_ind = ta_lib.trend.MACD(close)
+            macd_v = macd_ind.macd().iloc[-1]
+            signal_v = macd_ind.macd_signal().iloc[-1]
+            hist_v = macd_ind.macd_diff().iloc[-1]
+            cross = "金叉 📈" if macd_v > signal_v else "死叉 📉"
+            result.append(
+                f"── MACD ──\n"
+                f"MACD：{macd_v:.3f}　Signal：{signal_v:.3f}　Histogram：{hist_v:.3f}\n"
+                f"狀態：{cross}"
+            )
+        if "bb" in indicators:
+            bb = ta_lib.volatility.BollingerBands(close)
+            upper = bb.bollinger_hband().iloc[-1]
+            mid = bb.bollinger_mavg().iloc[-1]
+            lower = bb.bollinger_lband().iloc[-1]
+            width = (upper - lower) / mid * 100
+            if current >= upper:
+                bb_pos = "觸上軌（超買警示）⚠️"
+            elif current <= lower:
+                bb_pos = "觸下軌（超賣機會）💡"
+            else:
+                pos_pct = (current - lower) / (upper - lower) * 100
+                bb_pos = f"通道內 {pos_pct:.0f}%"
+            result.append(
+                f"\n── 布林通道（BB）──\n"
+                f"上軌：{upper:.2f}　中軌：{mid:.2f}　下軌：{lower:.2f}\n"
+                f"帶寬：{width:.1f}%　位置：{bb_pos}"
+            )
+        if "kd" in indicators:
+            stoch = ta_lib.momentum.StochasticOscillator(high, low, close)
+            k = stoch.stoch().iloc[-1]
+            d = stoch.stoch_signal().iloc[-1]
+            if k > 80:
+                kd_note = "超買區（K>80）⚠️"
+            elif k < 20:
+                kd_note = "超賣區（K<20）💡"
+            else:
+                kd_note = "中性區間"
+            cross_kd = "K上穿D（買訊）📈" if k > d else "K下穿D（賣訊）📉"
+            result.append(
+                f"\n── KD 指標 ──\n"
+                f"K：{k:.1f}　D：{d:.1f}\n"
+                f"狀態：{kd_note}　交叉：{cross_kd}"
+            )
+        return "\n".join(result)
+    except Exception as e:
+        return f"進階技術分析失敗：{e}"
+
+
+def fetch_macro(indicator: str) -> str:
+    try:
+        if indicator == "fed_rate":
+            import yfinance as yf
+            ticker = yf.Ticker("^IRX")
+            hist = ticker.history(period="1mo")
+            if not hist.empty:
+                rate = hist["Close"].iloc[-1]
+                prev = hist["Close"].iloc[-2] if len(hist) > 1 else rate
+                change = rate - prev
+                return (
+                    f"🏦 美國短期利率（13週國庫券）\n"
+                    f"當前：{rate:.2f}%　前日：{prev:.2f}%　變化：{change:+.2f}%\n"
+                    f"近1月高低：{hist['Low'].min():.2f}% ~ {hist['High'].max():.2f}%\n"
+                    f"（聯邦基金目標利率請參考 federalreserve.gov）"
+                )
+            return "無法取得利率資料"
+        if indicator == "nonfarm":
+            return (
+                "📊 美國非農就業（Non-Farm Payrolls）\n"
+                "每月第一個週五由美國勞工部公布。\n"
+                "建議用 get_finance_news 工具搜尋最新數據，或查詢 bls.gov。"
+            )
+        wb_map = {
+            "cpi":          ("美國 CPI 通膨年增率",  "FP.CPI.TOTL.ZG",  "US"),
+            "unemployment": ("美國失業率",            "SL.UEM.TOTL.ZS",  "US"),
+            "gdp":          ("美國 GDP 年增率",       "NY.GDP.MKTP.KD.ZG","US"),
+        }
+        label, wb_code, country = wb_map[indicator]
+        url = f"https://api.worldbank.org/v2/country/{country}/indicator/{wb_code}?format=json&mrv=5"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if len(data) < 2 or not data[1]:
+            return f"無法取得 {label} 資料"
+        entries = [e for e in data[1] if e.get("value") is not None][:5]
+        lines = [f"📈 {label}（世界銀行）"]
+        for e in entries:
+            lines.append(f"{e['date']}：{e['value']:.2f}%")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"總經指標查詢失敗：{e}"
+
+
+_PORTFOLIO_DB = Path(__file__).parent / "portfolio.db"
+
+def _init_portfolio_db():
+    conn = sqlite3.connect(_PORTFOLIO_DB)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS portfolio (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            symbol TEXT NOT NULL,
+            shares REAL NOT NULL,
+            cost REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def execute_portfolio(action: str, chat_id: int = 0, symbol: str = "",
+                      shares: float = 0, cost: float = 0) -> str:
+    try:
+        _init_portfolio_db()
+        if action == "add":
+            conn = sqlite3.connect(_PORTFOLIO_DB)
+            existing = conn.execute(
+                "SELECT id, shares, cost FROM portfolio WHERE chat_id=? AND symbol=?",
+                (chat_id, symbol.upper())
+            ).fetchone()
+            if existing:
+                new_shares = existing[1] + shares
+                new_cost = (existing[1] * existing[2] + shares * cost) / new_shares
+                conn.execute("UPDATE portfolio SET shares=?, cost=? WHERE id=?",
+                             (new_shares, new_cost, existing[0]))
+            else:
+                conn.execute(
+                    "INSERT INTO portfolio (chat_id, symbol, shares, cost) VALUES (?, ?, ?, ?)",
+                    (chat_id, symbol.upper(), shares, cost)
+                )
+            conn.commit(); conn.close()
+            return f"✅ 已新增 {symbol.upper()} {shares} 股，成本 {cost:.2f}"
+        elif action == "remove":
+            conn = sqlite3.connect(_PORTFOLIO_DB)
+            conn.execute("DELETE FROM portfolio WHERE chat_id=? AND symbol=?",
+                         (chat_id, symbol.upper()))
+            conn.commit(); conn.close()
+            return f"✅ 已移除 {symbol.upper()}"
+        elif action == "clear":
+            conn = sqlite3.connect(_PORTFOLIO_DB)
+            conn.execute("DELETE FROM portfolio WHERE chat_id=?", (chat_id,))
+            conn.commit(); conn.close()
+            return "✅ 已清空投資組合"
+        elif action == "view":
+            conn = sqlite3.connect(_PORTFOLIO_DB)
+            rows = conn.execute(
+                "SELECT symbol, shares, cost FROM portfolio WHERE chat_id=?", (chat_id,)
+            ).fetchall()
+            conn.close()
+            if not rows:
+                return "目前沒有持股紀錄，用 add 新增持股"
+            import yfinance as yf
+            lines = ["📁 投資組合\n"]
+            total_cost = total_value = 0
+            for sym, sh, ct in rows:
+                try:
+                    h = yf.Ticker(sym).history(period="1d")
+                    cur_price = h["Close"].iloc[-1]
+                    value = cur_price * sh
+                    invested = ct * sh
+                    pnl = value - invested
+                    pnl_pct = pnl / invested * 100 if invested else 0
+                    arrow = "▲" if pnl >= 0 else "▼"
+                    lines.append(
+                        f"📌 {sym}　{sh} 股 × {cur_price:.2f} = {value:,.0f}\n"
+                        f"   成本 {ct:.2f}　損益 {arrow}{abs(pnl):,.0f} ({pnl_pct:+.1f}%)"
+                    )
+                    total_cost += invested; total_value += value
+                except Exception:
+                    lines.append(f"📌 {sym}：無法取得即時價格")
+            if total_cost > 0:
+                total_pnl = total_value - total_cost
+                total_pct = total_pnl / total_cost * 100
+                arrow = "▲" if total_pnl >= 0 else "▼"
+                lines.append(
+                    f"\n── 總計 ──\n"
+                    f"總市值：{total_value:,.0f}\n"
+                    f"總成本：{total_cost:,.0f}\n"
+                    f"總損益：{arrow}{abs(total_pnl):,.0f} ({total_pct:+.1f}%)"
+                )
+            return "\n".join(lines)
+        return "未知操作"
+    except Exception as e:
+        return f"投資組合操作失敗：{e}"
 
 
 def fetch_weather(city: str) -> str:
@@ -10644,6 +11020,87 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     max_tokens=1024,
                     system=system,
                     tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_crypto":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_crypto,
+                    tool_use.input["coin"], tool_use.input.get("vs_currency", "usd"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_forex":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_forex, tool_use.input["pair"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_finance_news":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_finance_news,
+                    tool_use.input.get("source", "all"), tool_use.input.get("count", 5))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_stock_advanced":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_stock_advanced,
+                    tool_use.input["symbol"], tool_use.input.get("indicators"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_macro":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_macro, tool_use.input["indicator"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "portfolio":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, execute_portfolio,
+                    tool_use.input["action"],
+                    tool_use.input.get("chat_id", chat_id),
+                    tool_use.input.get("symbol", ""),
+                    tool_use.input.get("shares", 0),
+                    tool_use.input.get("cost", 0)
+                )
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
                         {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
