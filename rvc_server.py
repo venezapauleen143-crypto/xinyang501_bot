@@ -27,11 +27,11 @@ def load_rvc():
     rvc_instance = RVCInference(device="cpu")
     rvc_instance.load_model(MODEL_PTH, version="v2", index_path=MODEL_INDEX)
     rvc_instance.set_params(
-        f0method="harvest",
-        f0up_key=0,
-        index_rate=0.6,
+        f0method="rmvpe",
+        f0up_key=-3,
+        index_rate=0.88,
         filter_radius=3,
-        rms_mix_rate=1,
+        rms_mix_rate=0.25,
         protect=0.33,
     )
     print("[RVC] Model loaded OK")
@@ -88,7 +88,6 @@ class RVCHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    sys.path.insert(0, str(Path(__file__).parent.parent / "fairseq_src" / "fairseq-0.12.2"))
     load_rvc()
     server = HTTPServer(("127.0.0.1", PORT), RVCHandler)
     print(f"[RVC] Server running on port {PORT}")
