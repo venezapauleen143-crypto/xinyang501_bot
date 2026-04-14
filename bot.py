@@ -1,3 +1,18 @@
+# ── Monkey-patch slow platform functions ──────────────────────────────────────
+# Python 3.14 on Windows after crash: platform.uname() hangs (WMI/registry issue).
+# All derived functions (system, machine, platform, node, release, version) also hang.
+# Anthropic SDK calls these in platform_headers() → used in every API request.
+# Fix: patch root + derivatives so the SDK's lru_cached platform_headers is instant.
+import platform as _pm
+_pm.system   = lambda: "Windows"
+_pm.machine  = lambda: "AMD64"
+_pm.platform = lambda terse=False, aliased=False: "Windows-11-10.0.26200"
+_pm.node     = lambda: "PC"
+_pm.release  = lambda: "11"
+_pm.version  = lambda: "10.0.26200"
+_pm.processor = lambda: "Intel64 Family 6"
+# ──────────────────────────────────────────────────────────────────────────────
+
 import os
 import io
 import time
@@ -7,8 +22,7 @@ import logging
 import subprocess
 import urllib.parse
 import requests
-import pyautogui
-import yfinance as yf
+# pyautogui / yfinance 改為懶加載（避免重開機後 hang）
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
@@ -22,7 +36,7 @@ if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
     sys.exit(0)
 # ──────────────────────────────────────────────────────────
 
-pyautogui.FAILSAFE = True  # 滑鼠移到左上角可緊急停止
+pyautogui = None  # 懶加載，用到時才 import（避免重開機 hang）
 
 load_dotenv(Path(__file__).parent / ".env")
 from anthropic import Anthropic
@@ -2575,6 +2589,7 @@ def calc_rsi(closes, period=14):
 
 def fetch_stock(symbol: str, period: str = "1mo") -> str:
     try:
+        import yfinance as yf
         ticker = yf.Ticker(symbol)
         info = ticker.info
         # 取較長歷史以便計算 RSI
@@ -2748,6 +2763,11 @@ def _resolve_coords(x, y, monitor_idx):
 
 def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, direction="down", amount=3, monitor=None) -> dict:
     """執行桌面控制動作，支援多螢幕，回傳 {"ok": bool, "message": str, "screenshot": bytes or None}"""
+    global pyautogui
+    if pyautogui is None:
+        import pyautogui as _pag
+        _pag.FAILSAFE = True
+        pyautogui = _pag
     try:
         screenshot_bytes = None
 
@@ -2973,6 +2993,9 @@ def execute_window_control(action, keyword=""):
         return f"執行失敗：{e}"
 
 def execute_hotkey(keys: str):
+    global pyautogui
+    if pyautogui is None:
+        import pyautogui as _pag; _pag.FAILSAFE = True; pyautogui = _pag
     parts = [k.strip() for k in keys.split("+")]
     pyautogui.hotkey(*parts)
     return f"已執行組合鍵：{keys}"
@@ -9572,14 +9595,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             system = base_system
 
-        response = client.messages.create(
+        import asyncio as _aio
+        response = await _aio.get_running_loop().run_in_executor(None, lambda: client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1024,
             system=system,
             tools=TOOLS,
             messages=history
-        )
-
+        ))
         # 處理工具呼叫
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
@@ -10886,5 +10909,18 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo_message, block=True))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_message))
-    print("Bot 已啟動...")
-    app.run_polling(drop_pending_updates=True)
+
+    import asyncio as _asyncio
+
+    async def _run():
+        async with app:
+            await app.start()
+            await app.updater.start_polling(drop_pending_updates=True)
+            # 永久等待直到程序被終止
+            while True:
+                await _asyncio.sleep(3600)
+
+    try:
+        _asyncio.run(_run())
+    except (KeyboardInterrupt, SystemExit):
+        pass
