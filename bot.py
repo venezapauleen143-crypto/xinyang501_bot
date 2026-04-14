@@ -3078,13 +3078,31 @@ def fetch_finance_news(source: str = "all", count: int = 5) -> str:
 def ptt_search(keyword: str, board: str = "Gossiping", count: int = 5) -> str:
     try:
         from bs4 import BeautifulSoup
+        import ssl, urllib3
         count = min(count, 10)
-        headers = {"User-Agent": "Mozilla/5.0", "Cookie": "over18=1"}
+        # PTT 需要 session + 放寬 SSL + Cookie
+        session = requests.Session()
+        session.verify = False
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0",
+            "Cookie": "over18=1",
+            "Referer": "https://www.ptt.cc/",
+        }
         search_url = f"https://www.ptt.cc/bbs/{board}/search?q={urllib.parse.quote(keyword)}"
-        resp = requests.get(search_url, headers=headers, timeout=10)
+        resp = session.get(search_url, headers=headers, timeout=12)
         soup = BeautifulSoup(resp.text, "html.parser")
         posts = soup.select(".r-ent")[:count]
         if not posts:
+            # fallback: 用 Google News 搜尋 PTT 相關文章
+            import feedparser
+            fallback_url = f"https://news.google.com/rss/search?q=PTT+{urllib.parse.quote(keyword)}&hl=zh-Hant&gl=TW&ceid=TW:zh-Hant"
+            feed = feedparser.parse(fallback_url)
+            if feed.entries:
+                lines = [f"📋 PTT 搜尋結果（Google News 補充）：{keyword}\n"]
+                for i, e in enumerate(feed.entries[:count], 1):
+                    lines.append(f"{i}. {e.get('title', '')}")
+                return "\n".join(lines)
             return f"PTT {board} 版找不到「{keyword}」相關文章"
         lines = [f"📋 PTT/{board} 搜尋：{keyword}\n"]
         for post in posts:
@@ -3101,9 +3119,8 @@ def ptt_search(keyword: str, board: str = "Gossiping", count: int = 5) -> str:
             post_url = "https://www.ptt.cc" + title_el["href"]
             lines.append(f"🗂 {title}")
             lines.append(f"   推文：{nrec}　作者：{author}　{date}")
-            # 嘗試讀取文章前幾句
             try:
-                p_resp = requests.get(post_url, headers=headers, timeout=6)
+                p_resp = session.get(post_url, headers=headers, timeout=6)
                 p_soup = BeautifulSoup(p_resp.text, "html.parser")
                 content_el = p_soup.select_one("#main-content")
                 if content_el:
@@ -3120,7 +3137,7 @@ def ptt_search(keyword: str, board: str = "Gossiping", count: int = 5) -> str:
 
 def multi_perspective(topic: str, lang: str = "zh-tw") -> str:
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         results = {}
         queries = {
             "支持/正面觀點": f"{topic} 優點 支持 正面",
@@ -3320,7 +3337,7 @@ def analyze_pdf(path: str, max_chars: int = 4000) -> str:
 
 def execute_ddg_search(query: str, region: str = "zh-tw", max_results: int = 5) -> str:
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         max_results = min(max(max_results, 1), 10)
         results = []
         with DDGS() as ddgs:
@@ -9397,22 +9414,15 @@ def execute_osint_search(action, query="", target="", limit=10):
 
     if action == "web_search":
         try:
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-            resp = requests.get(url, headers=headers, timeout=10)
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            items = soup.select('.result__body')[:int(limit)]
-            for item in items:
-                title_el = item.select_one('.result__title')
-                snippet_el = item.select_one('.result__snippet')
-                url_el = item.select_one('.result__url')
-                if title_el:
-                    results.append({
-                        "title": title_el.get_text(strip=True),
-                        "url": url_el.get_text(strip=True) if url_el else "",
-                        "snippet": snippet_el.get_text(strip=True) if snippet_el else ""
-                    })
+            from ddgs import DDGS
+            with DDGS() as ddgs:
+                items = list(ddgs.text(query, region="zh-tw", max_results=int(limit)))
+            for r in items:
+                results.append({
+                    "title": r.get("title", ""),
+                    "url": r.get("href", ""),
+                    "snippet": r.get("body", "")
+                })
         except Exception as e:
             return f"搜尋失敗：{e}"
         return json.dumps(results, ensure_ascii=False, indent=2) if results else "無結果"
