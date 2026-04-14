@@ -67,7 +67,7 @@ client = Anthropic()
 # ── 持久化記憶（SQLite）──────────────────────────────
 DB_PATH = Path(__file__).parent / "memory.db"
 MAX_HISTORY = 300  # 每個聊天室最多保留幾條訊息
-CONTEXT_HISTORY = 20  # 每次送給 Claude 的對話筆數
+CONTEXT_HISTORY = 80  # 每次送給 Claude 的對話筆數
 
 import threading as _threading
 _db_lock = _threading.Lock()
