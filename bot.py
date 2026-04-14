@@ -350,6 +350,66 @@ TOOLS = [
         }
     },
     {
+        "name": "read_webpage",
+        "description": "讀取網頁完整內容並分析。當用戶貼網址、要分析某篇文章、要深度了解某個網頁內容時使用。比搜尋更深入，直接讀取全文。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "要讀取的網址"},
+                "max_chars": {"type": "integer", "description": "最多擷取幾個字元，預設 3000"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "wikipedia_search",
+        "description": "查詢 Wikipedia 百科，取得人物、事件、組織、地點的背景知識。當用戶問某人是誰、某事件的來龍去脈、某組織的背景時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "要查詢的人物、事件或主題"},
+                "lang": {"type": "string", "description": "語言版本，預設 zh（中文），可用 en（英文）", "enum": ["zh", "en", "ja"]}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "news_search",
+        "description": "搜尋任何主題的最新新聞（非財經專用）。當用戶問某人最近的新聞、某事件最新動態、某話題的報導時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字"},
+                "lang": {"type": "string", "description": "語言，預設 zh-TW", "enum": ["zh-TW", "zh-CN", "en-US"]},
+                "count": {"type": "integer", "description": "幾則新聞，預設 6"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "youtube_summary",
+        "description": "擷取 YouTube 影片字幕並分析內容、觀點、重點摘要。當用戶貼 YouTube 連結要了解影片說什麼時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "YouTube 影片網址或影片 ID"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "analyze_pdf",
+        "description": "讀取並分析 PDF 文件內容。當用戶傳來 PDF 檔案路徑或要分析報告、研究文件時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "PDF 檔案的完整路徑"},
+                "max_chars": {"type": "integer", "description": "最多擷取幾個字元，預設 4000"}
+            },
+            "required": ["path"]
+        }
+    },
+    {
         "name": "ddg_search",
         "description": "DuckDuckGo 快速網路搜尋，適合搜尋中文內容、中國相關話題、最新時事、任何需要查資料的問題。比 osint_search 更快更穩。當用戶問不知道答案的問題、需要查最新資訊、詢問中國相關話題時優先使用此工具。",
         "input_schema": {
@@ -2961,6 +3021,139 @@ def fetch_finance_news(source: str = "all", count: int = 5) -> str:
         return "\n\n".join(results) if results else "無法取得新聞"
     except Exception as e:
         return f"財經新聞失敗：{e}"
+
+
+def read_webpage(url: str, max_chars: int = 3000) -> str:
+    try:
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        resp = requests.get(url, headers=headers, timeout=12)
+        resp.encoding = resp.apparent_encoding
+        soup = BeautifulSoup(resp.text, "html.parser")
+        # 移除 script / style / nav / footer
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside", "ads"]):
+            tag.decompose()
+        # 優先取 article 或 main，其次 body
+        content_el = soup.find("article") or soup.find("main") or soup.find("body")
+        text = content_el.get_text(separator="\n", strip=True) if content_el else soup.get_text(separator="\n", strip=True)
+        # 清理多餘空行
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        clean = "\n".join(lines)
+        title = soup.title.string.strip() if soup.title else url
+        result = f"【{title}】\n{url}\n\n{clean[:max_chars]}"
+        if len(clean) > max_chars:
+            result += f"\n\n（內容已截斷，共 {len(clean)} 字）"
+        return result
+    except Exception as e:
+        return f"網頁讀取失敗：{e}"
+
+
+def wikipedia_search(query: str, lang: str = "zh") -> str:
+    try:
+        search_url = f"https://{lang}.wikipedia.org/w/api.php"
+        # 先搜尋
+        params = {"action": "search", "list": "search", "srsearch": query,
+                  "format": "json", "srlimit": 1}
+        resp = requests.get(search_url, params=params, timeout=10)
+        results = resp.json().get("query", {}).get("search", [])
+        if not results:
+            return f"Wikipedia 找不到「{query}」相關條目"
+        title = results[0]["title"]
+        # 取得摘要
+        params2 = {"action": "query", "titles": title, "prop": "extracts",
+                   "exintro": True, "explaintext": True, "format": "json"}
+        resp2 = requests.get(search_url, params=params2, timeout=10)
+        pages = resp2.json().get("query", {}).get("pages", {})
+        page = next(iter(pages.values()))
+        extract = page.get("extract", "無法取得內容")
+        extract = extract[:2500]
+        return f"📖 Wikipedia：{title}\n\n{extract}"
+    except Exception as e:
+        return f"Wikipedia 查詢失敗：{e}"
+
+
+def search_news(query: str, lang: str = "zh-TW", count: int = 6) -> str:
+    try:
+        import feedparser
+        count = min(count, 10)
+        lang_map = {"zh-TW": "zh-Hant&gl=TW&ceid=TW:zh-Hant",
+                    "zh-CN": "zh-Hans&gl=CN&ceid=CN:zh-Hans",
+                    "en-US": "en&gl=US&ceid=US:en"}
+        param = lang_map.get(lang, lang_map["zh-TW"])
+        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl={param}"
+        feed = feedparser.parse(url)
+        if not feed.entries:
+            return f"找不到「{query}」的新聞"
+        lines = [f"📰 {query} 最新新聞\n"]
+        for i, entry in enumerate(feed.entries[:count], 1):
+            title = entry.get("title", "無標題")
+            pub = entry.get("published", "")[:16]
+            lines.append(f"{i}. {title}（{pub}）")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"新聞搜尋失敗：{e}"
+
+
+def youtube_summary(url: str) -> str:
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        import re
+        # 從 URL 提取 video ID
+        patterns = [
+            r"(?:v=|youtu\.be/|/embed/|/v/)([a-zA-Z0-9_-]{11})",
+        ]
+        video_id = url if re.match(r"^[a-zA-Z0-9_-]{11}$", url) else None
+        if not video_id:
+            for pat in patterns:
+                m = re.search(pat, url)
+                if m:
+                    video_id = m.group(1)
+                    break
+        if not video_id:
+            return f"無法從網址提取 YouTube 影片 ID：{url}"
+        # 嘗試取得字幕（優先繁中→簡中→英文）
+        transcript = None
+        for lang in [["zh-TW", "zh-Hant"], ["zh", "zh-Hans"], ["en"]]:
+            try:
+                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=lang)
+                break
+            except Exception:
+                continue
+        if transcript is None:
+            try:
+                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            except Exception as e:
+                return f"無法取得字幕（影片可能無字幕或受限）：{e}"
+        # 合併字幕文字
+        full_text = " ".join(t["text"] for t in transcript)
+        # 截取前 3000 字
+        summary = full_text[:3000]
+        if len(full_text) > 3000:
+            summary += f"\n\n（字幕共 {len(full_text)} 字，已截取前段）"
+        return f"🎬 YouTube 字幕摘要\n影片ID：{video_id}\n\n{summary}"
+    except Exception as e:
+        return f"YouTube 字幕擷取失敗：{e}"
+
+
+def analyze_pdf(path: str, max_chars: int = 4000) -> str:
+    try:
+        import pdfplumber
+        with pdfplumber.open(path) as pdf:
+            total_pages = len(pdf.pages)
+            texts = []
+            for page in pdf.pages[:20]:  # 最多讀前 20 頁
+                t = page.extract_text()
+                if t:
+                    texts.append(t)
+        full_text = "\n".join(texts)
+        if not full_text.strip():
+            return "PDF 無法提取文字（可能是掃描圖片 PDF）"
+        result = f"📄 PDF 分析（共 {total_pages} 頁）\n\n{full_text[:max_chars]}"
+        if len(full_text) > max_chars:
+            result += f"\n\n（內容已截斷，共 {len(full_text)} 字）"
+        return result
+    except Exception as e:
+        return f"PDF 讀取失敗：{e}"
 
 
 def execute_ddg_search(query: str, region: str = "zh-tw", max_results: int = 5) -> str:
@@ -11521,6 +11714,71 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("source", "all"), tool_use.input.get("count", 5))
                 response = client.messages.create(
                     model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "read_webpage":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, read_webpage,
+                    tool_use.input["url"], tool_use.input.get("max_chars", 3000))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "wikipedia_search":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, wikipedia_search,
+                    tool_use.input["query"], tool_use.input.get("lang", "zh"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "news_search":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, search_news,
+                    tool_use.input["query"], tool_use.input.get("lang", "zh-TW"),
+                    tool_use.input.get("count", 6))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "youtube_summary":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, youtube_summary, tool_use.input["url"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "analyze_pdf":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, analyze_pdf,
+                    tool_use.input["path"], tool_use.input.get("max_chars", 4000))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
                         {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
