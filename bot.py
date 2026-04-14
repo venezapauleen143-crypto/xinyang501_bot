@@ -67,82 +67,93 @@ client = Anthropic()
 # ── 持久化記憶（SQLite）──────────────────────────────
 DB_PATH = Path(__file__).parent / "memory.db"
 MAX_HISTORY = 300  # 每個聊天室最多保留幾條訊息
+CONTEXT_HISTORY = 20  # 每次送給 Claude 的對話筆數
+
+import threading as _threading
+_db_lock = _threading.Lock()
+_db_conn: sqlite3.Connection | None = None
+
+def _get_db() -> sqlite3.Connection:
+    global _db_conn
+    if _db_conn is None:
+        _db_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        _db_conn.execute("PRAGMA journal_mode=WAL")
+        _db_conn.execute("PRAGMA synchronous=NORMAL")
+        _db_conn.execute("PRAGMA cache_size=2000")
+    return _db_conn
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS chat_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS long_term_memory (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER NOT NULL,
-            content TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
+    with _db_lock:
+        conn = _get_db()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS long_term_memory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
 
 def save_long_term_memory(chat_id: int, content: str):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "INSERT INTO long_term_memory (chat_id, content) VALUES (?, ?)",
-        (chat_id, content)
-    )
-    conn.commit()
-    conn.close()
+    with _db_lock:
+        conn = _get_db()
+        conn.execute(
+            "INSERT INTO long_term_memory (chat_id, content) VALUES (?, ?)",
+            (chat_id, content)
+        )
+        conn.commit()
 
 def load_long_term_memory(chat_id: int) -> list:
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute(
-        "SELECT id, content, created_at FROM long_term_memory WHERE chat_id=? ORDER BY id DESC",
-        (chat_id,)
-    ).fetchall()
-    conn.close()
+    with _db_lock:
+        rows = _get_db().execute(
+            "SELECT id, content, created_at FROM long_term_memory WHERE chat_id=? ORDER BY id DESC",
+            (chat_id,)
+        ).fetchall()
     return [{"id": r[0], "content": r[1], "created_at": r[2]} for r in rows]
 
 def delete_long_term_memory(memory_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM long_term_memory WHERE id=?", (memory_id,))
-    conn.commit()
-    conn.close()
+    with _db_lock:
+        conn = _get_db()
+        conn.execute("DELETE FROM long_term_memory WHERE id=?", (memory_id,))
+        conn.commit()
 
-def load_history(chat_id: int) -> list:
-    conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute(
-        "SELECT role, content FROM chat_history WHERE chat_id=? ORDER BY id DESC LIMIT ?",
-        (chat_id, MAX_HISTORY)
-    ).fetchall()
-    conn.close()
+def load_history(chat_id: int, limit: int = CONTEXT_HISTORY) -> list:
+    with _db_lock:
+        rows = _get_db().execute(
+            "SELECT role, content FROM chat_history WHERE chat_id=? ORDER BY id DESC LIMIT ?",
+            (chat_id, limit)
+        ).fetchall()
     return [{"role": r, "content": c} for r, c in reversed(rows)]
 
 def save_message(chat_id: int, role: str, content: str):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        "INSERT INTO chat_history (chat_id, role, content) VALUES (?, ?, ?)",
-        (chat_id, role, content)
-    )
-    # 超過上限自動刪除舊的
-    conn.execute("""
-        DELETE FROM chat_history WHERE chat_id=? AND id NOT IN (
-            SELECT id FROM chat_history WHERE chat_id=? ORDER BY id DESC LIMIT ?
+    with _db_lock:
+        conn = _get_db()
+        conn.execute(
+            "INSERT INTO chat_history (chat_id, role, content) VALUES (?, ?, ?)",
+            (chat_id, role, content)
         )
-    """, (chat_id, chat_id, MAX_HISTORY))
-    conn.commit()
-    conn.close()
+        conn.execute("""
+            DELETE FROM chat_history WHERE chat_id=? AND id NOT IN (
+                SELECT id FROM chat_history WHERE chat_id=? ORDER BY id DESC LIMIT ?
+            )
+        """, (chat_id, chat_id, MAX_HISTORY))
+        conn.commit()
 
 def clear_history(chat_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM chat_history WHERE chat_id=?", (chat_id,))
-    conn.commit()
-    conn.close()
+    with _db_lock:
+        conn = _get_db()
+        conn.execute("DELETE FROM chat_history WHERE chat_id=?", (chat_id,))
+        conn.commit()
 
 init_db()
 
@@ -9551,7 +9562,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 群組訊息加上發話者名字，讓 Claude 分清楚誰在說話
         saved_text = f"[{sender_name}]: {user_text}" if is_group else user_text
         save_message(chat_id, "user", saved_text)
-        history = load_history(chat_id)[-20:]
+        history = load_history(chat_id)
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
@@ -9577,7 +9588,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if memories:
             system_blocks.append({"type": "text", "text": f"\n\n【長期記憶】以下是你記住的重要資訊，回覆時請參考：\n{mem_text}"})
 
-        import asyncio as _aio, queue as _queue, threading as _threading
+        import asyncio as _aio, queue as _queue
 
         _chunk_q = _queue.Queue()
 
@@ -9598,11 +9609,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         loop = _aio.get_running_loop()
         api_future = loop.run_in_executor(None, _call_api)
 
+        # Typing keep-alive（每 4 秒補送一次，避免 5 秒後消失）
+        _typing_stop = False
+        async def _typing_keepalive():
+            while not _typing_stop:
+                await _aio.sleep(4)
+                if not _typing_stop:
+                    try:
+                        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+                    except Exception:
+                        pass
+        _typing_task = loop.create_task(_typing_keepalive())
+
         # 邊收 chunks 邊建構回覆，工具呼叫不顯示串流
         streamed_text = ""
         sent_msg = None
         last_edit_len = 0
-        EDIT_THRESHOLD = 40  # 每累積 40 字元 edit 一次
+        EDIT_THRESHOLD = 80  # 每累積 80 字元 edit 一次（避免 Telegram rate limit）
 
         while True:
             try:
@@ -9617,7 +9640,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 continue
 
             streamed_text += chunk
-            # 達到門檻就 edit（避免 Telegram rate limit）
+            # 達到門檻就 edit
             if len(streamed_text) - last_edit_len >= EDIT_THRESHOLD:
                 if sent_msg is None:
                     sent_msg = await update.message.reply_text(streamed_text)
@@ -9628,6 +9651,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 last_edit_len = len(streamed_text)
 
+        _typing_stop = True
+        _typing_task.cancel()
         response = await api_future
         # 處理工具呼叫
         if response.stop_reason == "tool_use":
