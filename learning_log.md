@@ -596,3 +596,120 @@ from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 job
 
 ---
+
+## 2026-04-14 — SQLite 效能優化與索引設計
+
+# 📓 小牛馬學習筆記 #Day-SQLite效能優化
+
+> 📅 學習日期：今晚  
+> ⏱️ 預計查閱時間：5分鐘  
+> 🎯 難度：★★★☆☆
+
+---
+
+## 1️⃣ 核心概念
+
+### 🔑 索引基礎
+- **索引本質**：B-Tree 結構，用空間換時間，讀快寫慢
+- **主鍵索引**：`INTEGER PRIMARY KEY` 在 SQLite 中即為 rowid，天然最快
+- **複合索引**：欄位順序非常關鍵，遵循「**最左前綴原則**」
+  - 索引 `(A, B, C)` → 可加速 `WHERE A=?`、`WHERE A=? AND B=?`，但**無法**加速單獨 `WHERE B=?`
+- **覆蓋索引**：查詢欄位全在索引內，不需回查主表，速度最快
+
+### ⚡ 效能關鍵設定
+| 設定 | 預設值 | 建議值 | 說明 |
+|------|--------|--------|------|
+| `PRAGMA journal_mode` | DELETE | WAL | 大幅提升並發讀寫 |
+| `PRAGMA synchronous` | FULL | NORMAL | 減少 fsync，速度提升 2-3x |
+| `PRAGMA cache_size` | -2000 | -64000 | 負數=KB，約 64MB 快取 |
+| `PRAGMA temp_store` | FILE | MEMORY | 臨時表放記憶體 |
+| `PRAGMA mmap_size` | 0 | 268435456 | 記憶體映射，大檔案必開 |
+
+### 📊 查詢優化原則
+- **批次寫入**：用 Transaction 包覆，1000筆單次 vs 1000筆單條，速度差 **100倍以上**
+- **避免 SELECT ***：只取需要的欄位，減少 I/O
+- **EXPLAIN QUERY PLAN**：永遠先看執行計畫再優化
+- **避免函數套欄位**：`WHERE date(created_at) = ?` 會讓索引失效，改用範圍查詢
+
+---
+
+## 2️⃣ 實用程式碼範例
+
+### 🚀 基礎設定模板（每次連線必做）
+```python
+import sqlite3
+
+def get_optimized_connection(db_path: str) -> sqlite3.Connection:
+    """取得效能優化過的 SQLite 連線"""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row  # 讓結果可用欄位名稱存取
+    
+    cursor = conn.cursor()
+    # 核心效能設定
+    cursor.executescript("""
+        PRAGMA journal_mode = WAL;       -- 開啟 WAL 模式，讀寫不互鎖
+        PRAGMA synchronous = NORMAL;     -- 平衡安全與速度
+        PRAGMA cache_size = -64000;      -- 64MB 快取
+        PRAGMA temp_store = MEMORY;      -- 臨時表存記憶體
+        PRAGMA mmap_size = 268435456;    -- 256MB 記憶體映射
+        PRAGMA foreign_keys = ON;        -- 開啟外鍵約束
+    """)
+    return conn
+```
+
+---
+
+### 📋 索引設計範例
+```python
+def setup_schema(conn: sqlite3.Connection):
+    """建立最佳化的資料表與索引"""
+    conn.executescript("""
+        -- 建立主表
+        CREATE TABLE IF NOT EXISTS logs (
+            id          INTEGER PRIMARY KEY,   -- rowid 別名，最快
+            user_id     INTEGER NOT NULL,
+            action      TEXT NOT NULL,
+            status      TEXT NOT NULL,
+            payload     TEXT,
+            created_at  REAL NOT NULL          -- Unix timestamp，比 TEXT 快
+        );
+
+        -- 單欄索引：高頻單條件查詢
+        CREATE INDEX IF NOT EXISTS idx_logs_user 
+            ON logs(user_id);
+
+        -- 複合索引：注意欄位順序！選擇性高的放前面
+        CREATE INDEX IF NOT EXISTS idx_logs_user_status_time 
+            ON logs(user_id, status, created_at DESC);
+
+        -- 覆蓋索引：查詢只需這幾欄時，完全不碰主表
+        CREATE INDEX IF NOT EXISTS idx_logs_covering
+            ON logs(user_id, created_at DESC, action, status);
+
+        -- 部分索引：只索引特定條件，節省空間
+        CREATE INDEX IF NOT EXISTS idx_logs_failed
+            ON logs(user_id, created_at)
+            WHERE status = 'failed';           -- 只索引失敗的記錄
+    """)
+    print("✅ Schema 建立完成")
+```
+
+---
+
+### ⚡ 批次寫入 vs 單筆寫入效能對比
+```python
+import time
+import random
+
+def benchmark_insert(conn: sqlite3.Connection, n: int = 10000):
+    """實際測試批次 vs 單筆差異"""
+    
+    # 準備假資料
+    data = [
+        (random.randint(1, 1000), 'click', 'ok', time.time())
+        for _ in range(n)
+    ]
+    
+    # ❌
+
+---
