@@ -9438,6 +9438,16 @@ async def handle_photo_message(update: Update, context: ContextTypes.DEFAULT_TYP
             pass
 
 
+def _build_tool_results(response_content, primary_id: str, primary_result: str) -> list:
+    """確保 response_content 裡每個 tool_use block 都有對應的 tool_result，避免 API 400 錯誤。"""
+    results = []
+    for block in response_content:
+        if getattr(block, 'type', None) == "tool_use":
+            content = primary_result if block.id == primary_id else "（已跳過）"
+            results.append({"type": "tool_result", "tool_use_id": block.id, "content": content})
+    return results or [{"type": "tool_result", "tool_use_id": primary_id, "content": primary_result}]
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         chat_id = update.effective_chat.id
@@ -10297,7 +10307,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # 把結果傳回 Claude
                     _messages = _messages + [
                         {"role": "assistant", "content": _cur_resp.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": _last_result}]}
+                        {"role": "user", "content": _build_tool_results(_cur_resp.content, tool_use.id, _last_result)}
                     ]
                     _next_resp = client.messages.create(
                         model="claude-sonnet-4-6",
@@ -10337,7 +10347,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": analysis}]}
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, analysis)}
                     ]
                 )
                 await update.message.reply_photo(photo=img_bytes, caption="📸 螢幕截圖")
@@ -10362,7 +10372,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": result}]}
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, result)}
                     ]
                 )
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
@@ -10396,7 +10406,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result_text}]}
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result_text)}
                     ]
                 )
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
@@ -10429,7 +10439,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
                     ]
                 )
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
@@ -10441,11 +10451,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif tool_use.name == "get_stock":
                 import asyncio
                 loop = asyncio.get_running_loop()
-                tool_result = await loop.run_in_executor(
-                    None, fetch_stock,
-                    tool_use.input["symbol"],
-                    tool_use.input.get("period", "1mo")
-                )
+                # Claude 可能同時查詢多支股票，全部執行並回傳
+                all_stock_uses = [b for b in response.content
+                                  if getattr(b, 'type', None) == "tool_use" and b.name == "get_stock"]
+                stock_results = await asyncio.gather(*[
+                    loop.run_in_executor(None, fetch_stock, tu.input["symbol"], tu.input.get("period", "1mo"))
+                    for tu in all_stock_uses
+                ])
+                tool_results_list = [
+                    {"type": "tool_result", "tool_use_id": tu.id, "content": res}
+                    for tu, res in zip(all_stock_uses, stock_results)
+                ]
+                # 補齊非 get_stock 的其他 tool_use（如有）
+                for b in response.content:
+                    if getattr(b, 'type', None) == "tool_use" and b.name != "get_stock":
+                        tool_results_list.append({"type": "tool_result", "tool_use_id": b.id, "content": "（跳過）"})
                 response = client.messages.create(
                     model="claude-sonnet-4-6",
                     max_tokens=1024,
@@ -10453,7 +10473,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                        {"role": "user", "content": tool_results_list}
                     ]
                 )
 
@@ -10466,7 +10486,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
                     ]
                 )
 
@@ -10513,7 +10533,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     _dc_messages = _dc_messages + [
                         {"role": "assistant", "content": _dc_cur_resp.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": _dc_cur_tu.id, "content": _dc_tool_result}]}
+                        {"role": "user", "content": _build_tool_results(_dc_cur_resp.content, _dc_cur_tu.id, _dc_tool_result)}
                     ]
                     _dc_next_resp = client.messages.create(
                         model="claude-sonnet-4-6",
@@ -10565,7 +10585,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
-                        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tool_use.id, "content": tool_result}]}
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
                     ]
                 )
                 text_blocks = [b.text for b in response.content if hasattr(b, "text")]
