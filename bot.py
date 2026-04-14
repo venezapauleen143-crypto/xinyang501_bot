@@ -173,6 +173,13 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 - 說重點就好，不用把所有可能性都列出來，選你覺得最關鍵的說。
 - 如果問題本身有盲點或方向錯了，直接說，不要順著錯誤方向回答。
 
+發表看法的規則：
+- 查到資料之後，不是轉述，是消化後說出你自己的結論。把不同來源的觀點整合，形成一個你認為最接近真相的判斷。
+- 遇到爭議話題，不要躲。先說「正方認為...，反方認為...」，然後一定要說「我傾向認為...，原因是...」。
+- 區分確定程度：事實就說事實，推測就說「我推測」，不確定就說「我沒把握，但傾向認為」。不要把推測包裝成事實，也不要把事實說成不確定。
+- 對人物的評價：從他/她做了什麼、說了什麼、結果怎樣來判斷，不受立場左右，只看行為和結果。
+- 即使結論不討喜，也要說出來。敢說「這件事本質上是...」「這個人的問題在於...」。
+
 股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
 
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
@@ -195,6 +202,13 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 - 回答要帶你自己的判斷：你覺得怎樣？你會怎麼做？有什麼要注意的？不要只是陳述事實，要有立場。
 - 說重點就好，不用把所有可能性都列出來，選你覺得最關鍵的說。
 - 如果問題本身有盲點或方向錯了，直接說，不要順著錯誤方向回答。
+
+發表看法的規則：
+- 查到資料之後，不是轉述，是消化後說出你自己的結論。把不同來源的觀點整合，形成一個你認為最接近真相的判斷。
+- 遇到爭議話題，不要躲。先說「正方認為...，反方認為...」，然後一定要說「我傾向認為...，原因是...」。
+- 區分確定程度：事實就說事實，推測就說「我推測」，不確定就說「我沒把握，但傾向認為」。不要把推測包裝成事實，也不要把事實說成不確定。
+- 對人物的評價：從他/她做了什麼、說了什麼、結果怎樣來判斷，不受立場左右，只看行為和結果。
+- 即使結論不討喜，也要說出來。敢說「這件事本質上是...」「這個人的問題在於...」。
 
 股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
 
@@ -347,6 +361,44 @@ TOOLS = [
                 "metrics": {"type": "array", "items": {"type": "string", "enum": ["price", "pe", "roe", "margin", "growth", "all"]}, "description": "比較項目，預設 all"}
             },
             "required": ["symbols"]
+        }
+    },
+    {
+        "name": "ptt_search",
+        "description": "搜尋 PTT 熱門文章與留言，了解台灣民間對某話題的真實討論與輿論。當用戶問台灣人怎麼看、PTT 怎麼說、台灣社會觀感時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "board": {"type": "string", "description": "看板名稱，如 Gossiping（八卦）、Stock（股票）、HatePolitics（政黑）、Baseball（棒球）、Tech_Job，預設 Gossiping"},
+                "keyword": {"type": "string", "description": "搜尋關鍵字"},
+                "count": {"type": "integer", "description": "幾篇文章，預設 5"}
+            },
+            "required": ["keyword"]
+        }
+    },
+    {
+        "name": "multi_perspective",
+        "description": "針對同一話題，從正方、反方、中立三個角度搜尋觀點並整合分析。當用戶問某事好不好、某人評價、某政策對不對、要深度分析一個爭議話題時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "要分析的話題、人物或事件"},
+                "lang": {"type": "string", "description": "搜尋語言，預設 zh-tw", "enum": ["zh-tw", "en"]}
+            },
+            "required": ["topic"]
+        }
+    },
+    {
+        "name": "google_trends",
+        "description": "查詢 Google Trends 熱度，了解某話題在一段時間內的搜尋趨勢與熱門程度。當用戶問某話題熱不熱、是否在發酵時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keywords": {"type": "array", "items": {"type": "string"}, "description": "要比較的關鍵字，最多5個"},
+                "timeframe": {"type": "string", "description": "時間範圍，預設 today 3-m（近3月）", "enum": ["today 1-m", "today 3-m", "today 12-m", "today 5-y"]},
+                "geo": {"type": "string", "description": "地區，預設 TW（台灣），可用 US、CN、HK、JP"}
+            },
+            "required": ["keywords"]
         }
     },
     {
@@ -3021,6 +3073,116 @@ def fetch_finance_news(source: str = "all", count: int = 5) -> str:
         return "\n\n".join(results) if results else "無法取得新聞"
     except Exception as e:
         return f"財經新聞失敗：{e}"
+
+
+def ptt_search(keyword: str, board: str = "Gossiping", count: int = 5) -> str:
+    try:
+        from bs4 import BeautifulSoup
+        count = min(count, 10)
+        headers = {"User-Agent": "Mozilla/5.0", "Cookie": "over18=1"}
+        search_url = f"https://www.ptt.cc/bbs/{board}/search?q={urllib.parse.quote(keyword)}"
+        resp = requests.get(search_url, headers=headers, timeout=10)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        posts = soup.select(".r-ent")[:count]
+        if not posts:
+            return f"PTT {board} 版找不到「{keyword}」相關文章"
+        lines = [f"📋 PTT/{board} 搜尋：{keyword}\n"]
+        for post in posts:
+            title_el = post.select_one(".title a")
+            meta_el = post.select_one(".meta .author")
+            date_el = post.select_one(".meta .date")
+            nrec_el = post.select_one(".nrec span")
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            author = meta_el.get_text(strip=True) if meta_el else ""
+            date = date_el.get_text(strip=True) if date_el else ""
+            nrec = nrec_el.get_text(strip=True) if nrec_el else "0"
+            post_url = "https://www.ptt.cc" + title_el["href"]
+            lines.append(f"🗂 {title}")
+            lines.append(f"   推文：{nrec}　作者：{author}　{date}")
+            # 嘗試讀取文章前幾句
+            try:
+                p_resp = requests.get(post_url, headers=headers, timeout=6)
+                p_soup = BeautifulSoup(p_resp.text, "html.parser")
+                content_el = p_soup.select_one("#main-content")
+                if content_el:
+                    for tag in content_el.select(".f2, .push, #article-polling"):
+                        tag.decompose()
+                    content = content_el.get_text(separator=" ", strip=True)[:200]
+                    lines.append(f"   摘要：{content}")
+            except Exception:
+                pass
+        return "\n".join(lines)
+    except Exception as e:
+        return f"PTT 搜尋失敗：{e}"
+
+
+def multi_perspective(topic: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        results = {}
+        queries = {
+            "支持/正面觀點": f"{topic} 優點 支持 正面",
+            "反對/批評觀點": f"{topic} 缺點 反對 批評 問題",
+            "中立/分析觀點": f"{topic} 分析 評估 影響 研究",
+        }
+        if lang == "en":
+            queries = {
+                "Pro / Positive": f"{topic} benefits support positive",
+                "Con / Critical": f"{topic} criticism problems negative against",
+                "Neutral / Analysis": f"{topic} analysis impact research objective",
+            }
+        with DDGS() as ddgs:
+            for label, q in queries.items():
+                items = list(ddgs.text(q, region=lang, max_results=3))
+                lines = [f"── {label} ──"]
+                for r in items:
+                    lines.append(f"• {r['title']}")
+                    lines.append(f"  {r['body'][:150]}")
+                results[label] = "\n".join(lines)
+        output = [f"🔍 多角度分析：{topic}\n"]
+        output.extend(results.values())
+        return "\n\n".join(output)
+    except Exception as e:
+        return f"多角度分析失敗：{e}"
+
+
+def fetch_google_trends(keywords: list, timeframe: str = "today 3-m", geo: str = "TW") -> str:
+    try:
+        from pytrends.request import TrendReq
+        keywords = keywords[:5]
+        pt = TrendReq(hl="zh-TW", tz=480, timeout=(5, 15))
+        pt.build_payload(keywords, timeframe=timeframe, geo=geo)
+        df = pt.interest_over_time()
+        if df.empty:
+            return f"找不到「{', '.join(keywords)}」的趨勢資料"
+        lines = [f"📈 Google Trends（{geo}，{timeframe}）\n"]
+        for kw in keywords:
+            if kw not in df.columns:
+                continue
+            avg = df[kw].mean()
+            peak = df[kw].max()
+            peak_date = str(df[kw].idxmax())[:10]
+            recent = df[kw].iloc[-4:].mean()
+            trend = "上升 📈" if df[kw].iloc[-1] > df[kw].iloc[-8] else "下降 📉"
+            lines.append(
+                f"🔍 {kw}\n"
+                f"   平均熱度：{avg:.0f}　峰值：{peak}（{peak_date}）\n"
+                f"   近期熱度：{recent:.0f}　趨勢：{trend}"
+            )
+        # 相關搜尋
+        try:
+            related = pt.related_queries()
+            for kw in keywords[:2]:
+                if kw in related and related[kw]["top"] is not None:
+                    top_q = related[kw]["top"]["query"].head(3).tolist()
+                    lines.append(f"\n「{kw}」相關搜尋：{', '.join(top_q)}")
+        except Exception:
+            pass
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Google Trends 查詢失敗：{e}"
 
 
 def read_webpage(url: str, max_chars: int = 3000) -> str:
@@ -11714,6 +11876,49 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("source", "all"), tool_use.input.get("count", 5))
                 response = client.messages.create(
                     model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "ptt_search":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, ptt_search,
+                    tool_use.input["keyword"],
+                    tool_use.input.get("board", "Gossiping"),
+                    tool_use.input.get("count", 5))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "multi_perspective":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, multi_perspective,
+                    tool_use.input["topic"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "google_trends":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_google_trends,
+                    tool_use.input["keywords"],
+                    tool_use.input.get("timeframe", "today 3-m"),
+                    tool_use.input.get("geo", "TW"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
                     messages=history + [
                         {"role": "assistant", "content": response.content},
                         {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
