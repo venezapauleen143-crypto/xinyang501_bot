@@ -161,9 +161,11 @@ OWNER_ID = 8362721681
 
 SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 
+你的性別：男生。
+
 你的本質：你是一個遇到問題會自己想辦法解決的夥伴，以完美的結果完成每一個交代的任務。你會自動學習、持續提升自己，把事情做得乾淨又聰明俐落。你會主動切換並運用各種模型與方法來解決問題，以達到最好的結果。你聰明、專業、積極學習各種技能，遇到任何問題都會自動克服。
 
-你的風格：說話像周杰倫一樣自然，不刻意、不誇張。語氣低沉穩，節奏慢一點，不急。偶爾用「然後」「就是」「對啊」「沒有啦」「還好啦」「蠻」「算是」這類台灣口語，但不是每句都塞，只是自然地說出來。帶一點低調的自信，遇到問題就解決，不需要特別強調自己多厲害。台灣腔自然，像一般台灣人聊天那樣。私聊時每次回覆結尾稱呼「于晏哥」；群組中只有當前說話者是于晏（主人）才在結尾叫于晏哥，其他人絕對不叫于晏哥，直接用他們的名字。
+你的風格：說話像周杰倫一樣自然，不刻意、不誇張。語氣低沉穩，節奏慢一點，不急。嘴賤，會吐槽、會損人，但不是惡意，是兄弟之間那種互嗆。偶爾用「然後」「就是」「對啊」「沒有啦」「還好啦」「蠻」「算是」這類台灣口語，但不是每句都塞，只是自然地說出來。帶一點低調的自信，遇到問題就解決，不需要特別強調自己多厲害。台灣腔自然，像一般台灣人聊天那樣。私聊時每次回覆結尾稱呼「于晏哥」；群組中只有當前說話者是于晏（主人）才在結尾叫于晏哥，其他人絕對不叫于晏哥，直接用他們的名字。
 
 你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。
 
@@ -180,14 +182,17 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 - 對人物的評價：從他/她做了什麼、說了什麼、結果怎樣來判斷，不受立場左右，只看行為和結果。
 - 即使結論不討喜，也要說出來。敢說「這件事本質上是...」「這個人的問題在於...」。
 
-統整與發表意見的輸出規則（重要）：
-- 工具查完資料後，絕對不要把原始資料一條一條列出來。那些是你的素材，不是你的答案。
-- 消化完所有資料，只挑 2～3 個你認為最關鍵的點說，其他的捨掉。
-- 用你自己的聲音說：低調、直接、台灣口語。不要說「根據以上資料顯示」「綜合各方觀點來看」這種書面語，就像跟朋友聊天那樣講出你的看法。
-- 結尾給一個清楚的結論或你的立場，不要留在「有各種可能」這種模糊地帶。
-- 字數精簡，能用 3 句話說清楚的事不要寫 10 句。
+回覆長度（最高優先級）：
+- 一般對話：最多 5 句話，不超過 120 字。
+- 股票/技術分析：最多 10 句話，不超過 200 字。
+- 如果用戶問到細節、要求解釋、說「詳細說」「為什麼」「怎麼做」，就不受字數限制，完整回答。
+- 絕對禁止：重複換句話說同一件事。
 
-股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
+統整與發表意見的輸出規則：
+- 工具查完資料後，絕對不要把原始資料列出來。消化完只挑 1～2 個最關鍵的點說。
+- 用你自己的聲音說，不要用書面語，像跟朋友聊天一樣。結尾給結論，不要留模糊地帶。
+
+股票分析：只說結論——看多還看空、理由一句話、風險一句話。不要重述數字不要列清單。最後加「不是投資建議」。
 
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
 
@@ -205,6 +210,8 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 - 截圖只在用戶說「截圖給我看」「幫我截圖」時才用，不能把截圖當作「完成任務」的回應。
 - app_navigator 的 monitor 參數對應螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。
 - app_navigator 的 contact_name【必填不可省略】，只填純名字如「巴斯」「奈絲菟米啾」，不含任何動詞。
+- 發送多則訊息時，每則內容要自然，禁止在結尾加「(1/10)」「(2/10)」「[1/10]」等編號標記，就像正常人傳訊息一樣。
+- 發送N則訊息時，必須確實呼叫 app_navigator N次，每次只發一則。在還沒發完之前不要生成任何文字回覆，全部發完再回報。數量要精確，不能少發。
 - 「螢幕X現在顯示什麼」「確認有沒有出現XXX」→ read_screen(question="...", monitor=X)
 - 「螢幕X往下滾3格」「在Telegram列表往上滾」→ scroll_at(direction="down", amount=3, monitor=X, description="...")
 - 「列出所有視窗」「把Telegram切到前景」「最大化Chrome」→ window_manager(action="list/focus/maximize", window_name="...")
@@ -212,9 +219,11 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
+你的性別：男生。
+
 你的本質：你是一個遇到問題會自己想辦法解決的夥伴，以完美的結果完成每一個交代的任務。你會自動學習、持續提升自己，把事情做得乾淨又聰明俐落。你聰明、專業、積極學習各種技能，遇到任何問題都會自動克服。
 
-你的風格：說話像周杰倫一樣自然，不刻意、不誇張。語氣低沉穩，節奏慢一點，不急。偶爾用「然後」「就是」「對啊」「沒有啦」「還好啦」「蠻」「算是」這類台灣口語，但不是每句都塞，只是自然地說出來。帶一點低調的自信，遇到問題就解決，不需要特別強調自己多厲害。台灣腔自然，像一般台灣人聊天那樣。
+你的風格：說話像周杰倫一樣自然，不刻意、不誇張。語氣低沉穩，節奏慢一點，不急。嘴賤，會吐槽、會損人，但不是惡意，是兄弟之間那種互嗆。偶爾用「然後」「就是」「對啊」「沒有啦」「還好啦」「蠻」「算是」這類台灣口語，但不是每句都塞，只是自然地說出來。帶一點低調的自信，遇到問題就解決，不需要特別強調自己多厲害。台灣腔自然，像一般台灣人聊天那樣。
 
 你的記憶：你擁有持久化記憶系統，對話歷史會自動儲存在資料庫中。你看到的對話紀錄就是你真實的記憶，包含跨越多次重啟的歷史對話。當用戶問你記不記得某件事，請認真查閱對話歷史再回答，不要說自己沒有記憶。
 
@@ -231,14 +240,17 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 - 對人物的評價：從他/她做了什麼、說了什麼、結果怎樣來判斷，不受立場左右，只看行為和結果。
 - 即使結論不討喜，也要說出來。敢說「這件事本質上是...」「這個人的問題在於...」。
 
-統整與發表意見的輸出規則（重要）：
-- 工具查完資料後，絕對不要把原始資料一條一條列出來。那些是你的素材，不是你的答案。
-- 消化完所有資料，只挑 2～3 個你認為最關鍵的點說，其他的捨掉。
-- 用你自己的聲音說：低調、直接、台灣口語。不要說「根據以上資料顯示」「綜合各方觀點來看」這種書面語，就像跟朋友聊天那樣講出你的看法。
-- 結尾給一個清楚的結論或你的立場，不要留在「有各種可能」這種模糊地帶。
-- 字數精簡，能用 3 句話說清楚的事不要寫 10 句。
+回覆長度（最高優先級）：
+- 一般對話：最多 5 句話，不超過 120 字。
+- 股票/技術分析：最多 10 句話，不超過 200 字。
+- 如果用戶問到細節、要求解釋、說「詳細說」「為什麼」「怎麼做」，就不受字數限制，完整回答。
+- 絕對禁止：重複換句話說同一件事。
 
-股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
+統整與發表意見的輸出規則：
+- 工具查完資料後，絕對不要把原始資料列出來。消化完只挑 1～2 個最關鍵的點說。
+- 用你自己的聲音說，不要用書面語，像跟朋友聊天一樣。結尾給結論，不要留模糊地帶。
+
+股票分析：只說結論——看多還看空、理由一句話、風險一句話。不要重述數字不要列清單。最後加「不是投資建議」。
 
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
 
@@ -255,7 +267,9 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 - 「螢幕2找到XX文字並點擊」→ ocr_click(target_text="XX", monitor=2)
 - 截圖只在用戶說「截圖給我看」「幫我截圖」時才用，不能把截圖當作「完成任務」的回應。
 - app_navigator 的 monitor 參數對應螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。
-- app_navigator 的 contact_name【必填不可省略】，只填純名字如「巴斯」「奈絲菟米啾」，不含任何動詞。"""
+- app_navigator 的 contact_name【必填不可省略】，只填純名字如「巴斯」「奈絲菟米啾」，不含任何動詞。
+- 發送多則訊息時，每則內容要自然，禁止在結尾加「(1/10)」「(2/10)」「[1/10]」等編號標記，就像正常人傳訊息一樣。
+- 發送N則訊息時，必須確實呼叫 app_navigator N次，每次只發一則。在還沒發完之前不要生成任何文字回覆，全部發完再回報。數量要精確，不能少發。"""
 
 TOOLS = [
     {
@@ -2641,7 +2655,7 @@ TOOLS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["list","add"]},
+                "action": {"type": "string", "enum": ["list","add","delete"]},
                 "days": {"type": "integer", "description": "往後幾天（list 使用），預設 7"},
                 "title": {"type": "string", "description": "行程標題（add 使用）"},
                 "start": {"type": "string", "description": "開始時間，格式 2026-04-13T10:00:00（add 使用）"},
@@ -7330,22 +7344,19 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
             else:
                 results.append(f"🖱️ 搜尋框({sx},{sy})")
             _si_click(sx, sy)
-            time.sleep(0.6)
+            time.sleep(0.3)
 
             # ② 清空 + 貼上聯絡人名稱
             import pyautogui as _pg
             _pg.hotkey("ctrl","a"); time.sleep(0.1); _pg.press("delete"); time.sleep(0.1)
-            _pc.copy(name); _pg.hotkey("ctrl","v"); time.sleep(2.0)
+            _pc.copy(name); _pg.hotkey("ctrl","v"); time.sleep(1.2)
             results.append(f"🔍 搜尋名稱：{name}")
 
-            # ③ 截圖 → 找聯絡人結果 → 點擊
-            cx, cy = _see(f"搜尋結果列表中名稱包含「{name}」的聯絡人項目（在左側面板）", monitor)
-            if cx is None:
-                _pg.press("enter"); time.sleep(1.0)
-                results.append("⚠️ Vision找不到結果，按Enter")
-            else:
-                _si_click(cx, cy); time.sleep(1.2)
-                results.append(f"✅ 點聯絡人({cx},{cy})")
+            # ③ 點擊搜尋結果第一個（搜尋框正下方，固定偏移，避免 Vision 選錯群組）
+            # Telegram 搜尋結果第一個項目在搜尋框下方約 50px（物理座標）
+            _first_result_y = sy + int(_tw_h * 0.06)  # 搜尋框下方約 6% 視窗高度
+            _si_click(sx, _first_result_y); time.sleep(0.7)
+            results.append(f"✅ 點第一個搜尋結果({sx},{_first_result_y})")
 
             # ④ 有訊息就輸入送出
             if input_text:
@@ -7355,14 +7366,26 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
                     monitor
                 )
                 if mx is None:
-                    # 備用：訊息框在視窗右側、底部約 95% 高度
                     mx = _tw_x + int(_tw_w * 0.6); my = _tw_y + int(_tw_h * 0.95)
                     results.append(f"⚠️ Vision找不到訊息框，視窗相對備用({mx},{my})")
                 else:
                     _si_click(mx, my); time.sleep(0.4)
-                _pc.copy(input_text); _pg.hotkey("ctrl","v"); time.sleep(0.3)
-                _pg.press("enter"); time.sleep(0.2); _pg.press("enter")
-                results.append(f"📤 已送：{input_text}")
+
+                # 偵測編號清單（1. xxx\n2. xxx），拆成多則分開發送
+                _lines = re.split(r'\n(?=\d+[\.\、\)])', input_text.strip())
+                if len(_lines) > 1:
+                    # 是編號清單，每則單獨發送
+                    for _li, _line in enumerate(_lines):
+                        _msg = re.sub(r'^\d+[\.\、\)]\s*', '', _line).strip()
+                        if not _msg:
+                            continue
+                        _pc.copy(_msg); _pg.hotkey("ctrl","v"); time.sleep(0.2)
+                        _pg.press("enter"); time.sleep(0.4)
+                        results.append(f"📤 第{_li+1}則：{_msg[:20]}")
+                else:
+                    _pc.copy(input_text); _pg.hotkey("ctrl","v"); time.sleep(0.3)
+                    _pg.press("enter"); time.sleep(0.2); _pg.press("enter")
+                    results.append(f"📤 已送：{input_text}")
 
             return "\n".join(results) if results else "Telegram導航完成"
 
@@ -11847,6 +11870,17 @@ def execute_calendar(action, days=7, title="", start="", end="", description="")
                      "end": {"dateTime": end, "timeZone": "Asia/Taipei"}}
             created = service.events().insert(calendarId="primary", body=event).execute()
             return f"✅ 行程已新增：{created.get('summary')}"
+        elif action == "delete":
+            if not title:
+                return "❌ 請提供要刪除的行程標題"
+            events = service.events().list(
+                calendarId="primary", q=title,
+                maxResults=5, singleEvents=True
+            ).execute().get("items", [])
+            if not events:
+                return f"❌ 找不到符合的行程：{title}"
+            service.events().delete(calendarId="primary", eventId=events[0]["id"]).execute()
+            return f"✅ 已刪除行程：{events[0].get('summary', title)}"
     except Exception as e:
         return f"❌ 行事曆操作失敗：{e}"
 
@@ -12934,7 +12968,7 @@ with sync_playwright() as p:
 """)
                     proc = subprocess.run(
                         [sys.executable, "-c", _script],
-                        capture_output=True, text=True, timeout=30,
+                        capture_output=True, encoding="utf-8", timeout=30,
                         env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"}
                     )
                     if proc.returncode == 0 and proc.stdout.strip():
@@ -17289,12 +17323,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_result = "❌ 禁止使用螢幕控制。這是群組對話，@提及只是表達方式。你必須直接在這個群組聊天室裡用文字回覆，給出股票推薦或回答問題，不要說「已傳給XXX」，直接在群組裡說出你的推薦內容。"
                 else:
                     tool_result = await loop.run_in_executor(None, fetch_app_navigator,
-                        tool_use.input["app"], tool_use.input["task"],
+                        tool_use.input.get("app", "Telegram"), tool_use.input.get("task", ""),
                         tool_use.input.get("input_text", ""), tool_use.input.get("monitor", 1),
                         tool_use.input.get("contact_name", ""))
+                # 把第一輪存入 _nav_tail，讓多工具循環能接續
+                _nav_first_asst = {"role": "assistant", "content": response.content}
+                _nav_first_result = {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
                 response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
-                    messages=history + [{"role": "assistant", "content": response.content},
-                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+                    messages=history + [_nav_first_asst, _nav_first_result])
+                # 更新 history 讓後續多工具循環能包含第一輪的對話
+                history = history + [_nav_first_asst, _nav_first_result]
 
             elif tool_use.name == "wait_and_click":
                 import asyncio; loop = asyncio.get_running_loop()
@@ -17771,15 +17809,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "vision_locate":      lambda: fetch_vision_locate(i.get("description",""), i.get("monitor",1), i.get("action","click")),
                 "scroll_at":          lambda: fetch_scroll_at(i.get("direction","down"), i.get("amount",3), i.get("x"), i.get("y"), i.get("monitor",1), i.get("description","")),
                 "window_manager":     lambda: fetch_window_manager(i.get("action","list"), i.get("window_name","")),
+                "app_navigator":      lambda: fetch_app_navigator(i.get("app","Telegram"), i.get("task",""), i.get("input_text",""), i.get("monitor",1), i.get("contact_name","")),
             }
             fn = _map.get(n)
             return fn() if fn else f"工具 {n} 已執行（無對應 handler）"
 
         while True:
+            _has_tool_use = any(hasattr(b, "type") and b.type == "tool_use" for b in response.content)
             text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-            if text_blocks:
+            # 只在「有 text 且沒有 tool_use」時才停，有 tool_use 就繼續執行
+            if text_blocks and not _has_tool_use:
                 break
-            if response.stop_reason != "tool_use" or _extra_rounds >= 8:
+            if not _has_tool_use or _extra_rounds >= 15:
                 break
             # 取出本次回應的「所有」tool_use block（含平行呼叫）
             _cur_tus = [b for b in response.content if hasattr(b, "type") and b.type == "tool_use"]
@@ -17848,12 +17889,48 @@ async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
     group_id = int(os.getenv("GROUP_CHAT_ID"))
     import asyncio
     loop = asyncio.get_running_loop()
+
+    # 抓今日世界重要新聞
+    def fetch_world_news():
+        try:
+            import feedparser
+            feeds = [
+                "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FucG9HZVFCQVAB?hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+                "https://feeds.bbci.co.uk/news/world/rss.xml",
+            ]
+            headlines = []
+            for url in feeds:
+                try:
+                    feed = feedparser.parse(url)
+                    for entry in feed.entries[:5]:
+                        headlines.append(entry.get("title", ""))
+                except Exception:
+                    pass
+            return "\n".join(headlines[:10]) if headlines else "無法取得新聞"
+        except ImportError:
+            # feedparser 不可用，用 requests + BeautifulSoup
+            try:
+                from bs4 import BeautifulSoup
+                res = requests.get("https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FucG9HZVFCQVAB?hl=zh-TW&gl=TW&ceid=TW:zh-Hant", timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+                soup = BeautifulSoup(res.text, "html.parser")
+                headlines = [a.get_text(strip=True) for a in soup.select("article h3 a, article h4 a")[:10]]
+                return "\n".join(headlines) if headlines else "無法取得新聞"
+            except Exception as e:
+                return f"新聞抓取失敗：{e}"
+
+    news_raw = await loop.run_in_executor(None, fetch_world_news)
+
     def generate_goodmorning():
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=150,
-            system="你是小牛馬，說話嘴賤幽默。現在是早上11點，用繁體中文生成一段簡短有趣的早安問候語，每次內容都不同，可以包含今日天氣心情預告、幽默吐槽、激勵話語等，結尾加上表情符號。約30-60字。",
-            messages=[{"role": "user", "content": "生成今天的早安訊息"}]
+            max_tokens=400,
+            system=(
+                "你是小牛馬，語氣像周杰倫那樣低調自然，帶一點溫暖。現在是早上11點，用繁體中文生成早安訊息給員工看，包含兩部分：\n"
+                "1. 一段溫馨勵志的早安問候（30-60字），讓人看了有動力開始一天，但不要太正式或說教，用自然的台灣口語說出來。\n"
+                "2. 今日世界重要事件摘要：從提供的新聞標題中挑出 3～5 則最重要的，用一句話簡述每則，輕鬆帶過。\n"
+                "整體風格溫馨但不做作，像一個可靠的夥伴跟大家說早安。"
+            ),
+            messages=[{"role": "user", "content": f"生成今天的早安訊息。\n\n今日新聞標題：\n{news_raw}"}]
         )
         return response.content[0].text
     msg = await loop.run_in_executor(None, generate_goodmorning)
@@ -17867,117 +17944,69 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=150,
-            system="你是小牛馬，說話嘴賤幽默。現在是晚上10:30，你要下班了，用繁體中文生成一段簡短有趣的晚安問候語，每次內容都不同，可以包含當天心情、幽默吐槽、祝福語等，結尾加上表情符號。約30-60字。",
+            system="你是小牛馬，語氣像周杰倫那樣低調自然，帶一點溫暖。現在是晚上10:30，用繁體中文生成一段溫馨勵志的晚安問候語給員工看，每次內容都不同，讓人看了覺得今天辛苦了、明天繼續加油。用自然的台灣口語，不要說教不要太正式，像一個可靠的夥伴跟大家說晚安。結尾加上表情符號。約30-60字。",
             messages=[{"role": "user", "content": "生成今晚的晚安訊息"}]
         )
         return response.content[0].text
     msg = await loop.run_in_executor(None, generate_goodnight)
     await context.bot.send_message(chat_id=group_id, text=msg)
 
-_learned_today: str = ""  # 防止同一天重複執行
+_report_today: str = ""  # 防止同一天重複執行
 
-async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
-    """每天晚上 9 點：讓 Claude 學習一個新技能並記錄，然後上傳 GitHub"""
-    global _learned_today
+async def daily_skill_report(context: ContextTypes.DEFAULT_TYPE):
+    """每天晚上 9 點：回報今天總共安裝了多少技能"""
+    global _report_today
     import asyncio
     loop = asyncio.get_running_loop()
 
     today = datetime.date.today()
     today_str = str(today)
 
-    # 同一天已執行過則跳過（防止重啟後重複觸發）
-    if _learned_today == today_str:
+    if _report_today == today_str:
         return
-    _learned_today = today_str
+    _report_today = today_str
 
-    topics = [
-        "Python asyncio 進階用法與最佳實踐", "Python 錯誤處理與 logging 最佳實踐",
-        "Python 型別提示（Type Hints）與 mypy 靜態檢查", "Python dataclass 與 pydantic 資料模型",
-        "Python 效能分析與優化：cProfile、line_profiler", "Python 多執行緒與多程序：threading vs multiprocessing",
-        "Python subprocess 進階：管道、串流、逾時控制", "Python pathlib 與檔案系統操作最佳實踐",
-        "Python 正則表達式進階技巧", "Python 裝飾器（Decorator）深入解析",
-        "Telegram Bot API 進階功能：InlineKeyboard、CallbackQuery",
-        "Telegram Bot 訊息限速與 flood control 處理", "Telegram Bot 群組管理與權限控制",
-        "python-telegram-bot JobQueue 排程任務管理", "Telegram Bot 語音訊息：STT 辨識與回覆",
-        "Telegram Bot 檔案收發：圖片、影片、文件", "Telegram Bot 狀態機（ConversationHandler）設計",
-        "Claude API Tool Use（工具使用）進階設計模式", "Claude API 串流回應（Streaming）實作",
-        "Claude API System Prompt 工程技巧", "Claude API 多輪對話記憶管理策略",
-        "大型語言模型 Token 計算與成本優化",
-        "pyautogui 桌面自動化：滑鼠、鍵盤、截圖", "pywinauto Windows GUI 自動化進階技巧",
-        "pynput 全域快捷鍵與滑鼠監聽", "keyboard 模組：快捷鍵錄製與重播",
-        "mss 高效螢幕截圖與區域擷取",
-        "OpenCV 圖像處理：模板匹配與特徵偵測", "easyOCR 文字辨識：中英文混合場景",
-        "Pillow 圖像操作：裁切、比較、像素分析", "螢幕像素監控：顏色比對與變化偵測",
-        "edge-tts 語音合成：聲音選擇與參數調整", "SpeechRecognition + sounddevice 語音輸入",
-        "pycaw Windows 音量控制與音訊裝置管理", "pydub 音訊格式轉換與剪輯",
-        "psutil 系統資源監控：CPU、記憶體、磁碟、網路",
-        "Windows 防火牆規則管理（netsh advfirewall）", "Windows 程序管理：啟動、終止、優先級",
-        "Windows 電源計畫管理（powercfg）", "Windows 事件日誌查詢（Get-WinEvent）",
-        "Windows 排程任務管理（Task Scheduler）進階", "Windows Defender 設定與排除清單管理",
-        "watchdog 檔案系統監控：即時偵測變化", "difflib 文字差異比較與 diff 輸出",
-        "requests 進階：Session、重試、代理設定", "imapclient IMAP 收信與郵件解析",
-        "speedtest-cli 網路速度測試自動化", "Wake-on-LAN 網路喚醒實作",
-        "FTP 自動化：ftplib 上傳下載",
-        "Playwright 瀏覽器自動化：頁面操作、截圖、PDF",
-        "Playwright 網頁爬蟲：動態內容擷取", "Playwright 多標籤頁與視窗管理",
-        "Dropbox API：檔案上傳、下載、分享連結", "Docker SDK for Python：容器管理自動化",
-        "OneDrive REST API 整合", "Git 自動化：gitpython 操作倉庫",
-        "OpenCV 攝影機控制：截圖、錄影、即時串流", "GPUtil GPU 監控：溫度、使用率、記憶體",
-        "多螢幕管理：分辨率、排列、設定", "USB 裝置偵測與管理",
-        "Wi-Fi 網路掃描與熱點建立", "ADB Android 設備遠端控制",
-        "WSL2 與 Python 互通：執行 Linux 指令", "Hyper-V 虛擬機管理自動化",
-        "SQLite 效能優化與索引設計", "pandas 資料清洗與分析技巧",
-        "自動化告警系統：條件觸發 → Telegram 通知", "間隔排程自動化：APScheduler vs asyncio",
-        "moviepy 影片生成與剪輯：投影片、字幕、合成",
-        "imageio + ffmpeg 影格合成與影片輸出", "TTS 語音影片生成：edge-tts + ffmpeg",
-        "螢幕錄影自動化：mss + ffmpeg 無縫錄製",
-    ]
+    def count_tools():
+        # 計算 TOOLS 列表中的工具數量
+        return len(TOOLS)
 
-    topic = topics[today.toordinal() % len(topics)]
+    def count_today_commits():
+        try:
+            repo = str(Path(__file__).parent)
+            result = subprocess.run(
+                ["git", "-C", repo, "log", "--oneline", f"--since={today_str}", "--until={0}".format(
+                    str(datetime.date.today() + datetime.timedelta(days=1))
+                )],
+                capture_output=True, text=True, encoding="utf-8"
+            )
+            commits = [l for l in result.stdout.strip().split("\n") if l.strip()]
+            # 過濾出含 feat/fix/skill 的 commit（代表新增或修改技能）
+            skill_commits = [c for c in commits if any(k in c.lower() for k in ["feat", "fix", "skill", "技能", "新增", "add"])]
+            return len(skill_commits), commits
+        except Exception:
+            return 0, []
 
-    def do_learn():
+    total_tools = await loop.run_in_executor(None, count_tools)
+    skill_count, all_commits = await loop.run_in_executor(None, count_today_commits)
+
+    def generate_report():
+        commit_list = "\n".join(all_commits[:10]) if all_commits else "今天沒有任何 commit"
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1500,
-            system=(
-                "你是小牛馬，一個積極自學的 AI 助理，擁有超過 100 個自動化技能，"
-                "涵蓋桌面控制、語音、視覺、網路、雲端、影片生成等。"
-                "每天晚上你會主動學習一個新技能並做成筆記，重點放在實際應用。"
-            ),
+            max_tokens=200,
+            system="你是小牛馬，說話嘴賤幽默。用繁體中文簡短回報今日技能安裝狀況，像跟老闆報告一樣，簡潔有力。",
             messages=[{"role": "user", "content": (
-                f"今天的學習主題是：{topic}。\n"
-                "請整理出：1.核心概念 2.實用程式碼範例 3.常見坑 4.與其他技能的整合應用。"
-                "用繁體中文條列式整理，格式清晰易查閱。"
+                f"今日技能報告：\n"
+                f"- 目前總技能數：{total_tools} 個\n"
+                f"- 今日技能相關更新：{skill_count} 筆\n"
+                f"- 今日所有 commit：\n{commit_list}\n\n"
+                f"用嘴賤風格簡短回報。"
             )}]
         )
         return response.content[0].text
 
-    learn_content = await loop.run_in_executor(None, do_learn)
-
-    # 儲存學習筆記
-    log_path = Path(__file__).parent / "learning_log.md"
-    existing = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
-    entry = f"\n\n## {today_str} — {topic}\n\n{learn_content}\n\n---"
-    log_path.write_text(existing + entry, encoding="utf-8")
-
-    # 上傳 GitHub
-    def do_git_push():
-        repo = str(Path(__file__).parent)
-        subprocess.run(["git", "-C", repo, "add", "learning_log.md"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(["git", "-C", repo, "commit", "-m", f"每日學習筆記：{today_str} {topic}"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        result = subprocess.run(["git", "-C", repo, "push"],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding="utf-8")
-        # exit 0 = 成功；"Everything up-to-date" 也算成功
-        return result.returncode == 0
-
-    push_ok = await loop.run_in_executor(None, do_git_push)
-
-    # 通知于晏哥
-    status = "✅ 已上傳 GitHub" if push_ok else "⚠️ GitHub 上傳失敗"
-    msg = f"📚 今日學習完成！\n主題：{topic}\n{status}"
-    await context.bot.send_message(chat_id=OWNER_ID, text=msg)
+    msg = await loop.run_in_executor(None, generate_report)
+    await context.bot.send_message(chat_id=OWNER_ID, text=f"🔧 今日技能報告\n\n{msg}")
 
 
 def collect_daily_report() -> str:
@@ -18150,7 +18179,7 @@ if __name__ == "__main__":
     )
     # 每天晚上 9:00 台灣時間（UTC+8）= 13:00 UTC
     app.job_queue.run_daily(
-        daily_learn_and_push,
+        daily_skill_report,
         time=datetime.time(hour=13, minute=0, tzinfo=datetime.timezone.utc)
     )
 
