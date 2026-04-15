@@ -4999,6 +4999,502 @@ def self_benchmark(action):
     print(execute_self_benchmark(action))
 
 
+# ── 新增投資技能 ─────────────────────────────────────
+
+def get_institutional(symbol="", date=""):
+    """台股三大法人買賣超。symbol=股票代號（空=整體市場），date=YYYYMMDD（空=今天）"""
+    from bot import fetch_institutional
+    print(fetch_institutional(symbol, date))
+
+def get_sector(market="us"):
+    """產業類股表現。market=us（美股）或 tw（台股）"""
+    from bot import fetch_sector
+    print(fetch_sector(market))
+
+def get_commodity(items="all"):
+    """大宗商品報價。items=gold,oil,silver,copper,natgas,wheat,corn 或 all"""
+    from bot import fetch_commodity
+    item_list = [x.strip() for x in items.split(",")] if items != "all" else ["all"]
+    print(fetch_commodity(item_list))
+
+def get_bond_yield():
+    """美國公債殖利率（2Y/5Y/10Y/30Y）及利差分析"""
+    from bot import fetch_bond_yield
+    print(fetch_bond_yield())
+
+def get_dividend_calendar(symbol):
+    """除權息資訊。symbol=股票代號（如 0056.TW、AAPL）"""
+    from bot import fetch_dividend_calendar
+    print(fetch_dividend_calendar(symbol))
+
+def stock_screener(criteria, market="us"):
+    """選股篩選。criteria=篩選條件（如「殖利率>5%」），market=us/tw"""
+    from bot import fetch_stock_screener
+    print(fetch_stock_screener(criteria, market))
+
+def get_margin_trading(symbol, date=""):
+    """台股融資融券餘額。symbol=台股代號，date=YYYYMMDD（空=今天）"""
+    from bot import fetch_margin_trading
+    print(fetch_margin_trading(symbol, date))
+
+def get_options(symbol, expiry=""):
+    """選擇權鏈。symbol=股票代號（如 AAPL），expiry=到期日（空=最近一個）"""
+    from bot import fetch_options
+    print(fetch_options(symbol, expiry))
+
+def get_futures(items="all"):
+    """期貨報價。items=sp500,nasdaq,dow,gold,oil,taiex 或 all"""
+    from bot import fetch_futures
+    item_list = [x.strip() for x in items.split(",")] if items != "all" else ["all"]
+    print(fetch_futures(item_list))
+
+def get_ipo(count=10):
+    """近期 IPO 行事曆。count=顯示筆數（預設10）"""
+    from bot import fetch_ipo
+    print(fetch_ipo(int(count)))
+
+def backtest(symbol, strategy="ma_cross", period="2y"):
+    """回測投資策略。strategy=ma_cross/buy_hold/dca，period=1y/2y/3y/5y"""
+    from bot import fetch_backtest
+    print(fetch_backtest(symbol, strategy, period))
+
+def get_ashare(code, period="1mo"):
+    """A股/港股查詢。code=6位A股代號或4位港股代號，period=1mo/3mo/6mo/1y"""
+    from bot import fetch_ashare
+    print(fetch_ashare(code, period))
+
+def get_cn_news(source="all", count=5):
+    """中國大陸新聞。source=xinhua/people/36kr/caixin/all，count=顯示則數"""
+    from bot import fetch_cn_news
+    print(fetch_cn_news(source, int(count)))
+
+def china_search(query, category="其他", count=6):
+    """中國大陸全方位搜尋（旅遊/美食/文化/戲劇/演員/工作等）。"""
+    from bot import fetch_china_search
+    print(fetch_china_search(query, category, int(count)))
+
+def get_global_market():
+    """全球主要股市指數概覽"""
+    from bot import fetch_global_market
+    print(fetch_global_market())
+
+def get_economic_calendar(count=10):
+    """重要經濟數據行事曆（CPI/非農/GDP/Fed）"""
+    from bot import fetch_economic_calendar
+    print(fetch_economic_calendar(int(count)))
+
+def get_earnings_calendar(days=7):
+    """未來N天財報日曆"""
+    from bot import fetch_earnings_calendar
+    print(fetch_earnings_calendar(int(days)))
+
+def get_analyst_ratings(symbol):
+    """分析師評級升降評紀錄。symbol=股票代號"""
+    from bot import fetch_analyst_ratings
+    print(fetch_analyst_ratings(symbol))
+
+def get_short_interest(symbol):
+    """空頭比率/借券賣出資料。symbol=股票代號"""
+    from bot import fetch_short_interest
+    print(fetch_short_interest(symbol))
+
+def get_correlation(symbols, period="1y"):
+    """多股相關性矩陣。symbols=逗號分隔代號，period=3mo/6mo/1y/2y"""
+    from bot import fetch_correlation
+    sym_list = [s.strip() for s in symbols.split(",")] if isinstance(symbols, str) else symbols
+    print(fetch_correlation(sym_list, period))
+
+def get_risk_metrics(symbol, period="1y"):
+    """風險指標：Beta/夏普/波動率/VaR。period=1y/2y/3y"""
+    from bot import fetch_risk_metrics
+    print(fetch_risk_metrics(symbol, period))
+
+def get_money_flow(symbol):
+    """個股資金流向分析。symbol=股票代號"""
+    from bot import fetch_money_flow
+    print(fetch_money_flow(symbol))
+
+def get_concept_stocks(theme):
+    """台股概念股查詢。theme=AI/電動車/軍工/低軌衛星/半導體等"""
+    from bot import fetch_concept_stocks
+    print(fetch_concept_stocks(theme))
+
+def get_crypto_depth(coin="bitcoin"):
+    """加密幣深度：鏈上數據/資金費率/DeFi。coin=bitcoin/ethereum/solana等"""
+    from bot import fetch_crypto_depth
+    print(fetch_crypto_depth(coin))
+
+def drip_calculator(symbol, shares, years=10, monthly_invest=0):
+    """DRIP股息再投資試算。shares=初始股數，years=持有年數，monthly_invest=每月追加"""
+    from bot import fetch_drip_calculator
+    print(fetch_drip_calculator(symbol, float(shares), int(years), float(monthly_invest)))
+
+def get_forex_chart(pair, period="3mo"):
+    """外匯技術分析。pair=USDTWD=X等，period=1mo/3mo/6mo/1y"""
+    from bot import fetch_forex_chart
+    print(fetch_forex_chart(pair, period))
+
+def get_warrant(underlying):
+    """台股認購/認售權證。underlying=標的股代號（如2330）"""
+    from bot import fetch_warrant
+    print(fetch_warrant(underlying))
+
+def get_portfolio_risk(symbols_weights, period="1y"):
+    """投資組合風險分析。symbols_weights=代號:權重,代號:權重（如AAPL:0.5,MSFT:0.5）"""
+    from bot import fetch_portfolio_risk
+    if isinstance(symbols_weights, str):
+        holdings = []
+        for item in symbols_weights.split(","):
+            parts = item.strip().split(":")
+            if len(parts) == 2:
+                holdings.append({"symbol": parts[0].strip(), "weight": float(parts[1].strip())})
+            else:
+                holdings.append({"symbol": parts[0].strip(), "weight": 1.0})
+    else:
+        holdings = symbols_weights
+    print(fetch_portfolio_risk(holdings, period))
+
+
+def retirement_calculator(current_age, current_savings, monthly_save,
+                           retire_age=65, annual_return=6.0, monthly_expense=50000):
+    """退休規劃試算。用法：retirement_calculator <年齡> <現有資產萬元> <月儲蓄元> [退休年齡] [年報酬%] [月支出元]"""
+    from bot import fetch_retirement_calculator
+    print(fetch_retirement_calculator(int(current_age), float(current_savings), float(monthly_save),
+                                      int(retire_age), float(annual_return), float(monthly_expense)))
+
+
+def loan_calculator(principal, annual_rate, years, loan_type="等額本息"):
+    """貸款試算。用法：loan_calculator <貸款萬元> <年利率%> <年數> [等額本息|等額本金]"""
+    from bot import fetch_loan_calculator
+    print(fetch_loan_calculator(float(principal), float(annual_rate), int(years), loan_type))
+
+
+def compound_calculator(principal, annual_rate, years, monthly_add=0, compound_freq=12):
+    """複利計算器。用法：compound_calculator <本金> <年報酬%> <年數> [每月追加] [複利頻率]"""
+    from bot import fetch_compound_calculator
+    print(fetch_compound_calculator(float(principal), float(annual_rate), int(years),
+                                    float(monthly_add), int(compound_freq)))
+
+
+def asset_allocation(age, risk_level="穩健", goal="退休", investment_horizon=None):
+    """資產配置建議。用法：asset_allocation <年齡> [保守|穩健|積極] [目標] [投資年數]"""
+    from bot import fetch_asset_allocation
+    print(fetch_asset_allocation(int(age), risk_level, goal,
+                                 int(investment_horizon) if investment_horizon else None))
+
+
+def tw_tax_calculator(dividend_income, other_income=0, tax_bracket=None, sell_amount=0):
+    """台股稅務試算。用法：tw_tax_calculator <股利所得元> [其他收入元] [稅率%] [賣出金額元]"""
+    from bot import fetch_tw_tax_calculator
+    print(fetch_tw_tax_calculator(float(dividend_income), float(other_income),
+                                  float(tax_bracket) if tax_bracket else None, float(sell_amount)))
+
+
+def currency_converter(amount, from_currency, to_currency):
+    """外幣換算。用法：currency_converter <金額> <來源幣別> <目標幣別>"""
+    from bot import fetch_currency_converter
+    print(fetch_currency_converter(float(amount), from_currency, to_currency))
+
+
+def get_fund(symbol):
+    """基金查詢。用法：get_fund <基金代號>"""
+    from bot import fetch_fund
+    print(fetch_fund(symbol))
+
+
+def get_reits(symbol):
+    """REITs查詢。用法：get_reits <REITs代號>"""
+    from bot import fetch_reits
+    print(fetch_reits(symbol))
+
+
+def inflation_adjusted(nominal_return, years, amount, inflation_rate=2.0):
+    """通膨調整報酬。用法：inflation_adjusted <名目報酬%> <年數> <本金元> [通膨率%]"""
+    from bot import fetch_inflation_adjusted
+    print(fetch_inflation_adjusted(float(nominal_return), int(years), float(amount), float(inflation_rate)))
+
+
+def defi_calculator(principal_usd, apy, days, compound=True, protocol=""):
+    """DeFi收益試算。用法：defi_calculator <本金USD> <APY%> <天數> [複利true/false] [協議名]"""
+    from bot import fetch_defi_calculator
+    c = compound if isinstance(compound, bool) else str(compound).lower() != "false"
+    print(fetch_defi_calculator(float(principal_usd), float(apy), int(days), c, str(protocol)))
+
+
+def gold_calculator(weight, unit="公克", currency="TWD"):
+    """黃金換算。用法：gold_calculator <重量> [公克|錢|兩|盎司] [TWD|USD]"""
+    from bot import fetch_gold_calculator
+    print(fetch_gold_calculator(float(weight), unit, currency))
+
+
+def forex_deposit(amount_twd, currency, annual_rate, months, buy_rate=None, sell_rate=None):
+    """外幣定存試算。用法：forex_deposit <台幣本金> <幣別> <年利率%> <月數> [買入匯率] [賣出匯率]"""
+    from bot import fetch_forex_deposit
+    print(fetch_forex_deposit(float(amount_twd), currency, float(annual_rate), int(months),
+                               float(buy_rate) if buy_rate else None,
+                               float(sell_rate) if sell_rate else None))
+
+
+def financial_health(monthly_income, monthly_expense, total_assets, total_debt,
+                     emergency_fund_months=0, has_insurance=False, investment_ratio=0):
+    """財務健康診斷。用法：financial_health <月收入> <月支出> <總資產> <總負債> [備用金月數] [有保險y/n] [投資比例%]"""
+    from bot import fetch_financial_health
+    ins = has_insurance if isinstance(has_insurance, bool) else str(has_insurance).lower() in ("y", "true", "yes", "1")
+    print(fetch_financial_health(float(monthly_income), float(monthly_expense),
+                                 float(total_assets), float(total_debt),
+                                 float(emergency_fund_months), ins, float(investment_ratio)))
+
+
+def deep_research(topic, lang="zh-tw", depth=5):
+    """深度研究。用法：deep_research <主題> [zh-tw|en] [深度3-8]"""
+    from bot import fetch_deep_research
+    print(fetch_deep_research(topic, lang, int(depth)))
+
+
+def fact_check(claim, lang="zh-tw"):
+    """事實查核。用法：fact_check <要查核的說法>"""
+    from bot import fetch_fact_check
+    print(fetch_fact_check(claim, lang))
+
+
+def timeline_events(topic, lang="zh-tw"):
+    """時間軸整理。用法：timeline_events <主題>"""
+    from bot import fetch_timeline_events
+    print(fetch_timeline_events(topic, lang))
+
+
+def sentiment_scan(topic, lang="zh-tw"):
+    """輿情掃描。用法：sentiment_scan <話題>"""
+    from bot import fetch_sentiment_scan
+    print(fetch_sentiment_scan(topic, lang))
+
+
+def compare_analysis(items_str, context=""):
+    """多項比較。用法：compare_analysis <A,B,C> [背景說明]"""
+    from bot import fetch_compare_analysis
+    items = [i.strip() for i in items_str.split(",")]
+    print(fetch_compare_analysis(items, None, context))
+
+
+def pros_cons_analysis(subject, context="", lang="zh-tw"):
+    """優缺點分析。用法：pros_cons_analysis <主題> [背景] [語言]"""
+    from bot import fetch_pros_cons_analysis
+    print(fetch_pros_cons_analysis(subject, context, lang))
+
+
+def research_report(topic, purpose="一般研究", lang="zh-tw"):
+    """研究報告。用法：research_report <主題> [目的] [語言]"""
+    from bot import fetch_research_report
+    print(fetch_research_report(topic, purpose, lang))
+
+
+def opinion_writer(topic, stance="中立", style="正式"):
+    """觀點撰寫。用法：opinion_writer <主題> [支持|反對|中立|批判] [正式|輕鬆|犀利]"""
+    from bot import fetch_opinion_writer
+    print(fetch_opinion_writer(topic, stance, style))
+
+
+def trend_forecast(topic, timeframe="全部", lang="zh-tw"):
+    """趨勢預測。用法：trend_forecast <主題> [短期|中期|長期|全部]"""
+    from bot import fetch_trend_forecast
+    print(fetch_trend_forecast(topic, timeframe, lang))
+
+
+def debate_simulator(motion, lang="zh-tw"):
+    """辯論模擬。用法：debate_simulator <辯論題目>"""
+    from bot import fetch_debate_simulator
+    print(fetch_debate_simulator(motion, lang))
+
+
+def academic_search(query, field="", lang="en"):
+    """學術論文搜尋。用法：academic_search <關鍵字> [領域] [語言]"""
+    from bot import fetch_academic_search
+    print(fetch_academic_search(query, field, lang))
+
+
+def health_research(topic, lang="zh-tw"):
+    """健康資訊搜尋。用法：health_research <主題>"""
+    from bot import fetch_health_research
+    print(fetch_health_research(topic, lang))
+
+
+def law_research(topic, jurisdiction="台灣", lang="zh-tw"):
+    """法規查詢。用法：law_research <主題> [地區] [語言]"""
+    from bot import fetch_law_research
+    print(fetch_law_research(topic, jurisdiction, lang))
+
+
+def person_research(name, context="", lang="zh-tw"):
+    """人物研究。用法：person_research <姓名> [背景說明]"""
+    from bot import fetch_person_research
+    print(fetch_person_research(name, context, lang))
+
+
+def company_research(company, lang="zh-tw"):
+    """公司深度研究。用法：company_research <公司名稱或代號>"""
+    from bot import fetch_company_research
+    print(fetch_company_research(company, lang))
+
+
+def product_review(product, category="", lang="zh-tw"):
+    """產品評測彙整。用法：product_review <產品名稱> [類別]"""
+    from bot import fetch_product_review
+    print(fetch_product_review(product, category, lang))
+
+
+def travel_research(destination, days=None, style="", lang="zh-tw"):
+    """旅遊研究。用法：travel_research <目的地> [天數] [風格]"""
+    from bot import fetch_travel_research
+    print(fetch_travel_research(destination, int(days) if days else None, style, lang))
+
+
+def job_market(job_title, location="台灣", lang="zh-tw"):
+    """職涯市場分析。用法：job_market <職位名稱> [地區]"""
+    from bot import fetch_job_market
+    print(fetch_job_market(job_title, location, lang))
+
+
+def impact_analysis(event, scope_str="", lang="zh-tw"):
+    """影響力分析。用法：impact_analysis <事件> [個人,企業,社會,經濟]"""
+    from bot import fetch_impact_analysis
+    scope = [s.strip() for s in scope_str.split(",")] if scope_str else None
+    print(fetch_impact_analysis(event, scope, lang))
+
+
+def scenario_planning(topic, horizon="", lang="zh-tw"):
+    """情境規劃。用法：scenario_planning <主題> [時間範圍]"""
+    from bot import fetch_scenario_planning
+    print(fetch_scenario_planning(topic, horizon, lang))
+
+
+def decision_helper(question, options_str="", criteria_str=""):
+    """決策輔助。用法：decision_helper <決策問題> [選項A,選項B] [考量1,考量2]"""
+    from bot import fetch_decision_helper
+    options = [o.strip() for o in options_str.split(",")] if options_str else None
+    criteria = [c.strip() for c in criteria_str.split(",")] if criteria_str else None
+    print(fetch_decision_helper(question, options, criteria))
+
+
+def devil_advocate(position, lang="zh-tw"):
+    """魔鬼代言人。用法：devil_advocate <要被挑戰的觀點>"""
+    from bot import fetch_devil_advocate
+    print(fetch_devil_advocate(position, lang))
+
+
+def summary_writer(topic, max_points=7, lang="zh-tw"):
+    """多來源摘要。用法：summary_writer <主題> [重點數] [語言]"""
+    from bot import fetch_summary_writer
+    print(fetch_summary_writer(topic, int(max_points), lang))
+
+
+def key_insights(topic, count=5, lang="zh-tw"):
+    """洞察萃取。用法：key_insights <主題> [數量] [語言]"""
+    from bot import fetch_key_insights
+    print(fetch_key_insights(topic, int(count), lang))
+
+
+def bias_detector(topic, lang="zh-tw"):
+    """偏見偵測。用法：bias_detector <議題>"""
+    from bot import fetch_bias_detector
+    print(fetch_bias_detector(topic, lang))
+
+
+def second_opinion(question, experts_str="", lang="zh-tw"):
+    """多專家視角。用法：second_opinion <問題> [專家A,專家B,...]"""
+    from bot import fetch_second_opinion
+    experts = [e.strip() for e in experts_str.split(",")] if experts_str else None
+    print(fetch_second_opinion(question, experts, lang))
+
+
+def brainstorm(problem, count=8, style="實用", lang="zh-tw"):
+    """腦力激盪。用法：brainstorm <問題> [數量] [實用|創意|顛覆]"""
+    from bot import fetch_brainstorm
+    print(fetch_brainstorm(problem, int(count), style, lang))
+
+
+def benchmark_analysis(subject, industry="", lang="zh-tw"):
+    """標竿分析。用法：benchmark_analysis <對象> [產業]"""
+    from bot import fetch_benchmark_analysis
+    print(fetch_benchmark_analysis(subject, industry, lang))
+
+
+def steel_man(opposing_view, own_position="", lang="zh-tw"):
+    """鋼人論證。用法：steel_man <對立觀點> [自己的立場]"""
+    from bot import fetch_steel_man
+    print(fetch_steel_man(opposing_view, own_position, lang))
+
+
+def socratic_questioning(topic, depth=5, lang="zh-tw"):
+    """蘇格拉底式提問。用法：socratic_questioning <主題> [層數]"""
+    from bot import fetch_socratic_questioning
+    print(fetch_socratic_questioning(topic, int(depth), lang))
+
+
+def analogy_maker(concept, audience="一般大眾", count=3, lang="zh-tw"):
+    """類比說明。用法：analogy_maker <概念> [受眾] [數量]"""
+    from bot import fetch_analogy_maker
+    print(fetch_analogy_maker(concept, audience, int(count), lang))
+
+
+def narrative_builder(topic, key_message="", audience="", lang="zh-tw"):
+    """敘事架構。用法：narrative_builder <主題> [核心訊息] [受眾]"""
+    from bot import fetch_narrative_builder
+    print(fetch_narrative_builder(topic, key_message, audience, lang))
+
+
+def critique_writer(subject, type_="觀點", lang="zh-tw"):
+    """批判性評析。用法：critique_writer <對象> [文章|政策|作品|計劃|觀點]"""
+    from bot import fetch_critique_writer
+    print(fetch_critique_writer(subject, type_, lang))
+
+
+def position_statement(issue, stance, lang="zh-tw"):
+    """立場聲明。用法：position_statement <議題> <支持|反對|有條件支持>"""
+    from bot import fetch_position_statement
+    print(fetch_position_statement(issue, stance, lang))
+
+
+def ocr_click(target_text, monitor=1, click_type="click"):
+    """OCR找字點擊。用法：ocr_click <目標文字> [螢幕1/2/3] [click|double_click|right_click]"""
+    from bot import fetch_ocr_click
+    print(fetch_ocr_click(target_text, int(monitor), click_type))
+
+
+def vision_locate(description, monitor=1, action="click"):
+    """視覺定位點擊。用法：vision_locate <描述> [螢幕] [click|double_click|locate_only]"""
+    from bot import fetch_vision_locate
+    print(fetch_vision_locate(description, int(monitor), action))
+
+
+def screen_workflow(steps_json):
+    """螢幕工作流。用法：screen_workflow '<JSON步驟陣列>'"""
+    import json
+    from bot import fetch_screen_workflow
+    steps = json.loads(steps_json) if isinstance(steps_json, str) else steps_json
+    print(fetch_screen_workflow(steps))
+
+
+def app_navigator(app, task, input_text="", monitor=1):
+    """App導航。用法：app_navigator <App名> <任務描述> [輸入文字] [螢幕]"""
+    from bot import fetch_app_navigator
+    print(fetch_app_navigator(app, task, input_text, int(monitor)))
+
+
+def wait_and_click(target_text, timeout=15, monitor=1, action_after="click"):
+    """等待出現後點擊。用法：wait_and_click <目標文字> [超時秒數] [螢幕] [click|none]"""
+    from bot import fetch_wait_and_click
+    print(fetch_wait_and_click(target_text, int(timeout), int(monitor), action_after))
+
+
+def drag_drop(from_x=None, from_y=None, to_x=None, to_y=None, from_text="", to_text="", monitor=1, duration=0.5):
+    """拖曳操作。用法：drag_drop <from_x> <from_y> <to_x> <to_y> 或 drag_drop from_text=<文字> to_text=<文字>"""
+    from bot import fetch_drag_drop
+    print(fetch_drag_drop(
+        int(from_x) if from_x else None, int(from_y) if from_y else None,
+        int(to_x) if to_x else None, int(to_y) if to_y else None,
+        str(from_text), str(to_text), int(monitor), float(duration)))
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -5289,6 +5785,96 @@ if __name__ == "__main__":
         "doc_ai":            lambda: doc_ai(args[0] if args else "summarize", *args[1:]),
         "web_monitor":       lambda: web_monitor(args[0] if args else "check_once", args[1] if len(args)>1 else "", *args[2:]),
         "audio_transcribe":  lambda: audio_transcribe(args[0] if args else "transcribe_mic", *args[1:]),
+        # 投資技能
+        "get_institutional":     lambda: get_institutional(args[0] if args else "", args[1] if len(args)>1 else ""),
+        "get_sector":            lambda: get_sector(args[0] if args else "us"),
+        "get_commodity":         lambda: get_commodity(args[0] if args else "all"),
+        "get_bond_yield":        lambda: get_bond_yield(),
+        "get_dividend_calendar": lambda: get_dividend_calendar(args[0]),
+        "stock_screener":        lambda: stock_screener(args[0], args[1] if len(args)>1 else "us"),
+        "get_margin_trading":    lambda: get_margin_trading(args[0], args[1] if len(args)>1 else ""),
+        "get_options":           lambda: get_options(args[0], args[1] if len(args)>1 else ""),
+        "get_futures":           lambda: get_futures(args[0] if args else "all"),
+        "get_ipo":               lambda: get_ipo(args[0] if args else 10),
+        "backtest":              lambda: backtest(args[0], args[1] if len(args)>1 else "ma_cross", args[2] if len(args)>2 else "2y"),
+        # 中國大陸技能
+        "get_ashare":            lambda: get_ashare(args[0], args[1] if len(args)>1 else "1mo"),
+        "get_cn_news":           lambda: get_cn_news(args[0] if args else "all", args[1] if len(args)>1 else 5),
+        "china_search":          lambda: china_search(args[0], args[1] if len(args)>1 else "其他", args[2] if len(args)>2 else 6),
+        # 進階投資技能
+        "get_global_market":     lambda: get_global_market(),
+        "get_economic_calendar": lambda: get_economic_calendar(args[0] if args else 10),
+        "get_earnings_calendar": lambda: get_earnings_calendar(args[0] if args else 7),
+        "get_analyst_ratings":   lambda: get_analyst_ratings(args[0]),
+        "get_short_interest":    lambda: get_short_interest(args[0]),
+        "get_correlation":       lambda: get_correlation(args, args[-1] if args[-1] in ["3mo","6mo","1y","2y"] else "1y"),
+        "get_risk_metrics":      lambda: get_risk_metrics(args[0], args[1] if len(args)>1 else "1y"),
+        "get_money_flow":        lambda: get_money_flow(args[0]),
+        "get_concept_stocks":    lambda: get_concept_stocks(args[0]),
+        "get_crypto_depth":      lambda: get_crypto_depth(args[0] if args else "bitcoin"),
+        "drip_calculator":       lambda: drip_calculator(args[0], float(args[1]) if len(args)>1 else 100, int(args[2]) if len(args)>2 else 10, float(args[3]) if len(args)>3 else 0),
+        "get_forex_chart":       lambda: get_forex_chart(args[0], args[1] if len(args)>1 else "3mo"),
+        "get_warrant":           lambda: get_warrant(args[0]),
+        "get_portfolio_risk":    lambda: get_portfolio_risk([{"symbol": s, "weight": 1/len(args)} for s in args], "1y"),
+        # 理財規劃技能
+        "retirement_calculator": lambda: retirement_calculator(*args),
+        "loan_calculator":       lambda: loan_calculator(*args),
+        "compound_calculator":   lambda: compound_calculator(*args),
+        "asset_allocation":      lambda: asset_allocation(*args),
+        "tw_tax_calculator":     lambda: tw_tax_calculator(*args),
+        "currency_converter":    lambda: currency_converter(*args),
+        "get_fund":              lambda: get_fund(args[0]),
+        "get_reits":             lambda: get_reits(args[0]),
+        "inflation_adjusted":    lambda: inflation_adjusted(*args),
+        "defi_calculator":       lambda: defi_calculator(*args),
+        "gold_calculator":       lambda: gold_calculator(*args),
+        "forex_deposit":         lambda: forex_deposit(*args),
+        "financial_health":      lambda: financial_health(*args),
+        # 研究統整與觀點技能
+        "deep_research":         lambda: deep_research(args[0], args[1] if len(args)>1 else "zh-tw", args[2] if len(args)>2 else 5),
+        "fact_check":            lambda: fact_check(" ".join(args)),
+        "timeline_events":       lambda: timeline_events(args[0], args[1] if len(args)>1 else "zh-tw"),
+        "sentiment_scan":        lambda: sentiment_scan(args[0], args[1] if len(args)>1 else "zh-tw"),
+        "compare_analysis":      lambda: compare_analysis(args[0], args[1] if len(args)>1 else ""),
+        "pros_cons_analysis":    lambda: pros_cons_analysis(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "zh-tw"),
+        "research_report":       lambda: research_report(args[0], args[1] if len(args)>1 else "一般研究", args[2] if len(args)>2 else "zh-tw"),
+        "opinion_writer":        lambda: opinion_writer(args[0], args[1] if len(args)>1 else "中立", args[2] if len(args)>2 else "正式"),
+        "trend_forecast":        lambda: trend_forecast(args[0], args[1] if len(args)>1 else "全部", args[2] if len(args)>2 else "zh-tw"),
+        "debate_simulator":      lambda: debate_simulator(" ".join(args)),
+        # 全域研究技能
+        "academic_search":       lambda: academic_search(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "en"),
+        "health_research":       lambda: health_research(" ".join(args)),
+        "law_research":          lambda: law_research(args[0], args[1] if len(args)>1 else "台灣", args[2] if len(args)>2 else "zh-tw"),
+        "person_research":       lambda: person_research(args[0], args[1] if len(args)>1 else ""),
+        "company_research":      lambda: company_research(args[0]),
+        "product_review":        lambda: product_review(args[0], args[1] if len(args)>1 else ""),
+        "travel_research":       lambda: travel_research(args[0], args[1] if len(args)>1 else None, args[2] if len(args)>2 else ""),
+        "job_market":            lambda: job_market(args[0], args[1] if len(args)>1 else "台灣"),
+        "impact_analysis":       lambda: impact_analysis(args[0], args[1] if len(args)>1 else ""),
+        "scenario_planning":     lambda: scenario_planning(args[0], args[1] if len(args)>1 else ""),
+        "decision_helper":       lambda: decision_helper(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "devil_advocate":        lambda: devil_advocate(" ".join(args)),
+        # 統整與觀點強化技能
+        "summary_writer":        lambda: summary_writer(args[0], args[1] if len(args)>1 else 7),
+        "key_insights":          lambda: key_insights(args[0], args[1] if len(args)>1 else 5),
+        "bias_detector":         lambda: bias_detector(" ".join(args)),
+        "second_opinion":        lambda: second_opinion(args[0], args[1] if len(args)>1 else ""),
+        "brainstorm":            lambda: brainstorm(args[0], args[1] if len(args)>1 else 8, args[2] if len(args)>2 else "實用"),
+        "benchmark_analysis":    lambda: benchmark_analysis(args[0], args[1] if len(args)>1 else ""),
+        # 觀點表達技能
+        "steel_man":             lambda: steel_man(args[0], args[1] if len(args)>1 else ""),
+        "socratic_questioning":  lambda: socratic_questioning(args[0], args[1] if len(args)>1 else 5),
+        "analogy_maker":         lambda: analogy_maker(args[0], args[1] if len(args)>1 else "一般大眾", args[2] if len(args)>2 else 3),
+        "narrative_builder":     lambda: narrative_builder(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "critique_writer":       lambda: critique_writer(args[0], args[1] if len(args)>1 else "觀點"),
+        "position_statement":    lambda: position_statement(args[0], args[1] if len(args)>1 else "支持"),
+        # 桌面視覺控制技能
+        "ocr_click":             lambda: ocr_click(args[0], args[1] if len(args)>1 else 1, args[2] if len(args)>2 else "click"),
+        "vision_locate":         lambda: vision_locate(args[0], args[1] if len(args)>1 else 1, args[2] if len(args)>2 else "click"),
+        "screen_workflow":       lambda: screen_workflow(args[0]),
+        "app_navigator":         lambda: app_navigator(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else 1),
+        "wait_and_click":        lambda: wait_and_click(args[0], args[1] if len(args)>1 else 15, args[2] if len(args)>2 else 1),
+        "drag_drop":             lambda: drag_drop(args[0] if args else None, args[1] if len(args)>1 else None, args[2] if len(args)>2 else None, args[3] if len(args)>3 else None),
     }
 
     if tool not in tools:

@@ -194,7 +194,11 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 桌面自動化規則：
 - open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
 - 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
-- 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。"""
+- 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。
+- 當用戶要「在某App找某人/某東西並操作（點擊/輸入/發送）」→ 優先用 app_navigator，不要只截圖。
+- 當用戶要「找螢幕上某個文字並點擊」→ 用 ocr_click，不要只截圖。
+- 截圖只在用戶明確說「截圖給我看」時使用，不作為桌面操作的最終回應。
+- app_navigator 的 monitor 參數要對應用戶說的螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。"""
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
@@ -231,7 +235,11 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 桌面自動化規則：
 - open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
 - 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
-- 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。"""
+- 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。
+- 當用戶要「在某App找某人/某東西並操作（點擊/輸入/發送）」→ 優先用 app_navigator，不要只截圖。
+- 當用戶要「找螢幕上某個文字並點擊」→ 用 ocr_click，不要只截圖。
+- 截圖只在用戶明確說「截圖給我看」時使用，不作為桌面操作的最終回應。
+- app_navigator 的 monitor 參數要對應用戶說的螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。"""
 
 TOOLS = [
     {
@@ -1045,6 +1053,74 @@ TOOLS = [
             "stance": {"type": "string", "enum": ["支持", "反對", "有條件支持"], "description": "立場"},
             "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
         }, "required": ["issue", "stance"]}
+    },
+    {
+        "name": "ocr_click",
+        "description": "OCR找字點擊：用OCR掃描指定螢幕上的所有文字，找到目標文字後自動點擊該位置。不需要模板圖，純文字定位。當用戶說「點開某某某的訊息」「點那個按鈕」「找到某個選項點一下」時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "target_text": {"type": "string", "description": "要尋找並點擊的文字"},
+            "monitor": {"type": "integer", "description": "目標螢幕編號（1/2/3），預設1"},
+            "click_type": {"type": "string", "enum": ["click", "double_click", "right_click"], "description": "點擊方式，預設click"},
+            "region": {"type": "array", "items": {"type": "integer"}, "description": "限定搜尋區域 [x, y, w, h]，不填則全螢幕"}
+        }, "required": ["target_text"]}
+    },
+    {
+        "name": "vision_locate",
+        "description": "視覺定位：截圖後讓 Claude 視覺辨識畫面，用自然語言描述目標元素（如「Telegram左側第三個對話」「右上角關閉按鈕」），自動計算出座標並點擊。當無法用文字找到目標、需要視覺理解畫面時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "description": {"type": "string", "description": "要找的目標元素的自然語言描述"},
+            "monitor": {"type": "integer", "description": "目標螢幕編號（1/2/3），預設1"},
+            "action": {"type": "string", "enum": ["click", "double_click", "right_click", "locate_only"], "description": "找到後執行的動作，預設click"},
+            "region": {"type": "array", "items": {"type": "integer"}, "description": "限定截圖區域 [x, y, w, h]，不填則全螢幕"}
+        }, "required": ["description"]}
+    },
+    {
+        "name": "screen_workflow",
+        "description": "螢幕工作流：把「截圖→辨識→點擊→等待→輸入→送出」串成多步驟自動化序列，一個指令完成整件事。當用戶說「幫我打開Telegram回覆某某某說○○」這類需要多個步驟的操作時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "steps": {"type": "array", "items": {
+                "type": "object", "properties": {
+                    "action": {"type": "string", "description": "動作類型：screenshot/ocr_click/vision_click/type/press/wait/open_app"},
+                    "target": {"type": "string", "description": "目標文字或描述"},
+                    "value": {"type": "string", "description": "輸入值或等待秒數"},
+                    "monitor": {"type": "integer", "description": "螢幕編號"}
+                }
+            }, "description": "步驟清單，依序執行"}
+        }, "required": ["steps"]}
+    },
+    {
+        "name": "app_navigator",
+        "description": "App導航：內建常見App的UI操作邏輯（Telegram、LINE、Chrome、記事本等），用自然語言描述目標就能自動執行完整操作流程。當用戶說「幫我在Telegram打開某某某的對話並回覆」時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "app": {"type": "string", "description": "目標App名稱，如Telegram、LINE、Chrome、記事本"},
+            "task": {"type": "string", "description": "要執行的任務，用自然語言描述，如「打開某某某的對話」「點新增按鈕」"},
+            "input_text": {"type": "string", "description": "需要輸入的文字（如回覆內容），選填"},
+            "monitor": {"type": "integer", "description": "App所在螢幕編號（1/2/3），預設1"}
+        }, "required": ["app", "task"]}
+    },
+    {
+        "name": "wait_and_click",
+        "description": "等待出現後點擊：持續監控螢幕，等到指定文字或圖示出現後才執行點擊，解決非同步等待問題（如等訊息載入、等彈窗出現）。當用戶的操作需要等待某個元素出現時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "target_text": {"type": "string", "description": "等待出現的目標文字"},
+            "timeout": {"type": "integer", "description": "最長等待秒數，預設15"},
+            "monitor": {"type": "integer", "description": "監控的螢幕編號（1/2/3），預設1"},
+            "action_after": {"type": "string", "enum": ["click", "double_click", "none"], "description": "出現後執行的動作，預設click"}
+        }, "required": ["target_text"]}
+    },
+    {
+        "name": "drag_drop",
+        "description": "拖曳操作：從一個座標拖曳到另一個座標，支援文字描述定位拖曳起點和終點。用於排序、移動視窗、拖曳上傳檔案、調整大小等操作。",
+        "input_schema": {"type": "object", "properties": {
+            "from_x": {"type": "integer", "description": "起點X座標（與from_text二選一）"},
+            "from_y": {"type": "integer", "description": "起點Y座標"},
+            "to_x": {"type": "integer", "description": "終點X座標（與to_text二選一）"},
+            "to_y": {"type": "integer", "description": "終點Y座標"},
+            "from_text": {"type": "string", "description": "起點目標文字（OCR定位，與from_x/y二選一）"},
+            "to_text": {"type": "string", "description": "終點目標文字（OCR定位，與to_x/y二選一）"},
+            "monitor": {"type": "integer", "description": "螢幕編號，預設1"},
+            "duration": {"type": "number", "description": "拖曳時間秒數，預設0.5"}
+        }, "required": []}
     },
     {
         "name": "get_candlestick_chart",
@@ -6744,6 +6820,408 @@ def fetch_position_statement(issue: str, stance: str, lang: str = "zh-tw") -> st
         return "\n".join(lines)
     except Exception as e:
         return f"立場聲明失敗：{e}"
+
+
+def fetch_ocr_click(target_text: str, monitor: int = 1, click_type: str = "click", region: list = None) -> str:
+    try:
+        import pyautogui
+        import pytesseract
+        from PIL import Image
+        import numpy as np
+
+        # 截圖
+        mon_map = {1: 0, 2: 1, 3: 2}
+        try:
+            import dxcam
+            cam = dxcam.create(device_idx=mon_map.get(monitor, 0))
+            frame = cam.grab()
+            cam.release()
+            if frame is None:
+                raise Exception("dxcam grab failed")
+            img = Image.fromarray(frame)
+        except Exception:
+            import mss
+            with mss.mss() as sct:
+                monitors = sct.monitors
+                mon = monitors[monitor] if monitor < len(monitors) else monitors[1]
+                if region:
+                    mon = {"left": mon["left"] + region[0], "top": mon["top"] + region[1],
+                           "width": region[2], "height": region[3]}
+                shot = sct.grab(mon)
+                img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+
+        # OCR
+        data = pytesseract.image_to_data(img, lang="chi_tra+eng", output_type=pytesseract.Output.DICT)
+        found = []
+        for i, text in enumerate(data["text"]):
+            if target_text.lower() in text.lower() and data["conf"][i] > 30:
+                x = data["left"][i] + data["width"][i] // 2
+                y = data["top"][i] + data["height"][i] // 2
+                found.append((x, y, data["conf"][i], text))
+
+        if not found:
+            return f"OCR找不到文字「{target_text}」，請確認文字正確或改用 vision_locate"
+
+        # 取信心最高的結果，換算為螢幕絕對座標
+        best = max(found, key=lambda f: f[2])
+        cx, cy = best[0], best[1]
+
+        # 加上螢幕偏移
+        try:
+            import mss
+            with mss.mss() as sct:
+                mon = sct.monitors[monitor] if monitor < len(sct.monitors) else sct.monitors[1]
+                abs_x = mon["left"] + cx
+                abs_y = mon["top"] + cy
+        except Exception:
+            abs_x, abs_y = cx, cy
+
+        # 執行點擊
+        pyautogui.moveTo(abs_x, abs_y, duration=0.3)
+        if click_type == "double_click":
+            pyautogui.doubleClick(abs_x, abs_y)
+        elif click_type == "right_click":
+            pyautogui.rightClick(abs_x, abs_y)
+        else:
+            pyautogui.click(abs_x, abs_y)
+
+        return f"✅ OCR找到「{best[3]}」（信心{best[2]}%），已在 ({abs_x}, {abs_y}) 執行 {click_type}"
+    except Exception as e:
+        return f"OCR點擊失敗：{e}"
+
+
+def fetch_vision_locate(description: str, monitor: int = 1, action: str = "click", region: list = None) -> str:
+    try:
+        import pyautogui
+        import anthropic
+        import base64
+        from PIL import Image
+        import io
+
+        # 截圖
+        try:
+            import dxcam
+            mon_map = {1: 0, 2: 1, 3: 2}
+            cam = dxcam.create(device_idx=mon_map.get(monitor, 0))
+            frame = cam.grab()
+            cam.release()
+            if frame is None:
+                raise Exception("dxcam failed")
+            img = Image.fromarray(frame)
+        except Exception:
+            import mss
+            with mss.mss() as sct:
+                monitors = sct.monitors
+                mon = monitors[monitor] if monitor < len(monitors) else monitors[1]
+                if region:
+                    mon = {"left": mon["left"] + region[0], "top": mon["top"] + region[1],
+                           "width": region[2], "height": region[3]}
+                shot = sct.grab(mon)
+                img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+
+        # 縮圖加速
+        max_dim = 1280
+        if img.width > max_dim or img.height > max_dim:
+            ratio = min(max_dim / img.width, max_dim / img.height)
+            img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
+        scale_x = img.width / (img.width)
+        scale_y = img.height / (img.height)
+
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        img_b64 = base64.standard_b64encode(buf.getvalue()).decode()
+
+        # 問 Claude 視覺
+        vclient = anthropic.Anthropic()
+        resp = vclient.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=256,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
+                {"type": "text", "text": f"這是螢幕截圖。請找出「{description}」這個元素的中心位置。只回答 JSON 格式：{{\"x\": <0到{img.width}的整數>, \"y\": <0到{img.height}的整數>, \"found\": true/false, \"note\": \"說明\"}}"}
+            ]}]
+        )
+
+        import json, re
+        raw = resp.content[0].text
+        m = re.search(r'\{.*?\}', raw, re.DOTALL)
+        if not m:
+            return f"視覺辨識無法解析回應：{raw[:200]}"
+        result = json.loads(m.group())
+        if not result.get("found", False):
+            return f"視覺辨識找不到「{description}」：{result.get('note','')}"
+
+        rx, ry = int(result["x"]), int(result["y"])
+
+        # 換算回螢幕絕對座標
+        orig_w = img.width
+        orig_h = img.height
+        try:
+            import mss
+            with mss.mss() as sct:
+                mon = sct.monitors[monitor] if monitor < len(sct.monitors) else sct.monitors[1]
+                abs_x = mon["left"] + rx
+                abs_y = mon["top"] + ry
+        except Exception:
+            abs_x, abs_y = rx, ry
+
+        if action == "locate_only":
+            return f"✅ 找到「{description}」，位置約 ({abs_x}, {abs_y})　備註：{result.get('note','')}"
+
+        pyautogui.moveTo(abs_x, abs_y, duration=0.3)
+        if action == "double_click":
+            pyautogui.doubleClick(abs_x, abs_y)
+        elif action == "right_click":
+            pyautogui.rightClick(abs_x, abs_y)
+        else:
+            pyautogui.click(abs_x, abs_y)
+
+        return f"✅ 視覺找到「{description}」，已在 ({abs_x}, {abs_y}) 執行 {action}　備註：{result.get('note','')}"
+    except Exception as e:
+        return f"視覺定位失敗：{e}"
+
+
+def fetch_screen_workflow(steps: list) -> str:
+    try:
+        import time
+        results = []
+        for i, step in enumerate(steps):
+            action = step.get("action", "")
+            target = step.get("target", "")
+            value = step.get("value", "")
+            monitor = step.get("monitor", 1)
+            try:
+                if action == "screenshot":
+                    results.append(f"步驟{i+1} screenshot：已截圖")
+                elif action == "ocr_click":
+                    r = fetch_ocr_click(target, monitor)
+                    results.append(f"步驟{i+1} ocr_click [{target}]：{r}")
+                elif action == "vision_click":
+                    r = fetch_vision_locate(target, monitor, "click")
+                    results.append(f"步驟{i+1} vision_click [{target}]：{r}")
+                elif action == "type":
+                    import pyautogui
+                    pyautogui.write(value, interval=0.05)
+                    results.append(f"步驟{i+1} type：已輸入「{value[:30]}」")
+                elif action == "press":
+                    import pyautogui
+                    pyautogui.press(value)
+                    results.append(f"步驟{i+1} press：已按 {value}")
+                elif action == "wait":
+                    secs = float(value) if value else 1.0
+                    time.sleep(secs)
+                    results.append(f"步驟{i+1} wait：等待 {secs}s")
+                elif action == "open_app":
+                    import subprocess
+                    subprocess.Popen(target, shell=True)
+                    time.sleep(1.5)
+                    results.append(f"步驟{i+1} open_app：已開啟 {target}")
+                elif action == "hotkey":
+                    import pyautogui
+                    keys = [k.strip() for k in value.split("+")]
+                    pyautogui.hotkey(*keys)
+                    results.append(f"步驟{i+1} hotkey：{value}")
+                else:
+                    results.append(f"步驟{i+1} 未知動作：{action}")
+            except Exception as e:
+                results.append(f"步驟{i+1} 失敗：{e}")
+                break
+        return "📋 工作流執行結果：\n" + "\n".join(results)
+    except Exception as e:
+        return f"螢幕工作流失敗：{e}"
+
+
+def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int = 1) -> str:
+    try:
+        import time
+        import pyautogui
+        import re
+        app_lower = app.lower()
+        results = []
+
+        # 取得螢幕絕對座標偏移
+        try:
+            import mss
+            with mss.mss() as sct:
+                mons = sct.monitors
+                mon_info = mons[monitor] if monitor < len(mons) else mons[1]
+                mon_left = mon_info["left"]
+                mon_top = mon_info["top"]
+                mon_cx = mon_left + mon_info["width"] // 2
+                mon_cy = mon_top + mon_info["height"] // 2
+        except Exception:
+            mon_left, mon_top, mon_cx, mon_cy = 0, 0, 960, 540
+
+        # 先點一下目標螢幕中央，確保焦點在正確螢幕
+        pyautogui.click(mon_cx, mon_cy)
+        time.sleep(0.3)
+
+        # 通用：把視窗拉到前景
+        try:
+            import win32gui, win32con
+            def find_window(name):
+                result = []
+                win32gui.EnumWindows(
+                    lambda h, _: result.append(h)
+                    if name.lower() in win32gui.GetWindowText(h).lower() else None, None)
+                return result[0] if result else None
+            hw = find_window(app)
+            if hw:
+                win32gui.ShowWindow(hw, win32con.SW_RESTORE)
+                win32gui.SetForegroundWindow(hw)
+                time.sleep(0.6)
+                results.append(f"✅ 切換到 {app} 視窗")
+            else:
+                results.append(f"⚠️ 找不到 {app} 視窗，嘗試開啟")
+                pyautogui.hotkey("win", "s")
+                time.sleep(0.5)
+                pyautogui.write(app, interval=0.05)
+                time.sleep(1)
+                pyautogui.press("enter")
+                time.sleep(2.5)
+        except Exception as e:
+            results.append(f"視窗切換：{e}")
+
+        # 再次點目標螢幕確保焦點
+        pyautogui.click(mon_cx, mon_cy)
+        time.sleep(0.3)
+
+        # Telegram 專屬流程
+        if "telegram" in app_lower:
+            # 提取聯絡人名稱（支援引號、「」、直接文字）
+            name_match = re.search(r'[「"](.*?)[」"]', task)
+            if name_match:
+                name = name_match.group(1)
+            else:
+                # 去掉常見動詞，剩下的當人名
+                name = re.sub(r'(打開|找到|找|搜尋|對話|訊息|聊天|跟|和|給|傳)', '', task).strip()
+
+            # Ctrl+K 開啟搜尋
+            pyautogui.hotkey("ctrl", "k")
+            time.sleep(0.8)
+            # 清空搜尋框再輸入
+            pyautogui.hotkey("ctrl", "a")
+            time.sleep(0.2)
+            pyautogui.write(name, interval=0.07)
+            time.sleep(1.2)
+            results.append(f"🔍 搜尋聯絡人：{name}")
+            pyautogui.press("enter")
+            time.sleep(1.0)
+            results.append("✅ 已開啟對話")
+
+            # 輸入訊息（有 input_text 就一定送出）
+            if input_text:
+                # 點一下輸入框（Telegram 輸入框在底部，估算位置）
+                try:
+                    with mss.mss() as sct:
+                        mons2 = sct.monitors
+                        m2 = mons2[monitor] if monitor < len(mons2) else mons2[1]
+                        input_x = m2["left"] + m2["width"] // 2
+                        input_y = m2["top"] + m2["height"] - 60
+                    pyautogui.click(input_x, input_y)
+                except Exception:
+                    pyautogui.click(mon_cx, mon_top + 900)
+                time.sleep(0.4)
+                pyautogui.hotkey("ctrl", "a")
+                time.sleep(0.1)
+                # 用 pyperclip 避免中文輸入問題
+                try:
+                    import pyperclip
+                    pyperclip.copy(input_text)
+                    pyautogui.hotkey("ctrl", "v")
+                except Exception:
+                    pyautogui.write(input_text, interval=0.05)
+                time.sleep(0.4)
+                results.append(f"⌨️ 已輸入：{input_text}")
+                pyautogui.press("enter")
+                results.append("📤 已送出")
+
+        # LINE 專屬流程
+        elif "line" in app_lower:
+            name_match = re.search(r'[「"](.*?)[」"]', task)
+            name = name_match.group(1) if name_match else re.sub(r'(打開|找到|找|搜尋|對話|訊息)', '', task).strip()
+            r = fetch_ocr_click(name, monitor)
+            results.append(f"找對話 {name}：{r}")
+            if input_text:
+                time.sleep(0.5)
+                pyautogui.write(input_text, interval=0.04)
+                if "送出" in task or "回覆" in task:
+                    pyautogui.press("enter")
+                    results.append("📤 已送出")
+
+        # 通用流程：用 OCR/視覺找目標
+        else:
+            r = fetch_ocr_click(task, monitor)
+            results.append(f"OCR操作：{r}")
+            if input_text:
+                time.sleep(0.3)
+                pyautogui.write(input_text, interval=0.04)
+                results.append(f"已輸入：{input_text[:40]}")
+
+        return "\n".join(results) if results else f"App導航完成：{app} / {task}"
+    except Exception as e:
+        return f"App導航失敗：{e}"
+
+
+def fetch_wait_and_click(target_text: str, timeout: int = 15, monitor: int = 1, action_after: str = "click") -> str:
+    try:
+        import time
+        start = time.time()
+        interval = 1.0
+        while time.time() - start < timeout:
+            result = fetch_ocr_click(target_text, monitor, action_after if action_after != "none" else "click")
+            if "✅" in result:
+                return f"✅ 等待 {time.time()-start:.1f}s 後找到並點擊：{result}"
+            if action_after == "none" and "找到" in result:
+                return f"✅ 等待 {time.time()-start:.1f}s 後出現：{target_text}"
+            time.sleep(interval)
+        return f"⏰ 等待 {timeout}s 仍未出現「{target_text}」，超時"
+    except Exception as e:
+        return f"等待點擊失敗：{e}"
+
+
+def fetch_drag_drop(from_x: int = None, from_y: int = None, to_x: int = None, to_y: int = None,
+                    from_text: str = "", to_text: str = "", monitor: int = 1, duration: float = 0.5) -> str:
+    try:
+        import pyautogui
+        import mss
+
+        def get_abs(x, y):
+            with mss.mss() as sct:
+                mon = sct.monitors[monitor] if monitor < len(sct.monitors) else sct.monitors[1]
+                return mon["left"] + x, mon["top"] + y
+
+        # 起點
+        if from_text:
+            r = fetch_ocr_click(from_text, monitor, "click")
+            if "找不到" in r:
+                return f"拖曳起點找不到「{from_text}」"
+            import re
+            m = re.search(r'\((\d+), (\d+)\)', r)
+            if m:
+                fx, fy = int(m.group(1)), int(m.group(2))
+            else:
+                return f"無法解析起點座標：{r}"
+        else:
+            fx, fy = get_abs(from_x or 0, from_y or 0)
+
+        # 終點
+        if to_text:
+            r2 = fetch_vision_locate(to_text, monitor, "locate_only")
+            import re
+            m2 = re.search(r'\((\d+), (\d+)\)', r2)
+            if m2:
+                tx, ty = int(m2.group(1)), int(m2.group(2))
+            else:
+                return f"無法解析終點：{r2}"
+        else:
+            tx, ty = get_abs(to_x or 0, to_y or 0)
+
+        pyautogui.moveTo(fx, fy, duration=0.2)
+        pyautogui.dragTo(tx, ty, duration=duration, button="left")
+        return f"✅ 拖曳完成：({fx},{fy}) → ({tx},{ty})，耗時 {duration}s"
+    except Exception as e:
+        return f"拖曳失敗：{e}"
 
 
 def fetch_crypto(coin: str, vs_currency: str = "usd") -> str:
@@ -16349,6 +16827,61 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input["issue"], tool_use.input["stance"],
                     tool_use.input.get("lang", "zh-tw"))
                 response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "ocr_click":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_ocr_click,
+                    tool_use.input["target_text"], tool_use.input.get("monitor", 1),
+                    tool_use.input.get("click_type", "click"), tool_use.input.get("region"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "vision_locate":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_vision_locate,
+                    tool_use.input["description"], tool_use.input.get("monitor", 1),
+                    tool_use.input.get("action", "click"), tool_use.input.get("region"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "screen_workflow":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_screen_workflow,
+                    tool_use.input["steps"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "app_navigator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_app_navigator,
+                    tool_use.input["app"], tool_use.input["task"],
+                    tool_use.input.get("input_text", ""), tool_use.input.get("monitor", 1))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "wait_and_click":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_wait_and_click,
+                    tool_use.input["target_text"], tool_use.input.get("timeout", 15),
+                    tool_use.input.get("monitor", 1), tool_use.input.get("action_after", "click"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "drag_drop":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_drag_drop,
+                    tool_use.input.get("from_x"), tool_use.input.get("from_y"),
+                    tool_use.input.get("to_x"), tool_use.input.get("to_y"),
+                    tool_use.input.get("from_text", ""), tool_use.input.get("to_text", ""),
+                    tool_use.input.get("monitor", 1), tool_use.input.get("duration", 0.5))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
                     messages=history + [{"role": "assistant", "content": response.content},
                     {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
 
