@@ -8822,13 +8822,31 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
 
         elif action == "open_app":
             import time as _t2, win32gui as _w32g_oa
+            # 常見 App 名稱 → 實際啟動指令
+            _app_alias = {
+                "google chrome": "start chrome", "chrome": "start chrome",
+                "firefox": "start firefox", "edge": "start msedge", "microsoft edge": "start msedge",
+                "notepad": "start notepad", "記事本": "start notepad",
+                "calculator": "start calc", "計算機": "start calc",
+                "explorer": "start explorer", "檔案總管": "start explorer",
+                "cmd": "start cmd", "命令提示字元": "start cmd",
+                "powershell": "start powershell",
+                "word": "start winword", "excel": "start excel", "powerpoint": "start powerpnt",
+                "spotify": "start spotify", "discord": "start discord",
+                "vscode": "start code", "visual studio code": "start code",
+                "telegram": "start telegram",
+                "line": "start LINE",
+                "youtube": "start https://www.youtube.com",
+                "google": "start https://www.google.com",
+            }
+            _cmd = _app_alias.get(app.lower().strip(), f"start \"\" \"{app}\"")
             # 記下開啟前已有的視窗 HWND
             _before = set()
             def _snap(h, _): _before.add(h); return True
             try: _w32g_oa.EnumWindows(_snap, None)
             except Exception: pass
-            subprocess.Popen(app, shell=True)
-            _t2.sleep(2.5)
+            subprocess.Popen(_cmd, shell=True)
+            _t2.sleep(1.5)
             # 找到新出現的視窗
             _last_opened_hwnd = 0
             try:
@@ -9226,6 +9244,14 @@ def execute_find_image(template_path: str, confidence: float = 0.8) -> str:
 def execute_browser_control(action: str, url: str = "", selector: str = "", text: str = "") -> str:
     try:
         from playwright.sync_api import sync_playwright
+    except (ImportError, OSError) as _dll_err:
+        # Playwright DLL 不可用（Python 3.14 憑證過期），用 start 指令開網址
+        if action in ("open", "goto") and url:
+            import subprocess as _sp
+            _sp.Popen(f'start "" "{url}"', shell=True)
+            return f"已用瀏覽器開啟：{url}"
+        return f"瀏覽器功能暫不可用（DLL 問題）：{_dll_err}"
+    try:
         if action == "open":
             if _browser_ctx.get("page"):
                 _browser_ctx["browser"].close()
@@ -12975,12 +13001,14 @@ with sync_playwright() as p:
                     )
                     if proc.returncode == 0 and proc.stdout.strip():
                         return proc.stdout.strip()
-                    return f"Playwright 爬蟲失敗：{proc.stderr.strip()[:300]}"
-                except Exception as _pw_err:
-                    return f"Playwright 爬蟲失敗：{_pw_err}"
+                    # Playwright 失敗 → fallback 回靜態內容
+                except Exception:
+                    pass
 
+            # 靜態內容或 Playwright fallback
             elements = soup.select(selector)
-            return "\n".join(e.get_text(strip=True) for e in elements[:10]) or "（未找到內容）"
+            static_result = "\n".join(e.get_text(strip=True) for e in elements[:10])
+            return static_result if static_result else f"（網頁內容太少，可能為 JS 動態網站：{url}）"
         elif action == "screen_diff":
             import time as t
             img1 = pyautogui.screenshot()
@@ -15577,13 +15605,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _typing_task.cancel()
         response = await api_future
 
-        # ── 攔截：模型沒呼叫工具但用戶要求打開程式 → 強制呼叫 desktop_control open_app ──
+        # ── 攔截：模型沒呼叫工具但用戶要求打開程式/網站 → 強制呼叫 desktop_control open_app ──
         if response.stop_reason != "tool_use":
             import re as _re_open
             _open_match = _re_open.search(r'(?:打開|開啟|執行|啟動|open)\s*(?:電腦的?\s*)?(.+)', user_text or "", _re_open.IGNORECASE)
-            if _open_match:
+            # 也偵測單獨的網站/App名稱（無「打開」關鍵字）
+            _site_map = {
+                "youtube": "youtube", "yt": "youtube", "google": "google",
+                "facebook": "start https://www.facebook.com", "fb": "start https://www.facebook.com",
+                "instagram": "start https://www.instagram.com", "ig": "start https://www.instagram.com",
+                "twitter": "start https://x.com", "x": "start https://x.com",
+                "gmail": "start https://mail.google.com",
+                "netflix": "start https://www.netflix.com",
+                "spotify": "spotify", "discord": "discord",
+                "line": "LINE", "telegram": "telegram",
+            }
+            _user_lower = (user_text or "").strip().lower()
+            if not _open_match and _user_lower in _site_map:
+                _open_match = True
+                _app_name = _site_map[_user_lower]
+            elif _open_match:
                 _app_name = _open_match.group(1).strip()
-                if _app_name and len(_app_name) < 30:
+            else:
+                _app_name = None
+            if _app_name and len(_app_name) < 60:
                     import asyncio as _aio_open
                     _loop_open = _aio_open.get_running_loop()
                     _open_result = await _loop_open.run_in_executor(
@@ -16397,7 +16442,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # open_app 動作後等視窗開啟
                     if tool_use.name == "desktop_control" and tool_use.input.get("action") == "open_app":
-                        await _asyncio.sleep(2.0)
+                        await _asyncio.sleep(1.0)
 
                     # 把結果傳回 Claude
                     _messages = _messages + [
@@ -16480,10 +16525,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 inp = tool_use.input
                 import asyncio
                 loop = asyncio.get_running_loop()
-                # 攔截 open/goto：改用 web_scrape 實際讀取內容
-                if inp.get("action") in ("open", "goto") and inp.get("url"):
+                # 攔截 open/goto：改用 web_scrape 實際讀取內容（排除 YouTube 等影音網站）
+                _url = inp.get("url", "")
+                _skip_scrape = any(s in _url.lower() for s in ["youtube.com", "youtu.be", "netflix.com", "spotify.com", "twitch.tv"])
+                if inp.get("action") in ("open", "goto") and _url and not _skip_scrape:
                     result = await loop.run_in_executor(
-                        None, lambda: execute_web_scrape("scrape", url=inp["url"])
+                        None, lambda: execute_web_scrape("scrape", url=_url)
                     )
                 else:
                     result = await loop.run_in_executor(
@@ -17711,7 +17758,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         _dc_last_msg = _dc_result["message"]
                         _dc_tool_result = _dc_last_msg
                         if _dc_inp.get("action") == "open_app":
-                            await _asyncio2.sleep(2.0)
+                            await _asyncio2.sleep(1.0)
                     else:
                         # simple_tools
                         tool_use = _dc_cur_tu
