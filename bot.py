@@ -195,10 +195,20 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 - open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
 - 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
 - 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。
-- 當用戶要「在某App找某人/某東西並操作（點擊/輸入/發送）」→ 優先用 app_navigator，不要只截圖。
-- 當用戶要「找螢幕上某個文字並點擊」→ 用 ocr_click，不要只截圖。
-- 截圖只在用戶明確說「截圖給我看」時使用，不作為桌面操作的最終回應。
-- app_navigator 的 monitor 參數要對應用戶說的螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。"""
+- 【重要】群組對話中有人 @提到其他人（如「告訴 @XXX」「跟 @XXX 說」「讓 @XXX 看」），這只是在群組裡回覆的表達方式，不要用 app_navigator 去控制螢幕傳訊息，直接在當前群組回答就好。
+- app_navigator 只有在明確說「用螢幕控制」「去螢幕X操作」「幫我在桌面的Telegram傳訊息」才使用。
+- 「螢幕X從Telegram找XXX跟他說OOO」→ app_navigator(app="Telegram", task="找XXX", contact_name="XXX", input_text="OOO", monitor=X)
+- 「在Telegram找好友XXX發訊息說OOO」→ app_navigator(app="Telegram", task="找XXX", contact_name="XXX", input_text="OOO")
+- 「去跟XXX聊天打屁」→ app_navigator(app="Telegram", task="找XXX", contact_name="XXX", input_text="")
+- 「幫我在LINE傳訊息給XXX說OOO」→ app_navigator(app="LINE", task="找XXX", contact_name="XXX", input_text="OOO")
+- 「螢幕2找到XX文字並點擊」→ ocr_click(target_text="XX", monitor=2)
+- 截圖只在用戶說「截圖給我看」「幫我截圖」時才用，不能把截圖當作「完成任務」的回應。
+- app_navigator 的 monitor 參數對應螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。
+- app_navigator 的 contact_name【必填不可省略】，只填純名字如「巴斯」「奈絲菟米啾」，不含任何動詞。
+- 「螢幕X現在顯示什麼」「確認有沒有出現XXX」→ read_screen(question="...", monitor=X)
+- 「螢幕X往下滾3格」「在Telegram列表往上滾」→ scroll_at(direction="down", amount=3, monitor=X, description="...")
+- 「列出所有視窗」「把Telegram切到前景」「最大化Chrome」→ window_manager(action="list/focus/maximize", window_name="...")
+- vision_locate/ocr_click/drag_drop 全部支援螢幕2負座標，直接填 monitor=2 即可。"""
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
@@ -236,10 +246,16 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 - open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
 - 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
 - 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。
-- 當用戶要「在某App找某人/某東西並操作（點擊/輸入/發送）」→ 優先用 app_navigator，不要只截圖。
-- 當用戶要「找螢幕上某個文字並點擊」→ 用 ocr_click，不要只截圖。
-- 截圖只在用戶明確說「截圖給我看」時使用，不作為桌面操作的最終回應。
-- app_navigator 的 monitor 參數要對應用戶說的螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。"""
+- 【重要】群組對話中有人 @提到其他人（如「告訴 @XXX」「跟 @XXX 說」「讓 @XXX 看」），這只是在群組裡回覆的表達方式，不要用 app_navigator 去控制螢幕傳訊息，直接在當前群組回答就好。
+- app_navigator 只有在明確說「用螢幕控制」「去螢幕X操作」「幫我在桌面的Telegram傳訊息」才使用。
+- 「螢幕X從Telegram找XXX跟他說OOO」→ app_navigator(app="Telegram", task="找XXX", contact_name="XXX", input_text="OOO", monitor=X)
+- 「在Telegram找好友XXX發訊息說OOO」→ app_navigator(app="Telegram", task="找XXX", contact_name="XXX", input_text="OOO")
+- 「去跟XXX聊天打屁」→ app_navigator(app="Telegram", task="找XXX", contact_name="XXX", input_text="")
+- 「幫我在LINE傳訊息給XXX說OOO」→ app_navigator(app="LINE", task="找XXX", contact_name="XXX", input_text="OOO")
+- 「螢幕2找到XX文字並點擊」→ ocr_click(target_text="XX", monitor=2)
+- 截圖只在用戶說「截圖給我看」「幫我截圖」時才用，不能把截圖當作「完成任務」的回應。
+- app_navigator 的 monitor 參數對應螢幕編號（螢幕1=1, 螢幕2=2, 螢幕3=3）。
+- app_navigator 的 contact_name【必填不可省略】，只填純名字如「巴斯」「奈絲菟米啾」，不含任何動詞。"""
 
 TOOLS = [
     {
@@ -1090,10 +1106,11 @@ TOOLS = [
     },
     {
         "name": "app_navigator",
-        "description": "App導航：內建常見App的UI操作邏輯（Telegram、LINE、Chrome、記事本等），用自然語言描述目標就能自動執行完整操作流程。當用戶說「幫我在Telegram打開某某某的對話並回覆」時使用。",
+        "description": "【優先使用】App多步驟自動操作：當用戶說以下任何一種時必須使用此工具：「從Telegram/LINE找XXX」「在Telegram跟XXX說」「幫我打開Telegram找好友XXX」「Telegram傳訊息給XXX說OOO」「螢幕X的Telegram找XXX並回覆」「LINE傳給XXX說OOO」。凡是涉及在App內找聯絡人、打開對話、發訊息、回覆訊息的複合操作，一律用這個工具，不要用 desktop_control 截圖。",
         "input_schema": {"type": "object", "properties": {
             "app": {"type": "string", "description": "目標App名稱，如Telegram、LINE、Chrome、記事本"},
             "task": {"type": "string", "description": "要執行的任務，用自然語言描述，如「打開某某某的對話」「點新增按鈕」"},
+            "contact_name": {"type": "string", "description": "【Telegram/LINE必填，不可省略】要搜尋的聯絡人名稱，只填純名字，例如「巴斯」「奈絲菟米啾」，絕對不能含「找」「跟」「並打開」等動詞"},
             "input_text": {"type": "string", "description": "需要輸入的文字（如回覆內容），選填"},
             "monitor": {"type": "integer", "description": "App所在螢幕編號（1/2/3），預設1"}
         }, "required": ["app", "task"]}
@@ -1121,6 +1138,35 @@ TOOLS = [
             "monitor": {"type": "integer", "description": "螢幕編號，預設1"},
             "duration": {"type": "number", "description": "拖曳時間秒數，預設0.5"}
         }, "required": []}
+    },
+    {
+        "name": "read_screen",
+        "description": "讀取螢幕內容：截圖後用 Vision AI 分析螢幕上有什麼，回傳詳細描述。用於「幫我看一下螢幕X現在顯示什麼」「確認有沒有出現XXX」「告訴我現在螢幕上的內容」。",
+        "input_schema": {"type": "object", "properties": {
+            "question": {"type": "string", "description": "要詢問螢幕的問題，如「現在顯示什麼」「有沒有出現確認對話框」，預設描述全部內容"},
+            "monitor": {"type": "integer", "description": "螢幕編號（1/2/3），預設1"}
+        }, "required": []}
+    },
+    {
+        "name": "scroll_at",
+        "description": "在螢幕指定位置滾動：支援所有螢幕包含螢幕2。可用座標或文字描述定位滾動位置。用於「螢幕X往下滾」「滾動到看到XXX」「在Telegram聊天列表往上滾」。",
+        "input_schema": {"type": "object", "properties": {
+            "direction": {"type": "string", "enum": ["up", "down"], "description": "滾動方向，預設down"},
+            "amount": {"type": "integer", "description": "滾動格數，預設3"},
+            "x": {"type": "integer", "description": "滾動位置X（相對螢幕左上角），與description二選一"},
+            "y": {"type": "integer", "description": "滾動位置Y（相對螢幕左上角）"},
+            "monitor": {"type": "integer", "description": "螢幕編號（1/2/3），預設1"},
+            "description": {"type": "string", "description": "用文字描述滾動目標區域，如「Telegram左側聊天列表」"}
+        }, "required": []}
+    },
+    {
+        "name": "window_manager",
+        "description": "視窗管理：列出所有開啟的視窗、切換視窗到前景、最大化/最小化/關閉視窗。用於「列出所有視窗」「把Telegram切到前景」「最大化記事本」「關閉Chrome」。",
+        "input_schema": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["list", "focus", "maximize", "minimize", "close"],
+                       "description": "動作：list列出所有視窗 / focus切換到前景 / maximize最大化 / minimize最小化 / close關閉"},
+            "window_name": {"type": "string", "description": "視窗名稱關鍵字（list動作不需要填）"}
+        }, "required": ["action"]}
     },
     {
         "name": "get_candlestick_chart",
@@ -1297,7 +1343,7 @@ TOOLS = [
     },
     {
         "name": "desktop_control",
-        "description": "控制電腦桌面，支援多螢幕。當用戶要求截圖、點擊、移動滑鼠、輸入文字、按鍵、開啟程式、查看螢幕資訊時使用此工具。",
+        "description": "控制電腦桌面基本操作，支援多螢幕。僅在以下情況使用：(1)截圖給用戶看 (2)點擊已知座標 (3)輸入文字 (4)按鍵 (5)開啟程式 (6)查看螢幕資訊。【重要】如果任務是「在某App找某人/某東西並操作（發訊息/點開/回覆）」，絕對不要用這個工具，請改用 app_navigator。截圖只在用戶說「截圖給我看」時使用。",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1342,7 +1388,7 @@ TOOLS = [
     },
     {
         "name": "browser_control",
-        "description": "控制瀏覽器自動化。可開啟網頁、點擊元素、輸入文字、擷取內容、截圖。",
+        "description": "控制瀏覽器自動化，用於互動操作：點擊、填表、截圖。若只是要讀取網頁文字內容，請用 web_scrape 而非此工具。",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -3096,7 +3142,7 @@ TOOLS = [
     },
     {
         "name": "web_scrape",
-        "description": "爬取網頁指定內容，或偵測螢幕區域變化。",
+        "description": "讀取/瀏覽網頁內容並回傳文字。當用戶要求「去看看這個網址」「瀏覽網頁」「讀取網站內容」「網頁裡面有什麼」時，必須使用此工具（action=scrape），不要使用 browser_control。支援 JS 動態網站。",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -6822,6 +6868,118 @@ def fetch_position_statement(issue: str, stance: str, lang: str = "zh-tw") -> st
         return f"立場聲明失敗：{e}"
 
 
+# ══════════════════════════════════════════════════
+#  通用螢幕控制 helper（SendInput，支援負座標/螢幕2）
+# ══════════════════════════════════════════════════
+
+def _get_virtual_desktop():
+    """回傳 (vl, vt, vw, vh, is_phys, sx, sy)
+    vl/vt/vw/vh = 物理虛擬桌面，sx/sy = 邏輯→物理縮放比"""
+    import ctypes as _c, mss as _m
+    u32 = _c.windll.user32
+    old = u32.SetThreadDpiAwarenessContext(_c.c_void_p(-1))
+    vl = u32.GetSystemMetrics(76); vt = u32.GetSystemMetrics(77)
+    vw = u32.GetSystemMetrics(78); vh = u32.GetSystemMetrics(79)
+    u32.SetThreadDpiAwarenessContext(old)
+    with _m.mss() as s:
+        ms = s.monitors[1:]
+        vl_log = min(m["left"] for m in ms)
+        vt_log = min(m["top"] for m in ms)
+        vw_log = max(m["left"]+m["width"] for m in ms) - vl_log
+        vh_log = max(m["top"]+m["height"] for m in ms) - vt_log
+    is_phys = vw > 4000
+    sx = vw / vw_log if is_phys else 1.0
+    sy = vh / vh_log if is_phys else 1.0
+    return vl, vt, vw, vh, is_phys, sx, sy
+
+def _si_universal(ax_log: float, ay_log: float, click_type: str = "click"):
+    """SendInput 點擊，ax_log/ay_log 為 mss 邏輯座標（支援負值螢幕2）"""
+    import ctypes as _c, ctypes.wintypes as _w, time as _t
+    vl, vt, vw, vh, is_phys, sx, sy = _get_virtual_desktop()
+    ax = round(ax_log * sx); ay = round(ay_log * sy)
+    nx = int((ax - vl) * 65535 // vw)
+    ny = int((ay - vt) * 65535 // vh)
+    u32 = _c.windll.user32
+    class MI(_c.Structure):
+        _fields_ = [('dx',_w.LONG),('dy',_w.LONG),('mouseData',_w.DWORD),
+                    ('dwFlags',_w.DWORD),('time',_w.DWORD),('dwExtraInfo',_c.POINTER(_c.c_ulong))]
+    class U(_c.Union): _fields_ = [('mi', MI)]
+    class INP(_c.Structure):
+        _anonymous_ = ('u',); _fields_ = [('type',_w.DWORD),('u',U)]
+    def _send(flags, dx=0, dy=0, md=0):
+        i = INP(0, U(mi=MI(dx, dy, md, flags, 0, None)))
+        u32.SendInput(1, _c.byref(i), _c.sizeof(i))
+    _send(0x0001|0x8000|0x4000, nx, ny)
+    _t.sleep(0.25)
+    if click_type == "double_click":
+        _send(0x0002); _t.sleep(0.05); _send(0x0004); _t.sleep(0.05)
+        _send(0x0002); _t.sleep(0.05); _send(0x0004)
+    elif click_type == "right_click":
+        _send(0x0008); _t.sleep(0.05); _send(0x0010)
+    else:
+        _send(0x0002); _t.sleep(0.05); _send(0x0004)
+
+def _si_scroll(ax_log: float, ay_log: float, amount: int, direction: str = "down"):
+    """SendInput 滾輪，在邏輯座標位置向上/下滾動"""
+    import ctypes as _c, ctypes.wintypes as _w, time as _t
+    vl, vt, vw, vh, is_phys, sx, sy = _get_virtual_desktop()
+    ax = round(ax_log * sx); ay = round(ay_log * sy)
+    nx = int((ax - vl) * 65535 // vw)
+    ny = int((ay - vt) * 65535 // vh)
+    u32 = _c.windll.user32
+    class MI(_c.Structure):
+        _fields_ = [('dx',_w.LONG),('dy',_w.LONG),('mouseData',_w.DWORD),
+                    ('dwFlags',_w.DWORD),('time',_w.DWORD),('dwExtraInfo',_c.POINTER(_c.c_ulong))]
+    class U(_c.Union): _fields_ = [('mi', MI)]
+    class INP(_c.Structure):
+        _anonymous_ = ('u',); _fields_ = [('type',_w.DWORD),('u',U)]
+    def _send(flags, dx=0, dy=0, md=0):
+        i = INP(0, U(mi=MI(dx, dy, _c.c_ulong(md & 0xFFFFFFFF).value, flags, 0, None)))
+        u32.SendInput(1, _c.byref(i), _c.sizeof(i))
+    _send(0x0001|0x8000|0x4000, nx, ny)
+    _t.sleep(0.15)
+    delta = 120 * amount * (1 if direction == "up" else -1)
+    for _ in range(max(1, amount // 3)):
+        _send(0x0800, md=120 * 3 * (1 if direction == "up" else -1))
+        _t.sleep(0.08)
+
+
+def _cap_monitor_logical(monitor: int):
+    """截圖回傳 (PIL.Image, mon_left_log, mon_top_log) 使用 mss 邏輯座標"""
+    import mss
+    from PIL import Image as _PI
+    with mss.mss() as s:
+        mon = s.monitors[monitor] if monitor < len(s.monitors) else s.monitors[1]
+        shot = s.grab(mon)
+        img = _PI.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+    return img, mon["left"], mon["top"]
+
+
+def _vision_find(img, description: str):
+    """截圖 → Claude Vision → 回傳 (rx, ry) resized圖像像素，找不到回傳 (None, None)"""
+    import anthropic, base64, io, json, re
+    from PIL import Image as _PI
+    ow, oh = img.width, img.height
+    if img.width > 1280:
+        r = 1280 / img.width
+        img = img.resize((1280, int(img.height * r)), _PI.LANCZOS)
+    scale = ow / img.width
+    buf = io.BytesIO(); img.save(buf, format="JPEG", quality=85)
+    b64 = base64.standard_b64encode(buf.getvalue()).decode()
+    resp = anthropic.Anthropic().messages.create(
+        model="claude-haiku-4-5-20251001", max_tokens=100,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+            {"type": "text", "text": f"截圖({img.width}x{img.height}px)。找「{description}」中心。僅回傳JSON:{{\"x\":整數,\"y\":整數,\"ok\":true/false}}"}
+        ]}]
+    )
+    m = re.search(r'\{.*?\}', resp.content[0].text, re.DOTALL)
+    if not m: return None, None
+    d = json.loads(m.group())
+    if not d.get("ok", True): return None, None
+    return int(d["x"] * scale), int(d["y"] * scale)
+
+
 def fetch_ocr_click(target_text: str, monitor: int = 1, click_type: str = "click", region: list = None) -> str:
     try:
         import pyautogui
@@ -6876,15 +7034,8 @@ def fetch_ocr_click(target_text: str, monitor: int = 1, click_type: str = "click
         except Exception:
             abs_x, abs_y = cx, cy
 
-        # 執行點擊
-        pyautogui.moveTo(abs_x, abs_y, duration=0.3)
-        if click_type == "double_click":
-            pyautogui.doubleClick(abs_x, abs_y)
-        elif click_type == "right_click":
-            pyautogui.rightClick(abs_x, abs_y)
-        else:
-            pyautogui.click(abs_x, abs_y)
-
+        # 執行點擊（SendInput，支援螢幕2負座標）
+        _si_universal(abs_x, abs_y, click_type)
         return f"✅ OCR找到「{best[3]}」（信心{best[2]}%），已在 ({abs_x}, {abs_y}) 執行 {click_type}"
     except Exception as e:
         return f"OCR點擊失敗：{e}"
@@ -6892,91 +7043,26 @@ def fetch_ocr_click(target_text: str, monitor: int = 1, click_type: str = "click
 
 def fetch_vision_locate(description: str, monitor: int = 1, action: str = "click", region: list = None) -> str:
     try:
-        import pyautogui
-        import anthropic
-        import base64
-        from PIL import Image
-        import io
+        # 截圖（mss 邏輯座標）
+        img, mon_left, mon_top = _cap_monitor_logical(monitor)
 
-        # 截圖
-        try:
-            import dxcam
-            mon_map = {1: 0, 2: 1, 3: 2}
-            cam = dxcam.create(device_idx=mon_map.get(monitor, 0))
-            frame = cam.grab()
-            cam.release()
-            if frame is None:
-                raise Exception("dxcam failed")
-            img = Image.fromarray(frame)
-        except Exception:
-            import mss
-            with mss.mss() as sct:
-                monitors = sct.monitors
-                mon = monitors[monitor] if monitor < len(monitors) else monitors[1]
-                if region:
-                    mon = {"left": mon["left"] + region[0], "top": mon["top"] + region[1],
-                           "width": region[2], "height": region[3]}
-                shot = sct.grab(mon)
-                img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+        if region:
+            from PIL import Image as _PI
+            img = img.crop((region[0], region[1], region[0]+region[2], region[1]+region[3]))
+            mon_left += region[0]; mon_top += region[1]
 
-        # 縮圖加速
-        max_dim = 1280
-        if img.width > max_dim or img.height > max_dim:
-            ratio = min(max_dim / img.width, max_dim / img.height)
-            img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
-        scale_x = img.width / (img.width)
-        scale_y = img.height / (img.height)
+        rx, ry = _vision_find(img, description)
+        if rx is None:
+            return f"視覺辨識找不到「{description}」"
 
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        img_b64 = base64.standard_b64encode(buf.getvalue()).decode()
-
-        # 問 Claude 視覺
-        vclient = anthropic.Anthropic()
-        resp = vclient.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=256,
-            messages=[{"role": "user", "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
-                {"type": "text", "text": f"這是螢幕截圖。請找出「{description}」這個元素的中心位置。只回答 JSON 格式：{{\"x\": <0到{img.width}的整數>, \"y\": <0到{img.height}的整數>, \"found\": true/false, \"note\": \"說明\"}}"}
-            ]}]
-        )
-
-        import json, re
-        raw = resp.content[0].text
-        m = re.search(r'\{.*?\}', raw, re.DOTALL)
-        if not m:
-            return f"視覺辨識無法解析回應：{raw[:200]}"
-        result = json.loads(m.group())
-        if not result.get("found", False):
-            return f"視覺辨識找不到「{description}」：{result.get('note','')}"
-
-        rx, ry = int(result["x"]), int(result["y"])
-
-        # 換算回螢幕絕對座標
-        orig_w = img.width
-        orig_h = img.height
-        try:
-            import mss
-            with mss.mss() as sct:
-                mon = sct.monitors[monitor] if monitor < len(sct.monitors) else sct.monitors[1]
-                abs_x = mon["left"] + rx
-                abs_y = mon["top"] + ry
-        except Exception:
-            abs_x, abs_y = rx, ry
+        abs_x = mon_left + rx
+        abs_y = mon_top + ry
 
         if action == "locate_only":
-            return f"✅ 找到「{description}」，位置約 ({abs_x}, {abs_y})　備註：{result.get('note','')}"
+            return f"✅ 找到「{description}」，位置 ({abs_x}, {abs_y})"
 
-        pyautogui.moveTo(abs_x, abs_y, duration=0.3)
-        if action == "double_click":
-            pyautogui.doubleClick(abs_x, abs_y)
-        elif action == "right_click":
-            pyautogui.rightClick(abs_x, abs_y)
-        else:
-            pyautogui.click(abs_x, abs_y)
-
-        return f"✅ 視覺找到「{description}」，已在 ({abs_x}, {abs_y}) 執行 {action}　備註：{result.get('note','')}"
+        _si_universal(abs_x, abs_y, action)
+        return f"✅ 視覺找到「{description}」，已在 ({abs_x}, {abs_y}) 執行 {action}"
     except Exception as e:
         return f"視覺定位失敗：{e}"
 
@@ -7031,7 +7117,7 @@ def fetch_screen_workflow(steps: list) -> str:
         return f"螢幕工作流失敗：{e}"
 
 
-def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int = 1) -> str:
+def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int = 1, contact_name: str = "") -> str:
     try:
         import time
         import pyautogui
@@ -7052,6 +7138,235 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
         except Exception:
             mon_left, mon_top, mon_cx, mon_cy = 0, 0, 960, 540
 
+        # ══ Telegram 純螢幕控制（最優先，跳過所有 win32gui 視窗管理）══
+        if "telegram" in app_lower:
+            import pyperclip as _pc
+            import ctypes as _ct, ctypes.wintypes as _wt
+            import anthropic as _ant, base64 as _b64, io as _io2
+            import ctypes as _ct2, win32ui as _w32u, win32con as _w32c2, win32gui as _w32g2
+            import mss as _mss2
+            from PIL import Image as _PI
+
+            # 提取聯絡人名稱（優先用 contact_name 直接參數，再引號，再 regex）
+            if contact_name:
+                name = contact_name.strip()
+            else:
+                name_match = re.search(r'[「"](.*?)[」"]', task)
+                if name_match:
+                    name = name_match.group(1)
+                else:
+                    # 優先：「找/搜尋 XXX」格式，停於並/和/的/給/，/說/聊/打
+                    m2 = re.search(r'(?:找到?|搜尋)(.+?)(?:並|和|的|給|，|,|說|聊|打|$)', task)
+                    if m2:
+                        name = m2.group(1).strip()
+                    else:
+                        # 次選：「跟 XXX 聊/說/打」格式，提取跟和動詞之間的名稱
+                        m3 = re.search(r'跟(.+?)(?:聊|說|打|和|並|的|給|，|,|$)', task)
+                        if m3:
+                            name = m3.group(1).strip()
+                        else:
+                            name = re.sub(r'(螢幕\d|從Telegram|從telegram|Telegram|telegram|打開|找到|找|搜尋|對話|訊息|聊天|跟他說.*|跟.*?說.*|和|給|傳)', '', task).strip()
+
+            # 名稱為空就直接報錯，不貼錯內容進搜尋框
+            if not name:
+                return "❌ 無法提取聯絡人名稱，請用引號標明，例如「去找「巴斯」聊天」或加 contact_name 參數"
+
+            # ── 虛擬桌面參數（強制物理 DPI context，SendInput 用物理座標）──
+            _u32 = _ct.windll.user32
+            _old_ctx = _u32.SetThreadDpiAwarenessContext(_ct.c_void_p(-1))
+            _vl = _u32.GetSystemMetrics(76); _vt = _u32.GetSystemMetrics(77)
+            _vw = _u32.GetSystemMetrics(78); _vh = _u32.GetSystemMetrics(79)
+            _u32.SetThreadDpiAwarenessContext(_old_ctx)
+            # 取得螢幕邏輯尺寸，計算 DPI scale
+            with _mss2.mss() as _smss:
+                _mon_log = _smss.monitors[monitor]
+                _log_left = _mon_log["left"]; _log_top = _mon_log["top"]
+                _log_w = _mon_log["width"];   _log_h = _mon_log["height"]
+
+            def _si_click(ax, ay):
+                # ax, ay 是物理絕對座標（與 GetSystemMetrics DPI-aware 一致）
+                class _MI(_ct.Structure):
+                    _fields_ = [('dx',_wt.LONG),('dy',_wt.LONG),('mouseData',_wt.DWORD),
+                                 ('dwFlags',_wt.DWORD),('time',_wt.DWORD),
+                                 ('dwExtraInfo',_ct.POINTER(_ct.c_ulong))]
+                class _U(_ct.Union):
+                    _fields_ = [('mi',_MI)]
+                class _INP(_ct.Structure):
+                    _anonymous_ = ('u',); _fields_ = [('type',_wt.DWORD),('u',_U)]
+                def _send(flags, dx=0, dy=0):
+                    i = _INP(0,_U(mi=_MI(dx,dy,0,flags,0,None)))
+                    _u32.SendInput(1,_ct.byref(i),_ct.sizeof(i))
+                nx = int((ax - _vl) * 65535 // _vw)
+                ny = int((ay - _vt) * 65535 // _vh)
+                _send(0x0001|0x8000|0x4000, nx, ny)  # MOVE|ABSOLUTE|VIRTUALDESK
+                time.sleep(0.35)
+                _send(0x0002); time.sleep(0.08); _send(0x0004)  # DOWN + UP
+
+            # ── GDI BitBlt 截圖（螢幕2用，其他用 dxcam）──
+            def _cap(mon_num):
+                with _mss2.mss() as s:
+                    m = s.monitors[mon_num]
+                    ml, mt, mw, mh = m["left"], m["top"], m["width"], m["height"]
+                if mon_num == 2:
+                    u32 = _ct2.windll.user32
+                    old = u32.SetThreadDpiAwarenessContext(_ct2.c_void_p(-1))
+                    try:
+                        hd = _w32g2.GetDesktopWindow()
+                        hdc = _w32g2.GetWindowDC(hd)
+                        mdc = _w32u.CreateDCFromHandle(hdc)
+                        sdc = mdc.CreateCompatibleDC()
+                        bm = _w32u.CreateBitmap()
+                        bm.CreateCompatibleBitmap(mdc, mw, mh)
+                        sdc.SelectObject(bm)
+                        sdc.BitBlt((0,0),(mw,mh),mdc,(ml,mt),_w32c2.SRCCOPY)
+                        inf = bm.GetInfo(); bits = bm.GetBitmapBits(True)
+                        img = _PI.frombuffer("RGB",(inf["bmWidth"],inf["bmHeight"]),bits,"raw","BGRX",0,1)
+                        _w32g2.DeleteObject(bm.GetHandle())
+                        sdc.DeleteDC(); mdc.DeleteDC(); _w32g2.ReleaseDC(hd, hdc)
+                    finally:
+                        u32.SetThreadDpiAwarenessContext(old)
+                else:
+                    import dxcam as _dx2
+                    c = _dx2.create(output_idx={1:0,3:1}.get(mon_num,0))
+                    img = _PI.fromarray(c.grab()); del c
+                # 回傳 img + 邏輯偏移 + 邏輯寬（供計算 DPI scale）
+                return img, ml, mt, mw
+
+            # 判斷 GetSystemMetrics 是否物理座標
+            _is_phys_gm = _vw > 4000
+
+            # ── 截圖 → Claude Vision → 回傳與 GetSystemMetrics 同空間的絕對座標 ──
+            def _see(prompt, mon_num):
+                img, off_x_log, off_y_log, log_w = _cap(mon_num)
+                # DPI scale：GDI 物理圖像寬 / mss 邏輯寬
+                dpi = img.width / log_w  # 例：2400/1920=1.25
+                ow = img.width
+                if img.width > 1280:
+                    r = 1280 / img.width
+                    img = img.resize((1280, int(img.height*r)), _PI.LANCZOS)
+                scale = ow / img.width  # 物理像素/resized像素
+                buf = _io2.BytesIO()
+                img.save(buf, format="JPEG", quality=85)
+                b = _b64.standard_b64encode(buf.getvalue()).decode()
+                resp = _ant.Anthropic().messages.create(
+                    model="claude-haiku-4-5-20251001", max_tokens=80,
+                    messages=[{"role":"user","content":[
+                        {"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":b}},
+                        {"type":"text","text":f"截圖({img.width}x{img.height}px)。找「{prompt}」中心座標。僅回傳JSON:{{\"x\":整數,\"y\":整數,\"ok\":true/false}}"}
+                    ]}]
+                )
+                import json as _j, re as _r2
+                m2 = _r2.search(r'\{.*?\}', resp.content[0].text, _r2.DOTALL)
+                if not m2: return None, None
+                d = _j.loads(m2.group())
+                if not d.get("ok", True): return None, None
+                if _is_phys_gm:
+                    # GetSystemMetrics=物理 → 回傳物理絕對
+                    return round(off_x_log*dpi) + int(d["x"]*scale), \
+                           round(off_y_log*dpi) + int(d["y"]*scale)
+                else:
+                    # GetSystemMetrics=邏輯 → pixel/dpi 轉邏輯再加邏輯偏移
+                    return off_x_log + int(d["x"]*scale/dpi), \
+                           off_y_log + int(d["y"]*scale/dpi)
+
+            # ══ Step 0：先用 Vision 找 Telegram 視窗邊界（不管移到哪都能定位）══
+            # Telegram 視覺特徵：左側深色聊天列表側欄、頂部≡選單+搜尋圖示、藍色紙飛機Logo
+            def _find_tg_window(mon_num):
+                """回傳 Telegram 視窗在螢幕上的絕對座標 (win_x, win_y, win_w, win_h)，失敗回傳 None"""
+                img, off_x_log, off_y_log, log_w = _cap(mon_num)
+                dpi = img.width / log_w
+                ow = img.width
+                if img.width > 1280:
+                    r = 1280 / img.width
+                    img = img.resize((1280, int(img.height*r)), _PI.LANCZOS)
+                scale = ow / img.width
+                buf = _io2.BytesIO(); img.save(buf, format="JPEG", quality=85)
+                b = _b64.standard_b64encode(buf.getvalue()).decode()
+                resp = _ant.Anthropic().messages.create(
+                    model="claude-haiku-4-5-20251001", max_tokens=120,
+                    messages=[{"role":"user","content":[
+                        {"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":b}},
+                        {"type":"text","text":
+                            f"截圖({img.width}x{img.height}px)。"
+                            "找 Telegram 桌面應用程式視窗。"
+                            "識別特徵：左側有深色聊天列表側欄（含聯絡人名稱和頭像）、頂部有≡漢堡選單圖示和搜尋放大鏡、藍色紙飛機Logo、右側有聊天對話區域。"
+                            "回傳視窗邊界 JSON（像素座標）：{\"x\":左上角x, \"y\":左上角y, \"w\":視窗寬度, \"h\":視窗高度, \"ok\":true/false}"}
+                    ]}]
+                )
+                m2 = re.search(r'\{.*?\}', resp.content[0].text, re.DOTALL)
+                if not m2: return None
+                import json as _j2
+                d = _j2.loads(m2.group())
+                if not d.get("ok", True): return None
+                # 轉換到與 GetSystemMetrics 同空間的絕對座標
+                wx = int(d["x"] * scale); wy = int(d["y"] * scale)
+                ww = int(d["w"] * scale); wh = int(d["h"] * scale)
+                if _is_phys_gm:
+                    return round(off_x_log*dpi)+wx, round(off_y_log*dpi)+wy, ww, wh
+                else:
+                    return off_x_log+int(wx/dpi), off_y_log+int(wy/dpi), int(ww/dpi), int(wh/dpi)
+
+            _tg_win = _find_tg_window(monitor)
+            if _tg_win:
+                _tw_x, _tw_y, _tw_w, _tw_h = _tg_win
+                results.append(f"📐 Telegram視窗({_tw_x},{_tw_y}) {_tw_w}x{_tw_h}")
+            else:
+                # 找不到視窗邊界時，退回用 monitor 左上角估算
+                _tw_x = round(_log_left * 1.25) if _is_phys_gm else _log_left
+                _tw_y = round(_log_top * 1.25) if _is_phys_gm else _log_top
+                _tw_w = round(_log_w * 1.25) if _is_phys_gm else _log_w
+                _tw_h = round(_log_h * 1.25) if _is_phys_gm else _log_h
+                results.append(f"⚠️ 找不到視窗邊界，用螢幕偏移估算({_tw_x},{_tw_y})")
+
+            # ① 截圖 → 找 Telegram 搜尋框 → 點擊（Vision 用視窗邊界幫助定位）
+            sx, sy = _see(
+                "Telegram左側欄頂部的搜尋輸入框（有放大鏡圖示的橫條，在聊天列表最上方，不是聊天輸入框）",
+                monitor
+            )
+            if sx is None:
+                # 備用：搜尋框在視窗左側欄約 1/4 寬、頂部約 5% 高的位置
+                sx = _tw_x + int(_tw_w * 0.13); sy = _tw_y + int(_tw_h * 0.05)
+                results.append(f"⚠️ Vision找不到搜尋框，視窗相對備用({sx},{sy})")
+            else:
+                results.append(f"🖱️ 搜尋框({sx},{sy})")
+            _si_click(sx, sy)
+            time.sleep(0.6)
+
+            # ② 清空 + 貼上聯絡人名稱
+            import pyautogui as _pg
+            _pg.hotkey("ctrl","a"); time.sleep(0.1); _pg.press("delete"); time.sleep(0.1)
+            _pc.copy(name); _pg.hotkey("ctrl","v"); time.sleep(2.0)
+            results.append(f"🔍 搜尋名稱：{name}")
+
+            # ③ 截圖 → 找聯絡人結果 → 點擊
+            cx, cy = _see(f"搜尋結果列表中名稱包含「{name}」的聯絡人項目（在左側面板）", monitor)
+            if cx is None:
+                _pg.press("enter"); time.sleep(1.0)
+                results.append("⚠️ Vision找不到結果，按Enter")
+            else:
+                _si_click(cx, cy); time.sleep(1.2)
+                results.append(f"✅ 點聯絡人({cx},{cy})")
+
+            # ④ 有訊息就輸入送出
+            if input_text:
+                time.sleep(0.5)
+                mx, my = _see(
+                    "Telegram聊天視窗底部的訊息輸入框（最下方打字區，顯示「輸入訊息」或有emoji圖示，不是頂部搜尋框）",
+                    monitor
+                )
+                if mx is None:
+                    # 備用：訊息框在視窗右側、底部約 95% 高度
+                    mx = _tw_x + int(_tw_w * 0.6); my = _tw_y + int(_tw_h * 0.95)
+                    results.append(f"⚠️ Vision找不到訊息框，視窗相對備用({mx},{my})")
+                else:
+                    _si_click(mx, my); time.sleep(0.4)
+                _pc.copy(input_text); _pg.hotkey("ctrl","v"); time.sleep(0.3)
+                _pg.press("enter"); time.sleep(0.2); _pg.press("enter")
+                results.append(f"📤 已送：{input_text}")
+
+            return "\n".join(results) if results else "Telegram導航完成"
+
+        # ── 非 Telegram：通用視窗管理 ──
         # 先點一下目標螢幕中央，確保焦點在正確螢幕
         pyautogui.click(mon_cx, mon_cy)
         time.sleep(0.3)
@@ -7086,58 +7401,8 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
         pyautogui.click(mon_cx, mon_cy)
         time.sleep(0.3)
 
-        # Telegram 專屬流程
-        if "telegram" in app_lower:
-            # 提取聯絡人名稱（支援引號、「」、直接文字）
-            name_match = re.search(r'[「"](.*?)[」"]', task)
-            if name_match:
-                name = name_match.group(1)
-            else:
-                # 去掉常見動詞，剩下的當人名
-                name = re.sub(r'(打開|找到|找|搜尋|對話|訊息|聊天|跟|和|給|傳)', '', task).strip()
-
-            # Ctrl+K 開啟搜尋
-            pyautogui.hotkey("ctrl", "k")
-            time.sleep(0.8)
-            # 清空搜尋框再輸入
-            pyautogui.hotkey("ctrl", "a")
-            time.sleep(0.2)
-            pyautogui.write(name, interval=0.07)
-            time.sleep(1.2)
-            results.append(f"🔍 搜尋聯絡人：{name}")
-            pyautogui.press("enter")
-            time.sleep(1.0)
-            results.append("✅ 已開啟對話")
-
-            # 輸入訊息（有 input_text 就一定送出）
-            if input_text:
-                # 點一下輸入框（Telegram 輸入框在底部，估算位置）
-                try:
-                    with mss.mss() as sct:
-                        mons2 = sct.monitors
-                        m2 = mons2[monitor] if monitor < len(mons2) else mons2[1]
-                        input_x = m2["left"] + m2["width"] // 2
-                        input_y = m2["top"] + m2["height"] - 60
-                    pyautogui.click(input_x, input_y)
-                except Exception:
-                    pyautogui.click(mon_cx, mon_top + 900)
-                time.sleep(0.4)
-                pyautogui.hotkey("ctrl", "a")
-                time.sleep(0.1)
-                # 用 pyperclip 避免中文輸入問題
-                try:
-                    import pyperclip
-                    pyperclip.copy(input_text)
-                    pyautogui.hotkey("ctrl", "v")
-                except Exception:
-                    pyautogui.write(input_text, interval=0.05)
-                time.sleep(0.4)
-                results.append(f"⌨️ 已輸入：{input_text}")
-                pyautogui.press("enter")
-                results.append("📤 已送出")
-
         # LINE 專屬流程
-        elif "line" in app_lower:
+        if "line" in app_lower:
             name_match = re.search(r'[「"](.*?)[」"]', task)
             name = name_match.group(1) if name_match else re.sub(r'(打開|找到|找|搜尋|對話|訊息)', '', task).strip()
             r = fetch_ocr_click(name, monitor)
@@ -7183,8 +7448,7 @@ def fetch_wait_and_click(target_text: str, timeout: int = 15, monitor: int = 1, 
 def fetch_drag_drop(from_x: int = None, from_y: int = None, to_x: int = None, to_y: int = None,
                     from_text: str = "", to_text: str = "", monitor: int = 1, duration: float = 0.5) -> str:
     try:
-        import pyautogui
-        import mss
+        import mss, ctypes as _c, ctypes.wintypes as _w, time as _t, re
 
         def get_abs(x, y):
             with mss.mss() as sct:
@@ -7193,35 +7457,156 @@ def fetch_drag_drop(from_x: int = None, from_y: int = None, to_x: int = None, to
 
         # 起點
         if from_text:
-            r = fetch_ocr_click(from_text, monitor, "click")
-            if "找不到" in r:
-                return f"拖曳起點找不到「{from_text}」"
-            import re
-            m = re.search(r'\((\d+), (\d+)\)', r)
-            if m:
-                fx, fy = int(m.group(1)), int(m.group(2))
-            else:
-                return f"無法解析起點座標：{r}"
+            r = fetch_vision_locate(from_text, monitor, "locate_only")
+            m = re.search(r'\((-?\d+), (-?\d+)\)', r)
+            if m: fx, fy = int(m.group(1)), int(m.group(2))
+            else: return f"拖曳起點找不到「{from_text}」：{r}"
         else:
             fx, fy = get_abs(from_x or 0, from_y or 0)
 
         # 終點
         if to_text:
             r2 = fetch_vision_locate(to_text, monitor, "locate_only")
-            import re
-            m2 = re.search(r'\((\d+), (\d+)\)', r2)
-            if m2:
-                tx, ty = int(m2.group(1)), int(m2.group(2))
-            else:
-                return f"無法解析終點：{r2}"
+            m2 = re.search(r'\((-?\d+), (-?\d+)\)', r2)
+            if m2: tx, ty = int(m2.group(1)), int(m2.group(2))
+            else: return f"拖曳終點找不到「{to_text}」：{r2}"
         else:
             tx, ty = get_abs(to_x or 0, to_y or 0)
 
-        pyautogui.moveTo(fx, fy, duration=0.2)
-        pyautogui.dragTo(tx, ty, duration=duration, button="left")
+        # SendInput 拖曳（支援螢幕2負座標）
+        vl, vt, vw, vh, is_phys, sx, sy = _get_virtual_desktop()
+        u32 = _c.windll.user32
+        class MI(_c.Structure):
+            _fields_ = [('dx',_w.LONG),('dy',_w.LONG),('mouseData',_w.DWORD),
+                        ('dwFlags',_w.DWORD),('time',_w.DWORD),('dwExtraInfo',_c.POINTER(_c.c_ulong))]
+        class U(_c.Union): _fields_ = [('mi', MI)]
+        class INP(_c.Structure):
+            _anonymous_ = ('u',); _fields_ = [('type',_w.DWORD),('u',U)]
+        def _send(flags, dx=0, dy=0):
+            i = INP(0, U(mi=MI(dx, dy, 0, flags, 0, None)))
+            u32.SendInput(1, _c.byref(i), _c.sizeof(i))
+        def _norm(lx, ly):
+            px = round(lx * sx); py = round(ly * sy)
+            return int((px-vl)*65535//vw), int((py-vt)*65535//vh)
+
+        fnx, fny = _norm(fx, fy)
+        tnx, tny = _norm(tx, ty)
+        steps = max(10, int(duration * 60))
+        _send(0x0001|0x8000|0x4000, fnx, fny); _t.sleep(0.1)
+        _send(0x0002)  # LEFTDOWN
+        for i in range(1, steps+1):
+            ix = fnx + (tnx - fnx) * i // steps
+            iy = fny + (tny - fny) * i // steps
+            _send(0x0001|0x8000|0x4000, ix, iy); _t.sleep(duration / steps)
+        _send(0x0004)  # LEFTUP
         return f"✅ 拖曳完成：({fx},{fy}) → ({tx},{ty})，耗時 {duration}s"
     except Exception as e:
         return f"拖曳失敗：{e}"
+
+
+def fetch_read_screen(question: str = "描述螢幕上有什麼", monitor: int = 1) -> str:
+    """截圖 → Vision → 回傳螢幕內容描述"""
+    try:
+        import anthropic, base64, io
+        from PIL import Image as _PI
+        img, _, _ = _cap_monitor_logical(monitor)
+        if img.width > 1280:
+            r = 1280 / img.width
+            img = img.resize((1280, int(img.height*r)), _PI.LANCZOS)
+        buf = io.BytesIO(); img.save(buf, format="JPEG", quality=85)
+        b64 = base64.standard_b64encode(buf.getvalue()).decode()
+        resp = anthropic.Anthropic().messages.create(
+            model="claude-haiku-4-5-20251001", max_tokens=512,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                {"type": "text", "text": f"這是螢幕{monitor}的截圖。{question}。請用繁體中文詳細描述。"}
+            ]}]
+        )
+        return f"📺 螢幕{monitor}內容：\n{resp.content[0].text}"
+    except Exception as e:
+        return f"讀取螢幕失敗：{e}"
+
+
+def fetch_scroll_at(direction: str = "down", amount: int = 3,
+                    x: int = None, y: int = None,
+                    monitor: int = 1, description: str = "") -> str:
+    """在指定位置滾動，支援所有螢幕包含螢幕2負座標"""
+    try:
+        import mss, time
+        if description:
+            img, ml, mt = _cap_monitor_logical(monitor)
+            rx, ry = _vision_find(img, description)
+            if rx is not None:
+                abs_x, abs_y = ml + rx, mt + ry
+            else:
+                with mss.mss() as s:
+                    m = s.monitors[monitor] if monitor < len(s.monitors) else s.monitors[1]
+                    abs_x = m["left"] + m["width"] // 2
+                    abs_y = m["top"] + m["height"] // 2
+        elif x is not None and y is not None:
+            with mss.mss() as s:
+                m = s.monitors[monitor] if monitor < len(s.monitors) else s.monitors[1]
+                abs_x = m["left"] + x; abs_y = m["top"] + y
+        else:
+            with mss.mss() as s:
+                m = s.monitors[monitor] if monitor < len(s.monitors) else s.monitors[1]
+                abs_x = m["left"] + m["width"] // 2
+                abs_y = m["top"] + m["height"] // 2
+        _si_scroll(abs_x, abs_y, amount, direction)
+        return f"✅ 螢幕{monitor} 在({abs_x},{abs_y}) 向{direction}滾動 {amount} 格"
+    except Exception as e:
+        return f"滾動失敗：{e}"
+
+
+def fetch_window_manager(action: str = "list", window_name: str = "") -> str:
+    """視窗管理：列出所有視窗 / 切換焦點 / 最大化 / 最小化 / 關閉"""
+    try:
+        import win32gui, win32con, re
+        results = []
+
+        if action == "list":
+            wins = []
+            def _enum(h, _):
+                if win32gui.IsWindowVisible(h):
+                    t = win32gui.GetWindowText(h).strip()
+                    if t: wins.append(f"[{h}] {t}")
+                return True
+            win32gui.EnumWindows(_enum, None)
+            return "開啟中的視窗：\n" + "\n".join(wins[:30])
+
+        # 找目標視窗
+        matches = []
+        def _find(h, _):
+            if win32gui.IsWindowVisible(h):
+                t = win32gui.GetWindowText(h)
+                if window_name.lower() in t.lower():
+                    matches.append(h)
+            return True
+        win32gui.EnumWindows(_find, None)
+
+        if not matches:
+            return f"找不到包含「{window_name}」的視窗"
+
+        hw = matches[0]
+        title = win32gui.GetWindowText(hw)
+
+        if action == "focus":
+            win32gui.ShowWindow(hw, win32con.SW_RESTORE)
+            win32gui.SetForegroundWindow(hw)
+            return f"✅ 已切換到視窗：{title}"
+        elif action == "maximize":
+            win32gui.ShowWindow(hw, win32con.SW_MAXIMIZE)
+            return f"✅ 已最大化：{title}"
+        elif action == "minimize":
+            win32gui.ShowWindow(hw, win32con.SW_MINIMIZE)
+            return f"✅ 已最小化：{title}"
+        elif action == "close":
+            win32gui.PostMessage(hw, win32con.WM_CLOSE, 0, 0)
+            return f"✅ 已關閉：{title}"
+        else:
+            return f"未知動作：{action}，可用：list/focus/maximize/minimize/close"
+    except Exception as e:
+        return f"視窗管理失敗：{e}"
 
 
 def fetch_crypto(coin: str, vs_currency: str = "usd") -> str:
@@ -12525,8 +12910,39 @@ def execute_web_scrape(action, url="", selector="body", interval=2.0, region="fu
     try:
         if action == "scrape":
             from bs4 import BeautifulSoup
+            # 先用靜態爬蟲試，若內容太少（JS渲染網站）改用 Playwright
             res = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             soup = BeautifulSoup(res.text, "html.parser")
+            static_text = soup.get_text(strip=True)
+            use_playwright = len(static_text) < 500 or len(soup.find_all("script")) > 10
+
+            if use_playwright:
+                try:
+                    import subprocess, sys, json as _json, textwrap
+                    _script = textwrap.dedent(f"""
+import sys
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b = p.chromium.launch(headless=True)
+    page = b.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    page.goto({_json.dumps(url)}, wait_until="networkidle", timeout=20000)
+    page.wait_for_timeout(2000)
+    els = page.query_selector_all({_json.dumps(selector)})
+    texts = [e.inner_text() for e in els[:10] if e.inner_text().strip()]
+    b.close()
+    print("\\n".join(texts))
+""")
+                    proc = subprocess.run(
+                        [sys.executable, "-c", _script],
+                        capture_output=True, text=True, timeout=30,
+                        env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"}
+                    )
+                    if proc.returncode == 0 and proc.stdout.strip():
+                        return proc.stdout.strip()
+                    return f"Playwright 爬蟲失敗：{proc.stderr.strip()[:300]}"
+                except Exception as _pw_err:
+                    return f"Playwright 爬蟲失敗：{_pw_err}"
+
             elements = soup.select(selector)
             return "\n".join(e.get_text(strip=True) for e in elements[:10]) or "（未找到內容）"
         elif action == "screen_diff":
@@ -16003,14 +16419,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 inp = tool_use.input
                 import asyncio
                 loop = asyncio.get_running_loop()
-                result = await loop.run_in_executor(
-                    None, lambda: execute_browser_control(
-                        action=inp["action"],
-                        url=inp.get("url", ""),
-                        selector=inp.get("selector", ""),
-                        text=inp.get("text", "")
+                # 攔截 open/goto：改用 web_scrape 實際讀取內容
+                if inp.get("action") in ("open", "goto") and inp.get("url"):
+                    result = await loop.run_in_executor(
+                        None, lambda: execute_web_scrape("scrape", url=inp["url"])
                     )
-                )
+                else:
+                    result = await loop.run_in_executor(
+                        None, lambda: execute_browser_control(
+                            action=inp["action"],
+                            url=inp.get("url", ""),
+                            selector=inp.get("selector", ""),
+                            text=inp.get("text", "")
+                        )
+                    )
                 if result.startswith("__BROWSER_SCREENSHOT__:"):
                     img_bytes = bytes.fromhex(result.split(":", 1)[1])
                     await update.message.reply_photo(photo=img_bytes, caption="🌐 瀏覽器截圖")
@@ -16857,10 +17279,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
 
             elif tool_use.name == "app_navigator":
-                import asyncio; loop = asyncio.get_running_loop()
-                tool_result = await loop.run_in_executor(None, fetch_app_navigator,
-                    tool_use.input["app"], tool_use.input["task"],
-                    tool_use.input.get("input_text", ""), tool_use.input.get("monitor", 1))
+                import asyncio, re as _re_nav_guard
+                loop = asyncio.get_running_loop()
+                # ── 程式碼層級封鎖：群組訊息含 @提及 且無螢幕控制關鍵字 → 直接拒絕 ──
+                _screen_kw = ("螢幕", "桌面", "screen", "monitor", "控制", "視窗")
+                _has_at = bool(_re_nav_guard.search(r'@\w+', user_text or ""))
+                _has_screen = any(k in (user_text or "") for k in _screen_kw)
+                if is_group and _has_at and not _has_screen:
+                    tool_result = "❌ 禁止使用螢幕控制。這是群組對話，@提及只是表達方式。你必須直接在這個群組聊天室裡用文字回覆，給出股票推薦或回答問題，不要說「已傳給XXX」，直接在群組裡說出你的推薦內容。"
+                else:
+                    tool_result = await loop.run_in_executor(None, fetch_app_navigator,
+                        tool_use.input["app"], tool_use.input["task"],
+                        tool_use.input.get("input_text", ""), tool_use.input.get("monitor", 1),
+                        tool_use.input.get("contact_name", ""))
                 response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
                     messages=history + [{"role": "assistant", "content": response.content},
                     {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
@@ -16881,6 +17312,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("to_x"), tool_use.input.get("to_y"),
                     tool_use.input.get("from_text", ""), tool_use.input.get("to_text", ""),
                     tool_use.input.get("monitor", 1), tool_use.input.get("duration", 0.5))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "read_screen":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_read_screen,
+                    tool_use.input.get("question", "描述螢幕上有什麼"),
+                    tool_use.input.get("monitor", 1))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "scroll_at":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_scroll_at,
+                    tool_use.input.get("direction", "down"),
+                    tool_use.input.get("amount", 3),
+                    tool_use.input.get("x"), tool_use.input.get("y"),
+                    tool_use.input.get("monitor", 1),
+                    tool_use.input.get("description", ""))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=256, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "window_manager":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_window_manager,
+                    tool_use.input.get("action", "list"),
+                    tool_use.input.get("window_name", ""))
                 response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
                     messages=history + [{"role": "assistant", "content": response.content},
                     {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
@@ -17144,19 +17605,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     if _dc_cur_tu.name == "desktop_control":
                         _dc_inp = _dc_cur_tu.input
-                        _dc_result = await _loop2.run_in_executor(
-                            None,
-                            lambda _i=_dc_inp: execute_desktop_control(
-                                action=_i["action"],
-                                x=_i.get("x"),
-                                y=_i.get("y"),
-                                text=_i.get("text"),
-                                app=_i.get("app"),
-                                direction=_i.get("direction", "down"),
-                                amount=_i.get("amount", 3),
-                                monitor=_i.get("monitor")
-                            )
+                        # ── 攔截：screenshot 但實際是 Telegram/LINE 導航請求 ──
+                        import re as _re_nav
+                        _is_tg_nav = (
+                            _dc_inp.get("action") == "screenshot" and
+                            _re_nav.search(r'telegram|line', user_text, _re_nav.IGNORECASE) and
+                            _re_nav.search(r'找.{1,20}(說|傳|回覆|發|跟他說)', user_text)
                         )
+                        if _is_tg_nav:
+                            _mon_m = _re_nav.search(r'螢幕(\d)', user_text)
+                            _nav_mon = int(_mon_m.group(1)) if _mon_m else 1
+                            _nav_app = "LINE" if _re_nav.search(r'line', user_text, _re_nav.IGNORECASE) else "Telegram"
+                            _nm = _re_nav.search(r'找(.+?)(?:跟他說|並說|跟.{0,5}說|說|給|傳|發)(.+)', user_text)
+                            if _nm:
+                                _nav_task = _nm.group(1).strip()
+                                _nav_input = _nm.group(2).strip()
+                            else:
+                                _nav_task = user_text
+                                _nav_input = ""
+                            _nav_r = await _loop2.run_in_executor(
+                                None, fetch_app_navigator, _nav_app, _nav_task, _nav_input, _nav_mon, _nav_task
+                            )
+                            _dc_result = {"ok": True, "message": _nav_r, "screenshot": None}
+                        else:
+                            _dc_result = await _loop2.run_in_executor(
+                                None,
+                                lambda _i=_dc_inp: execute_desktop_control(
+                                    action=_i["action"],
+                                    x=_i.get("x"),
+                                    y=_i.get("y"),
+                                    text=_i.get("text"),
+                                    app=_i.get("app"),
+                                    direction=_i.get("direction", "down"),
+                                    amount=_i.get("amount", 3),
+                                    monitor=_i.get("monitor")
+                                )
+                            )
                         if _dc_result.get("screenshot"):
                             _dc_last_screenshot = _dc_result["screenshot"]
                         _dc_last_msg = _dc_result["message"]
@@ -17251,6 +17735,69 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("圖片生成失敗，請稍後再試。")
                 save_message(chat_id, "assistant", f"已為用戶生成圖片：{prompt}")
                 return
+
+        # ── 多輪工具 dispatch：處理連續/平行 tool calls ──
+        # 用 _tail 追蹤本輪所有 tool 交換，確保 messages 格式正確
+        import asyncio as _aio
+        _eloop = _aio.get_running_loop()
+        _tail = []        # 本輪累積的 [assistant, user] pairs
+        _extra_rounds = 0
+
+        def _tool_dispatch(tu):
+            """根據 tool 名稱呼叫對應 fetch 函式"""
+            n, i = tu.name, tu.input
+            _map = {
+                "get_stock":          lambda: fetch_stock(i.get("symbol",""), i.get("period","1mo")),
+                "get_fundamentals":   lambda: fetch_fundamentals(i.get("symbol","")),
+                "get_market_sentiment": lambda: fetch_market_sentiment(),
+                "get_sector":         lambda: fetch_sector(i.get("market","tw")),
+                "get_global_market":  lambda: fetch_global_market(),
+                "get_weather":        lambda: fetch_weather(i.get("city","台北")),
+                "get_crypto":         lambda: fetch_crypto(i.get("coin","btc"), i.get("vs_currency","usd")),
+                "get_ashare":         lambda: fetch_ashare(i.get("code",""), i.get("period","1mo")),
+                "compare_stocks":     lambda: fetch_compare_stocks(i.get("symbols",[]), i.get("metrics",["all"])),
+                "stock_screener":     lambda: fetch_stock_screener(i.get("criteria",""), i.get("market","tw")),
+                "get_analyst_ratings": lambda: fetch_analyst_ratings(i.get("symbol","")),
+                "get_risk_metrics":   lambda: fetch_risk_metrics(i.get("symbol",""), i.get("period","1y")),
+                "get_earnings":       lambda: fetch_earnings(i.get("symbol","")),
+                "get_finance_news":   lambda: fetch_finance_news(i.get("category","general"), i.get("count",5)),
+                "get_etf":            lambda: fetch_etf(i.get("symbol","")),
+                "get_earnings_calendar": lambda: fetch_earnings_calendar(i.get("days",7)),
+                "get_dividend_calendar": lambda: fetch_dividend_calendar(i.get("symbol","")),
+                "ptt_search":         lambda: ptt_search(i.get("keyword",""), i.get("board","Gossiping"), i.get("count",5)),
+                "china_search":       lambda: fetch_china_search(i.get("query",""), i.get("category","其他"), i.get("count",6)),
+                "read_screen":        lambda: fetch_read_screen(i.get("question","描述螢幕上有什麼"), i.get("monitor",1)),
+                "ocr_click":          lambda: fetch_ocr_click(i.get("target_text",""), i.get("monitor",1), i.get("click_type","click")),
+                "vision_locate":      lambda: fetch_vision_locate(i.get("description",""), i.get("monitor",1), i.get("action","click")),
+                "scroll_at":          lambda: fetch_scroll_at(i.get("direction","down"), i.get("amount",3), i.get("x"), i.get("y"), i.get("monitor",1), i.get("description","")),
+                "window_manager":     lambda: fetch_window_manager(i.get("action","list"), i.get("window_name","")),
+            }
+            fn = _map.get(n)
+            return fn() if fn else f"工具 {n} 已執行（無對應 handler）"
+
+        while True:
+            text_blocks = [b.text for b in response.content if hasattr(b, "text")]
+            if text_blocks:
+                break
+            if response.stop_reason != "tool_use" or _extra_rounds >= 8:
+                break
+            # 取出本次回應的「所有」tool_use block（含平行呼叫）
+            _cur_tus = [b for b in response.content if hasattr(b, "type") and b.type == "tool_use"]
+            if not _cur_tus:
+                break
+            _extra_rounds += 1
+            # 執行全部 tool，收集對應 tool_result
+            _results_block = []
+            for _tu in _cur_tus:
+                _res = await _eloop.run_in_executor(None, _tool_dispatch, _tu)
+                _results_block.append({"type": "tool_result", "tool_use_id": _tu.id, "content": str(_res)})
+            # 累積本輪 assistant + user
+            _tail.append({"role": "assistant", "content": response.content})
+            _tail.append({"role": "user",      "content": _results_block})
+            response = client.messages.create(
+                model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                messages=history + _tail
+            )
 
         text_blocks = [b.text for b in response.content if hasattr(b, "text")]
         if not text_blocks:
