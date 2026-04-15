@@ -15576,6 +15576,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _typing_stop = True
         _typing_task.cancel()
         response = await api_future
+
+        # ── 攔截：模型沒呼叫工具但用戶要求打開程式 → 強制呼叫 desktop_control open_app ──
+        if response.stop_reason != "tool_use":
+            import re as _re_open
+            _open_match = _re_open.search(r'(?:打開|開啟|執行|啟動|open)\s*(?:電腦的?\s*)?(.+)', user_text or "", _re_open.IGNORECASE)
+            if _open_match:
+                _app_name = _open_match.group(1).strip()
+                if _app_name and len(_app_name) < 30:
+                    import asyncio as _aio_open
+                    _loop_open = _aio_open.get_running_loop()
+                    _open_result = await _loop_open.run_in_executor(
+                        None, lambda: execute_desktop_control("open_app", app=_app_name)
+                    )
+                    _open_msg = _open_result.get("message", "")
+                    # 清除已串流的假訊息，送出真正結果
+                    if sent_msg:
+                        try:
+                            await sent_msg.edit_text(f"✅ {_open_msg}")
+                        except Exception:
+                            await update.message.reply_text(f"✅ {_open_msg}")
+                    else:
+                        await update.message.reply_text(f"✅ {_open_msg}")
+                    save_message(chat_id, "assistant", _open_msg)
+                    return
+
         # 處理工具呼叫
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
