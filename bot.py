@@ -180,6 +180,13 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 - 對人物的評價：從他/她做了什麼、說了什麼、結果怎樣來判斷，不受立場左右，只看行為和結果。
 - 即使結論不討喜，也要說出來。敢說「這件事本質上是...」「這個人的問題在於...」。
 
+統整與發表意見的輸出規則（重要）：
+- 工具查完資料後，絕對不要把原始資料一條一條列出來。那些是你的素材，不是你的答案。
+- 消化完所有資料，只挑 2～3 個你認為最關鍵的點說，其他的捨掉。
+- 用你自己的聲音說：低調、直接、台灣口語。不要說「根據以上資料顯示」「綜合各方觀點來看」這種書面語，就像跟朋友聊天那樣講出你的看法。
+- 結尾給一個清楚的結論或你的立場，不要留在「有各種可能」這種模糊地帶。
+- 字數精簡，能用 3 句話說清楚的事不要寫 10 句。
+
 股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
 
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
@@ -209,6 +216,13 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 - 區分確定程度：事實就說事實，推測就說「我推測」，不確定就說「我沒把握，但傾向認為」。不要把推測包裝成事實，也不要把事實說成不確定。
 - 對人物的評價：從他/她做了什麼、說了什麼、結果怎樣來判斷，不受立場左右，只看行為和結果。
 - 即使結論不討喜，也要說出來。敢說「這件事本質上是...」「這個人的問題在於...」。
+
+統整與發表意見的輸出規則（重要）：
+- 工具查完資料後，絕對不要把原始資料一條一條列出來。那些是你的素材，不是你的答案。
+- 消化完所有資料，只挑 2～3 個你認為最關鍵的點說，其他的捨掉。
+- 用你自己的聲音說：低調、直接、台灣口語。不要說「根據以上資料顯示」「綜合各方觀點來看」這種書面語，就像跟朋友聊天那樣講出你的看法。
+- 結尾給一個清楚的結論或你的立場，不要留在「有各種可能」這種模糊地帶。
+- 字數精簡，能用 3 句話說清楚的事不要寫 10 句。
 
 股票分析：當你拿到股票數據後，不要只是重述數字。你要像一個有個性的分析師，結合 MA、RSI、趨勢、基本面，說出你自己的判斷：現在適不適合進場？風險在哪？你看多還是看空？理由是什麼？語氣要有主見，敢說敢講，但最後加一句「這不是投資建議，請自行判斷」。
 
@@ -338,6 +352,699 @@ TOOLS = [
             },
             "required": ["symbol"]
         }
+    },
+    {
+        "name": "china_search",
+        "description": "搜尋所有關於中國大陸的資訊，包含旅遊景點、美食、文化、風俗習慣、工作環境、電視劇、電影、演員明星、政治、歷史、科技、城市介紹、簽證、物價、交通等任何主題。當用戶詢問任何與中國大陸相關的非股票問題時優先使用此工具。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字，用繁體或簡體中文描述想查的內容，例如：成都旅遊景點、北京烤鴨哪裡吃、趙麗穎最新作品、中國春節習俗、上海工作薪資"},
+                "category": {"type": "string", "enum": ["旅遊", "美食", "文化風俗", "戲劇影視", "演員明星", "工作生活", "城市介紹", "歷史", "科技", "新聞時事", "其他"], "description": "問題分類，幫助精準搜尋"},
+                "count": {"type": "integer", "description": "回傳結果數量，預設 6，最多 10"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_ashare",
+        "description": "查詢中國A股（滬深）或港股股價、技術指標、基本面。當用戶詢問A股、滬股、深股、港股、茅台、比亞迪、騰訊、阿里、恆生等中國大陸或香港上市公司股票時使用。輸入6位A股代號（如600519、000858）或港股代號（如0700、9988），不需要後綴。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "股票代號：A股填6位數字（如600519=茅台、000858=五糧液、300750=寧德時代），港股填4位數字（如0700=騰訊、9988=阿里巴巴、1211=比亞迪）"},
+                "period": {"type": "string", "enum": ["1mo", "3mo", "6mo", "1y"], "description": "查詢期間，預設 1mo"}
+            },
+            "required": ["code"]
+        }
+    },
+    {
+        "name": "get_cn_news",
+        "description": "查詢中國大陸最新新聞：政治、經濟、科技、社會等。當用戶詢問中國新聞、大陸動態、習近平、中共、人民日報、新華社相關消息時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "source": {"type": "string", "enum": ["xinhua", "people", "36kr", "caixin", "all"], "description": "來源：xinhua=新華社, people=人民網, 36kr=36氪科技, caixin=財新網, all=全部"},
+                "count": {"type": "integer", "description": "顯示幾則，預設 5，最多 10"}
+            }
+        }
+    },
+    {
+        "name": "get_institutional",
+        "description": "查詢台股三大法人（外資、投信、自營商）買賣超資料。可查整體市場合計或單一個股。當用戶問外資動向、法人買賣、籌碼面分析時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "台股代號（如 2330），不填則查整體市場合計"},
+                "date": {"type": "string", "description": "查詢日期 YYYYMMDD，預設今天"}
+            }
+        }
+    },
+    {
+        "name": "get_sector",
+        "description": "查詢美股或台股各產業類股今日表現，找出最強/最弱族群。當用戶問哪個類股最強、產業輪動、族群行情時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "market": {"type": "string", "enum": ["us", "tw"], "description": "us=美股產業（科技/金融/能源等），tw=台股族群（半導體/金融/航運等），預設 us"}
+            }
+        }
+    },
+    {
+        "name": "get_commodity",
+        "description": "查詢黃金、原油、白銀、銅、天然氣、小麥、玉米等大宗商品即時報價與走勢。當用戶詢問金價、油價、原物料、商品市場時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "items": {"type": "array", "items": {"type": "string", "enum": ["gold", "oil", "silver", "copper", "natgas", "wheat", "corn", "all"]}, "description": "要查的商品，all=全部，預設 all"}
+            }
+        }
+    },
+    {
+        "name": "get_bond_yield",
+        "description": "查詢美國公債殖利率（2年、5年、10年、30年）及利差，判斷景氣循環與殖利率曲線形狀。當用戶問美債、殖利率、升息、景氣反轉時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "get_dividend_calendar",
+        "description": "查詢股票的除權息資訊：除息日、配息金額、殖利率、除息後預估股價。當用戶問什麼時候除息、要不要存股、配息多少時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代號（台股如 0056.TW、2330.TW，美股如 AAPL、SPY）"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "stock_screener",
+        "description": "依條件篩選股票：殖利率、本益比、市值、ROE、漲跌幅等。當用戶說「找殖利率高的股票」、「本益比低的成長股」、「今天漲最多的股票」時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "market": {"type": "string", "enum": ["us", "tw"], "description": "美股或台股，預設 us"},
+                "criteria": {"type": "string", "description": "篩選條件描述，例如：殖利率>5% 本益比<20、ROE>15% 市值>1000億、今日漲幅最大前10名"}
+            },
+            "required": ["criteria"]
+        }
+    },
+    {
+        "name": "get_margin_trading",
+        "description": "查詢台股個股融資融券餘額、增減變化，分析散戶籌碼動向。當用戶問融資、融券、軋空、散戶動向時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "台股代號（如 2330、0050）"},
+                "date": {"type": "string", "description": "日期 YYYYMMDD，預設今天"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "get_options",
+        "description": "查詢股票選擇權鏈：各履約價的 Call/Put 未平倉量、隱含波動率、Delta。當用戶問選擇權、買權、賣權、隱波率時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代號，如 AAPL、SPY、QQQ"},
+                "expiry": {"type": "string", "description": "到期日 YYYY-MM-DD，不填則用最近一個到期日"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "get_futures",
+        "description": "查詢主要期貨報價：S&P500期貨、那斯達克期貨、道瓊期貨、黃金期貨、原油期貨、台指期。當用戶問期貨、夜盤、指數期貨時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "items": {"type": "array", "items": {"type": "string", "enum": ["sp500", "nasdaq", "dow", "gold", "oil", "taiex", "all"]}, "description": "要查的期貨，預設 all"}
+            }
+        }
+    },
+    {
+        "name": "get_ipo",
+        "description": "查詢近期或即將上市的 IPO 行事曆，包含上市日期、發行價、募資金額。當用戶問新股、IPO、即將上市時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer", "description": "顯示幾筆，預設 10"}
+            }
+        }
+    },
+    {
+        "name": "backtest",
+        "description": "對某檔股票回測投資策略，計算歷史報酬率、勝率、最大虧損。支援均線交叉、定期定額、買進持有等策略。當用戶問這個策略有沒有用、歷史報酬、回測時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代號"},
+                "strategy": {"type": "string", "enum": ["ma_cross", "buy_hold", "dca"], "description": "策略：ma_cross=均線交叉（MA5穿MA20）, buy_hold=買進持有, dca=定期定額"},
+                "period": {"type": "string", "enum": ["1y", "2y", "3y", "5y"], "description": "回測期間，預設 2y"}
+            },
+            "required": ["symbol", "strategy"]
+        }
+    },
+    {
+        "name": "get_global_market",
+        "description": "一次查看全球主要股市指數現況：美股（S&P500/那斯達克/道瓊）、歐股、日股、港股、台股、韓股等。當用戶問全球股市、今天漲跌、各國市場時使用。",
+        "input_schema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "get_economic_calendar",
+        "description": "查詢重要經濟數據發布行事曆：CPI、非農就業、GDP、Fed利率決議、PPI等。當用戶問本週有什麼重要數據、什麼時候公布CPI、Fed何時開會時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "count": {"type": "integer", "description": "顯示幾筆，預設 10"}
+        }}
+    },
+    {
+        "name": "get_earnings_calendar",
+        "description": "查詢即將發布財報的公司名單，包含預期EPS。當用戶問本週哪些公司發財報、接下來的財報季時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "days": {"type": "integer", "description": "查未來幾天，預設 7"}
+        }}
+    },
+    {
+        "name": "get_analyst_ratings",
+        "description": "查詢券商分析師對某股票的最新評級：升評/降評/維持、目標價調整。當用戶問分析師怎麼看、有沒有被升評時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "股票代號"}
+        }, "required": ["symbol"]}
+    },
+    {
+        "name": "get_short_interest",
+        "description": "查詢股票的空頭倉位：做空比率、借券賣出量、軋空風險評估。當用戶問有多少人在放空、空頭比率、是否有軋空機會時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "股票代號"}
+        }, "required": ["symbol"]}
+    },
+    {
+        "name": "get_correlation",
+        "description": "計算兩檔或多檔資產的相關係數，幫助分散風險配置。當用戶問這兩支股票相關嗎、投資組合分散夠嗎時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbols": {"type": "array", "items": {"type": "string"}, "description": "2~5 個股票代號"},
+            "period": {"type": "string", "enum": ["3mo", "6mo", "1y", "2y"], "description": "計算期間，預設 1y"}
+        }, "required": ["symbols"]}
+    },
+    {
+        "name": "get_risk_metrics",
+        "description": "計算股票的風險指標：Beta（市場敏感度）、夏普比率、年化波動率、最大回撤、VaR（風險值）。當用戶問這支股票風險高嗎、夏普值多少時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "股票代號"},
+            "period": {"type": "string", "enum": ["1y", "2y", "3y"], "description": "計算期間，預設 1y"}
+        }, "required": ["symbol"]}
+    },
+    {
+        "name": "get_money_flow",
+        "description": "查詢個股或大盤的資金流向：今日成交額、大單買賣、與均量比較。當用戶問資金有沒有流入、主力在買還是賣時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "股票代號"}
+        }, "required": ["symbol"]}
+    },
+    {
+        "name": "get_concept_stocks",
+        "description": "查詢台股特定概念/主題的相關股票清單，例如AI、電動車、軍工、低軌衛星、半導體、5G等。當用戶問某個題材有哪些股票、概念股有哪些時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "theme": {"type": "string", "description": "概念主題，例如：AI、電動車、軍工、低軌衛星、半導體、5G、儲能、DRAM、CoWoS、矽光子、機器人"}
+        }, "required": ["theme"]}
+    },
+    {
+        "name": "get_crypto_depth",
+        "description": "查詢加密幣深度資料：鏈上數據、交易所資金費率、DeFi TVL、恐懼貪婪指數、BTC主導率。當用戶問加密市場狀況、資金費率、鏈上活動時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "coin": {"type": "string", "description": "幣種，如 bitcoin、ethereum、solana，預設 bitcoin"}
+        }}
+    },
+    {
+        "name": "drip_calculator",
+        "description": "股息再投資（DRIP）複利試算：持有N年後能領多少股息、資產成長多少。當用戶問存股幾年能退休、股息再投資有多厲害時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "股票代號（如 0056.TW、AAPL）"},
+            "shares": {"type": "number", "description": "初始股數"},
+            "years": {"type": "integer", "description": "持有年數，預設 10"},
+            "monthly_invest": {"type": "number", "description": "每月額外投入金額（選填，0=不追加）"}
+        }, "required": ["symbol", "shares"]}
+    },
+    {
+        "name": "get_forex_chart",
+        "description": "查詢外匯走勢技術分析：MA均線、RSI、布林通道、趨勢判斷。當用戶問匯率走勢、美元強弱、外匯技術面時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "pair": {"type": "string", "description": "貨幣對，yfinance格式：USDTWD=X、USDJPY=X、EURUSD=X、GBPUSD=X"},
+            "period": {"type": "string", "enum": ["1mo", "3mo", "6mo", "1y"], "description": "分析期間，預設 3mo"}
+        }, "required": ["pair"]}
+    },
+    {
+        "name": "get_warrant",
+        "description": "查詢台股認購/認售權證資訊：標的股、履約價、到期日、溢價率、槓桿倍數。當用戶問權證、認購、認售、槓桿操作時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "underlying": {"type": "string", "description": "標的股票代號（如 2330、2317）"}
+        }, "required": ["underlying"]}
+    },
+    {
+        "name": "get_portfolio_risk",
+        "description": "計算多資產投資組合的整體風險：VaR（風險值）、組合波動率、各資產相關性熱力圖分析。當用戶想評估整體投資組合風險時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "holdings": {"type": "array", "items": {"type": "object", "properties": {
+                "symbol": {"type": "string"}, "weight": {"type": "number"}
+            }}, "description": "持倉清單，每項包含 symbol 和 weight（權重，總和應為1）"},
+            "period": {"type": "string", "enum": ["1y", "2y", "3y"], "description": "計算期間，預設 1y"}
+        }, "required": ["holdings"]}
+    },
+    {
+        "name": "retirement_calculator",
+        "description": "退休財務規劃試算：根據目前年齡、目標退休年齡、現有資產、月儲蓄、預期報酬率，計算退休時的資產總額及是否達標。當用戶問退休規劃、幾歲可以退休、退休金夠不夠時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "current_age": {"type": "integer", "description": "目前年齡"},
+            "retire_age": {"type": "integer", "description": "預計退休年齡，預設65"},
+            "current_savings": {"type": "number", "description": "目前已有存款/資產（新台幣萬元）"},
+            "monthly_save": {"type": "number", "description": "每月可存/投資金額（新台幣元）"},
+            "annual_return": {"type": "number", "description": "預期年化報酬率（%），預設6"},
+            "monthly_expense": {"type": "number", "description": "退休後每月預計生活費（新台幣元），預設50000"}
+        }, "required": ["current_age", "current_savings", "monthly_save"]}
+    },
+    {
+        "name": "loan_calculator",
+        "description": "貸款試算：計算房貸/車貸/信貸的每月還款金額、總利息、還款期程。當用戶問貸款、房貸、月繳多少、利息多少時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "principal": {"type": "number", "description": "貸款金額（萬元）"},
+            "annual_rate": {"type": "number", "description": "年利率（%）"},
+            "years": {"type": "integer", "description": "貸款年數"},
+            "loan_type": {"type": "string", "enum": ["等額本息", "等額本金"], "description": "還款方式，預設等額本息"}
+        }, "required": ["principal", "annual_rate", "years"]}
+    },
+    {
+        "name": "compound_calculator",
+        "description": "複利計算器：計算一筆資金在複利效果下隨時間的成長。當用戶問複利、本金成長、幾年變幾倍時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "principal": {"type": "number", "description": "本金（元）"},
+            "annual_rate": {"type": "number", "description": "年化報酬率（%）"},
+            "years": {"type": "integer", "description": "投資年數"},
+            "monthly_add": {"type": "number", "description": "每月額外投入金額（元），預設0"},
+            "compound_freq": {"type": "integer", "description": "每年複利次數，1=年複利、12=月複利，預設12"}
+        }, "required": ["principal", "annual_rate", "years"]}
+    },
+    {
+        "name": "asset_allocation",
+        "description": "資產配置建議：根據年齡、風險承受度、投資目標，給出股票/債券/現金等配置建議。當用戶問資產怎麼配、幾歲應該多少股票、投資組合怎麼分時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "age": {"type": "integer", "description": "年齡"},
+            "risk_level": {"type": "string", "enum": ["保守", "穩健", "積極"], "description": "風險承受度"},
+            "goal": {"type": "string", "description": "投資目標，如退休、買房、子女教育"},
+            "investment_horizon": {"type": "integer", "description": "投資期間（年）"}
+        }, "required": ["age", "risk_level"]}
+    },
+    {
+        "name": "tw_tax_calculator",
+        "description": "台股稅務試算：計算股利所得稅（合併申報/分離課稅）、健保補充保費、證券交易稅。當用戶問股利要繳多少稅、補充保費、證交稅時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "dividend_income": {"type": "number", "description": "年度股利所得（元）"},
+            "other_income": {"type": "number", "description": "其他年收入（元），用於合併申報試算"},
+            "tax_bracket": {"type": "number", "description": "個人綜所稅稅率（%），如5、12、20、30、40"},
+            "sell_amount": {"type": "number", "description": "賣出金額（元），用於計算證交稅，預設0"}
+        }, "required": ["dividend_income"]}
+    },
+    {
+        "name": "currency_converter",
+        "description": "外幣換算：查詢即時匯率並換算金額。當用戶問外幣換算、匯率、多少台幣換美金時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "amount": {"type": "number", "description": "金額"},
+            "from_currency": {"type": "string", "description": "來源幣別，如TWD、USD、JPY、EUR、CNY"},
+            "to_currency": {"type": "string", "description": "目標幣別"}
+        }, "required": ["amount", "from_currency", "to_currency"]}
+    },
+    {
+        "name": "get_fund",
+        "description": "基金查詢：查詢共同基金的淨值、績效、費用率、持倉。當用戶問基金、ETF型基金、定期定額基金績效時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "基金代號（如 0050.TW、VTI、VWRA）或基金名稱關鍵字"}
+        }, "required": ["symbol"]}
+    },
+    {
+        "name": "get_reits",
+        "description": "REITs查詢：查詢不動產投資信託的股息殖利率、NAV折溢價、持有物業類型。當用戶問REITs、房地產信託、被動不動產投資時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "symbol": {"type": "string", "description": "REITs代號，如 VNQ、REET、00712（台灣REITs ETF）"}
+        }, "required": ["symbol"]}
+    },
+    {
+        "name": "inflation_adjusted",
+        "description": "通膨調整報酬：計算扣除通膨後的實質報酬率，及現在金額在未來的實質購買力。當用戶問通膨影響、實質報酬、購買力時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "nominal_return": {"type": "number", "description": "名目報酬率（%）"},
+            "inflation_rate": {"type": "number", "description": "預期通膨率（%），台灣預設2"},
+            "years": {"type": "integer", "description": "年數"},
+            "amount": {"type": "number", "description": "本金金額（元）"}
+        }, "required": ["nominal_return", "years", "amount"]}
+    },
+    {
+        "name": "defi_calculator",
+        "description": "DeFi收益試算：計算去中心化金融的流動性挖礦、質押、借貸收益。當用戶問DeFi、質押APY、流動性挖礦收益時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "principal_usd": {"type": "number", "description": "本金（美元）"},
+            "apy": {"type": "number", "description": "年化收益率APY（%）"},
+            "days": {"type": "integer", "description": "質押天數"},
+            "compound": {"type": "boolean", "description": "是否自動複利，預設true"},
+            "protocol": {"type": "string", "description": "協議名稱（僅供顯示），如 Aave、Curve、Uniswap"}
+        }, "required": ["principal_usd", "apy", "days"]}
+    },
+    {
+        "name": "gold_calculator",
+        "description": "黃金換算：查詢即時金價並計算黃金重量與台幣/美元的換算。當用戶問黃金價格、幾錢黃金值多少錢、黃金換算時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "weight": {"type": "number", "description": "黃金重量"},
+            "unit": {"type": "string", "enum": ["公克", "錢", "兩", "盎司"], "description": "重量單位，預設公克"},
+            "currency": {"type": "string", "enum": ["TWD", "USD"], "description": "換算貨幣，預設TWD"}
+        }, "required": ["weight"]}
+    },
+    {
+        "name": "forex_deposit",
+        "description": "外幣定存試算：試算外幣定存到期後的本利和，考慮換匯成本及匯率風險。當用戶問外幣定存、美元定存利息、日圓定存划算嗎時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "amount_twd": {"type": "number", "description": "台幣本金（元）"},
+            "currency": {"type": "string", "description": "存入幣別，如USD、JPY、AUD、EUR"},
+            "annual_rate": {"type": "number", "description": "外幣定存年利率（%）"},
+            "months": {"type": "integer", "description": "存款月數"},
+            "buy_rate": {"type": "number", "description": "換匯買入匯率（選填，若不填自動查詢）"},
+            "sell_rate": {"type": "number", "description": "到期賣出匯率假設（選填，預設同買入匯率）"}
+        }, "required": ["amount_twd", "currency", "annual_rate", "months"]}
+    },
+    {
+        "name": "financial_health",
+        "description": "財務健康診斷：根據收入、支出、資產、負債、保險等輸入，給出財務健康評分與改善建議。當用戶想了解自己財務狀況好不好、理財健檢時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "monthly_income": {"type": "number", "description": "月收入（元）"},
+            "monthly_expense": {"type": "number", "description": "月支出（元）"},
+            "total_assets": {"type": "number", "description": "總資產（元），包含存款、股票、不動產"},
+            "total_debt": {"type": "number", "description": "總負債（元），包含房貸、車貸、信貸"},
+            "emergency_fund_months": {"type": "number", "description": "緊急備用金可支撐幾個月"},
+            "has_insurance": {"type": "boolean", "description": "是否有壽險/重大疾病險"},
+            "investment_ratio": {"type": "number", "description": "月收入中用於投資的比例（%）"}
+        }, "required": ["monthly_income", "monthly_expense", "total_assets", "total_debt"]}
+    },
+    {
+        "name": "deep_research",
+        "description": "深度研究：針對一個主題自動展開多個子問題，分別搜尋後彙整成完整研究底稿，涵蓋背景、現況、數據、爭議點。當用戶要深入了解某議題、要做報告、要全面研究某主題時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "研究主題"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en", "zh-cn"], "description": "搜尋語言，預設 zh-tw"},
+            "depth": {"type": "integer", "description": "研究深度：幾個子問題，預設5，最多8"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "fact_check",
+        "description": "事實查核：對一個說法從多個來源交叉驗證，判斷真/假/爭議/待確認，並列出佐證與反駁資料。當用戶問某說法是否為真、要查謠言、要驗證某新聞時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "claim": {"type": "string", "description": "要查核的說法或聲明"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "查核語言，預設 zh-tw"}
+        }, "required": ["claim"]}
+    },
+    {
+        "name": "timeline_events",
+        "description": "時間軸整理：自動搜尋某事件/人物/議題的發展歷程，依時間順序排列成清晰的時間軸。當用戶問事情的來龍去脈、發展過程、歷史脈絡時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要整理時間軸的事件或主題"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "搜尋語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "sentiment_scan",
+        "description": "輿情掃描：同時蒐集新聞、社群討論對某話題的情緒傾向，給出正面/負面/中立比例及代表性觀點。當用戶問某事件的社會反應、民眾怎麼看、輿論風向時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要掃描輿情的話題"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "搜尋語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "compare_analysis",
+        "description": "多項比較分析：對 2–5 個選項（人物/產品/政策/公司）做結構化多維度比較，輸出比較表與建議。當用戶問A和B哪個好、要比較多個選項時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "items": {"type": "array", "items": {"type": "string"}, "description": "要比較的項目清單，2–5個"},
+            "dimensions": {"type": "array", "items": {"type": "string"}, "description": "比較維度，如['價格','效能','口碑']，不填則自動決定"},
+            "context": {"type": "string", "description": "比較背景說明，幫助更精準搜尋"}
+        }, "required": ["items"]}
+    },
+    {
+        "name": "pros_cons_analysis",
+        "description": "深入優缺點分析：針對某決策/產品/趨勢/政策，根據多方資料給出有根據的優點與缺點，並附上信心程度。當用戶要分析某事好不好、值不值得做時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "subject": {"type": "string", "description": "要分析的事物或決策"},
+            "context": {"type": "string", "description": "背景說明，如使用情境、目標族群"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["subject"]}
+    },
+    {
+        "name": "research_report",
+        "description": "研究報告生成：將輸入的主題自動蒐集資料，排版成「執行摘要→背景→數據→分析→結論與建議」格式的完整報告。當用戶要寫報告、要完整分析某主題、要有組織地呈現研究結果時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "報告主題"},
+            "purpose": {"type": "string", "description": "報告目的或受眾，如投資決策、學術研究、商業評估"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "opinion_writer",
+        "description": "觀點撰寫：基於搜尋到的資料，以特定立場（支持/反對/中立/批判性）撰寫有論據支撐的評論或意見文章。當用戶要聽小牛馬的看法、要小牛馬發表意見、要寫評論時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "評論主題"},
+            "stance": {"type": "string", "enum": ["支持", "反對", "中立", "批判"], "description": "觀點立場，預設中立"},
+            "style": {"type": "string", "enum": ["正式", "輕鬆", "犀利"], "description": "文風，預設正式"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "trend_forecast",
+        "description": "趨勢預測：根據現有數據、歷史規律與搜尋到的專家觀點，對某議題給出短中長期趨勢預測，並標示信心程度。當用戶問未來走向、某事會怎麼發展、要做預測時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要預測趨勢的主題"},
+            "timeframe": {"type": "string", "enum": ["短期(1年內)", "中期(1-3年)", "長期(3年以上)", "全部"], "description": "預測時間範圍，預設全部"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "debate_simulator",
+        "description": "辯論模擬：對一個議題從正方和反方分別深入論述，最後給出綜合判斷與個人立場。當用戶要深入探討爭議性議題、要聽正反兩方論點、要做辯論準備時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "motion": {"type": "string", "description": "辯論題目或議題，如「電動車將在10年內取代燃油車」"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["motion"]}
+    },
+    {
+        "name": "academic_search",
+        "description": "學術論文搜尋：從Google Scholar搜尋學術研究論文，讓觀點有學術依據。當用戶問某領域的研究結果、要引用學術資料、要了解科學界共識時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "搜尋關鍵字或研究問題"},
+            "field": {"type": "string", "description": "學科領域，如醫學、經濟學、心理學、電腦科學（選填）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 en（學術資料多為英文）"}
+        }, "required": ["query"]}
+    },
+    {
+        "name": "health_research",
+        "description": "健康資訊：搜尋症狀、疾病、藥物、飲食、運動等醫療健康資訊，整合多方資料給出說明（非醫療診斷）。當用戶問身體狀況、藥物資訊、健康建議時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "健康主題，如症狀名稱、藥物名稱、疾病名稱、健康問題"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "law_research",
+        "description": "法規查詢：搜尋台灣或國際法規條文、判例、法律解釋與實務見解。當用戶問法律問題、某行為是否合法、法規規定時使用（非法律意見）。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "法律主題，如勞基法工時、租屋糾紛、著作權、交通違規"},
+            "jurisdiction": {"type": "string", "description": "管轄地區，預設台灣，可指定美國、中國、歐盟等"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "person_research",
+        "description": "人物研究：搜尋某人的背景、經歷、成就、評價與爭議，統整後給出全面評價。當用戶問某人是誰、某人怎麼樣、要了解某位名人/政治人物/企業家時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "人物姓名"},
+            "context": {"type": "string", "description": "背景提示，如職業或國籍（選填）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["name"]}
+    },
+    {
+        "name": "company_research",
+        "description": "公司深度研究：整合財務數據、新聞動態、產品評價、競爭者分析，給出完整的公司評估報告。當用戶要了解一家公司、要評估值不值得合作/投資時使用（比股票工具更全面）。",
+        "input_schema": {"type": "object", "properties": {
+            "company": {"type": "string", "description": "公司名稱或股票代號"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["company"]}
+    },
+    {
+        "name": "product_review",
+        "description": "產品/服務評測彙整：蒐集多方評測與用戶評價，給出綜合評分與優缺點建議。當用戶問某產品好不好、要買什麼、某服務值不值得用時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "product": {"type": "string", "description": "產品或服務名稱"},
+            "category": {"type": "string", "description": "類別，如手機、筆電、餐廳、App（選填）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["product"]}
+    },
+    {
+        "name": "travel_research",
+        "description": "旅遊研究：蒐集目的地資訊、必去景點、消費水準、交通方式、注意事項，整合成旅遊指南。當用戶問去哪旅遊、某地怎麼玩、要規劃行程時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "destination": {"type": "string", "description": "目的地（城市或國家）"},
+            "days": {"type": "integer", "description": "旅遊天數（選填）"},
+            "style": {"type": "string", "description": "旅遊風格，如親子、背包客、豪華、美食（選填）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["destination"]}
+    },
+    {
+        "name": "job_market",
+        "description": "職涯市場分析：搜尋特定職位的薪資行情、市場需求、必備技能與未來趨勢。當用戶問某職業薪水、該學什麼技能、某產業未來前景時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "job_title": {"type": "string", "description": "職位名稱，如軟體工程師、行銷企劃、數據分析師"},
+            "location": {"type": "string", "description": "地區，如台灣、台北、美國（選填，預設台灣）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["job_title"]}
+    },
+    {
+        "name": "impact_analysis",
+        "description": "影響力分析：分析某事件、政策或決策對不同群體（個人/企業/社會/經濟）的短中長期影響。當用戶問某事會有什麼影響、某政策好不好、某決定的後果時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "event": {"type": "string", "description": "要分析的事件、政策或決策"},
+            "scope": {"type": "array", "items": {"type": "string"}, "description": "影響範圍，如['個人','企業','社會','經濟']，不填則自動決定"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["event"]}
+    },
+    {
+        "name": "scenario_planning",
+        "description": "情境規劃：針對一個問題或決策，設計樂觀、基準、悲觀三種未來情境，並分析各情境的發生條件與因應方式。當用戶要預測未來、要規劃應對方案時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要規劃情境的主題或問題"},
+            "horizon": {"type": "string", "description": "時間範圍，如1年、5年、10年（選填）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "decision_helper",
+        "description": "決策輔助：針對一個決策問題蒐集相關資訊，分析各選項的優劣，最後給出結構化建議與行動步驟。當用戶面臨選擇、問該怎麼辦、要做重要決定時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "question": {"type": "string", "description": "決策問題，如「要不要換工作」「要不要買這支股票」"},
+            "options": {"type": "array", "items": {"type": "string"}, "description": "已有的選項（選填，不填則自動搜尋）"},
+            "criteria": {"type": "array", "items": {"type": "string"}, "description": "決策考量標準，如['薪資','成長空間','工作環境']（選填）"}
+        }, "required": ["question"]}
+    },
+    {
+        "name": "devil_advocate",
+        "description": "魔鬼代言人：刻意從相反角度挑戰一個觀點或計劃，找出最強的反駁論點，讓思考更嚴謹。當用戶要測試自己想法、要找漏洞、要做最壞打算時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "position": {"type": "string", "description": "要被挑戰的觀點、計劃或決策"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["position"]}
+    },
+    {
+        "name": "summary_writer",
+        "description": "多來源摘要：搜尋多篇文章後壓縮成精華重點，讓大量資料快速被消化。當用戶要快速了解某主題、要把長資料變短、要整理重點時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要摘要的主題或關鍵字"},
+            "max_points": {"type": "integer", "description": "最多幾個重點，預設7"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "key_insights",
+        "description": "洞察萃取：從大量搜尋資料中篩選出最有價值的 3–5 個核心洞察，去蕪存菁。當用戶要找關鍵發現、要知道最重要的幾點、要提煉精華時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要萃取洞察的主題"},
+            "count": {"type": "integer", "description": "萃取幾個洞察，預設5"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "bias_detector",
+        "description": "偏見偵測：分析某議題相關資訊來源的立場與意識形態偏向，標記哪些資料可能有偏見，確保觀點客觀。當用戶要分辨資訊是否中立、要找出媒體立場、要確認資料可信度時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要檢測偏見的議題"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "second_opinion",
+        "description": "多專家視角：模擬不同領域專家（經濟學家、心理學家、工程師、醫師等）對同一問題各自給出看法，呈現多元觀點。當用戶要聽不同角度意見、要知道各領域專家怎麼看時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "question": {"type": "string", "description": "要徵詢意見的問題或議題"},
+            "experts": {"type": "array", "items": {"type": "string"}, "description": "指定專家角色，如['經濟學家','心理學家','工程師']，不填則自動決定"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["question"]}
+    },
+    {
+        "name": "brainstorm",
+        "description": "腦力激盪：針對一個問題搜尋現有解法後，結合創意產生多元方案與新視角。當用戶要想辦法、要找解法、要創意發想時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "problem": {"type": "string", "description": "要腦力激盪的問題或挑戰"},
+            "count": {"type": "integer", "description": "產生幾個方案，預設8"},
+            "style": {"type": "string", "enum": ["實用", "創意", "顛覆"], "description": "發想風格，預設實用"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["problem"]}
+    },
+    {
+        "name": "benchmark_analysis",
+        "description": "標竿分析：找出該領域最佳實踐案例，與目標對象比較後給出具體改進方向。當用戶要學習最佳做法、要知道業界標準、要找對標對象時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "subject": {"type": "string", "description": "要進行標竿分析的對象（公司、產品、做法等）"},
+            "industry": {"type": "string", "description": "所屬產業或領域（選填）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["subject"]}
+    },
+    {
+        "name": "steel_man",
+        "description": "鋼人論證：先把對方觀點強化到最強版本後，再表達自己的立場與反駁。比魔鬼代言人更進階，避免打稻草人，讓論述更有說服力。當用戶要深度回應某觀點、要理性辯論、要展現思想深度時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "opposing_view": {"type": "string", "description": "要被鋼人化的對立觀點"},
+            "own_position": {"type": "string", "description": "自己的立場（選填，不填則給出中立分析）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["opposing_view"]}
+    },
+    {
+        "name": "socratic_questioning",
+        "description": "蘇格拉底式提問：針對一個主題產生一系列層層遞進的深層問題，引導更清晰的思考，而不只是給答案。當用戶要深入探索某議題、要訓練批判思考、要找到問題的核心時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要深入探索的主題或議題"},
+            "depth": {"type": "integer", "description": "提問層數，預設5"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "analogy_maker",
+        "description": "類比說明：把複雜概念、技術原理或抽象看法，用生活化的類比讓人一聽就懂。當用戶要解釋難懂的東西、要讓想法更有說服力、要找到好的比喻時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "concept": {"type": "string", "description": "要類比說明的複雜概念或想法"},
+            "audience": {"type": "string", "description": "目標受眾，如一般大眾、小學生、商業人士（選填）"},
+            "count": {"type": "integer", "description": "產生幾個類比，預設3"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["concept"]}
+    },
+    {
+        "name": "narrative_builder",
+        "description": "敘事架構：把資料與觀點包裝成「問題→衝突→洞察→結論」的有力故事結構，讓想法更有說服力與感染力。當用戶要寫有說服力的文章、要讓報告更吸引人時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "要建構敘事的主題"},
+            "key_message": {"type": "string", "description": "核心訊息或結論（選填）"},
+            "audience": {"type": "string", "description": "目標受眾（選填）"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["topic"]}
+    },
+    {
+        "name": "critique_writer",
+        "description": "批判性評析：對一篇文章、政策、作品、計劃或想法進行有深度的評論，指出優點、盲點、假設前提與改進方向。當用戶要評論某事物、要寫書評影評、要深度分析一個計劃時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "subject": {"type": "string", "description": "要評析的對象（作品名、政策名、想法描述）"},
+            "type": {"type": "string", "enum": ["文章", "政策", "作品", "計劃", "觀點", "其他"], "description": "評析類型，預設觀點"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["subject"]}
+    },
+    {
+        "name": "position_statement",
+        "description": "立場聲明：針對爭議議題清楚表明立場，並給出「論點→證據→反駁→結論」的系統性多層次論證。當用戶要寫有說服力的意見、要公開表態、要寫辯論稿時使用。",
+        "input_schema": {"type": "object", "properties": {
+            "issue": {"type": "string", "description": "爭議議題"},
+            "stance": {"type": "string", "enum": ["支持", "反對", "有條件支持"], "description": "立場"},
+            "lang": {"type": "string", "enum": ["zh-tw", "en"], "description": "語言，預設 zh-tw"}
+        }, "required": ["issue", "stance"]}
     },
     {
         "name": "get_candlestick_chart",
@@ -2970,6 +3677,3075 @@ def fetch_stock(symbol: str, period: str = "1mo") -> str:
         return f"查詢「{symbol}」失敗：{str(e)}"
 
 
+def fetch_ashare(code: str, period: str = "1mo") -> str:
+    """A股（滬深）/ 港股查詢，自動判斷市場並加後綴"""
+    try:
+        import yfinance as yf
+        code = code.strip().lstrip("0" * 0)  # 保留原始代號
+
+        # 判斷市場：6位數字 → A股（6開頭=上海.SS，其他=深圳.SZ）；4位以下 → 港股.HK
+        if code.isdigit():
+            if len(code) == 6:
+                symbol = f"{code}.SS" if code.startswith("6") else f"{code}.SZ"
+                market = "A股"
+            else:
+                symbol = f"{code.zfill(4)}.HK"
+                market = "港股"
+        else:
+            symbol = code  # 使用者直接提供後綴
+            market = "未知"
+
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period="3mo")
+
+        if hist.empty:
+            return f"找不到「{code}」的數據，請確認代號是否正確。"
+
+        name = info.get("longName") or info.get("shortName") or code
+        currency = info.get("currency", "")
+        current = hist["Close"].iloc[-1]
+        prev = hist["Close"].iloc[-2] if len(hist) > 1 else current
+        change = current - prev
+        change_pct = (change / prev * 100) if prev else 0
+        arrow = "▲" if change >= 0 else "▼"
+        volume = hist["Volume"].iloc[-1]
+
+        ma5  = hist["Close"].tail(5).mean()
+        ma20 = hist["Close"].tail(20).mean()
+        ma60 = hist["Close"].tail(60).mean() if len(hist) >= 60 else hist["Close"].mean()
+        rsi  = calc_rsi(hist["Close"]) if len(hist) >= 15 else None
+
+        if ma5 > ma20 > ma60:
+            trend = "強勢多頭 📈"
+        elif ma5 < ma20 < ma60:
+            trend = "強勢空頭 📉"
+        elif ma5 > ma20:
+            trend = "短線偏多 🔼"
+        else:
+            trend = "短線偏空 🔽"
+
+        rsi_note = ""
+        if rsi is not None:
+            if rsi >= 80:   rsi_note = "（嚴重超買 ⚠️）"
+            elif rsi >= 70: rsi_note = "（超買）"
+            elif rsi <= 20: rsi_note = "（嚴重超賣 💡）"
+            elif rsi <= 30: rsi_note = "（超賣）"
+            else:           rsi_note = "（中性）"
+
+        week52_high = info.get("fiftyTwoWeekHigh")
+        week52_low  = info.get("fiftyTwoWeekLow")
+        market_cap  = info.get("marketCap")
+        pe_ratio    = info.get("trailingPE")
+
+        result = (
+            f"🇨🇳 {name}（{market} {code}）\n"
+            f"💰 現價：{current:.2f} {currency}  {arrow} {abs(change):.2f} ({change_pct:+.2f}%)\n"
+            f"📦 成交量：{volume:,}\n"
+            f"\n── 技術指標 ──\n"
+            f"MA5：{ma5:.2f}　MA20：{ma20:.2f}　MA60：{ma60:.2f}\n"
+            f"趨勢：{trend}\n"
+        )
+        if rsi is not None:
+            result += f"RSI(14)：{rsi}{rsi_note}\n"
+        if week52_high and week52_low:
+            result += f"52週高低：{week52_low:.2f} ~ {week52_high:.2f}\n"
+        result += "\n── 基本面 ──\n"
+        if market_cap:
+            mc_str = f"{market_cap/1e12:.2f}兆" if market_cap >= 1e12 else f"{market_cap/1e8:.0f}億"
+            result += f"市值：{mc_str} {currency}\n"
+        if pe_ratio:
+            result += f"本益比：{pe_ratio:.1f}\n"
+
+        return result.strip()
+    except Exception as e:
+        return f"查詢「{code}」失敗：{e}"
+
+
+def fetch_cn_news(source: str = "all", count: int = 5) -> str:
+    """抓取中國大陸新聞 RSS"""
+    try:
+        import feedparser
+        count = min(max(count, 1), 10)
+        feeds = {
+            "xinhua":  ("新華社",   "https://feeds.xinhuanet.com/news/world/rss"),
+            "people":  ("人民網",   "http://www.people.com.cn/rss/politics.xml"),
+            "36kr":    ("36氪",     "https://36kr.com/feed"),
+            "caixin":  ("財新網",   "https://www.caixin.com/rss/home.xml"),
+        }
+        # 備用可靠來源
+        fallback_feeds = {
+            "xinhua":  ("新華社",   "https://rsshub.app/xinhua/world"),
+            "people":  ("人民網",   "https://rsshub.app/people/politics"),
+            "36kr":    ("36氪",     "https://rsshub.app/36kr/news/latest"),
+            "caixin":  ("財新網",   "https://rsshub.app/caixin/blog"),
+        }
+        sources = list(feeds.keys()) if source == "all" else [source]
+        results = []
+        for src in sources:
+            if src not in feeds:
+                continue
+            label, url = feeds[src]
+            try:
+                feed = feedparser.parse(url)
+                items = feed.entries[:count]
+                if not items:
+                    # 嘗試備用
+                    label2, url2 = fallback_feeds.get(src, (label, url))
+                    feed = feedparser.parse(url2)
+                    items = feed.entries[:count]
+                if not items:
+                    results.append(f"📰 {label}：暫無資料")
+                    continue
+                lines = [f"📰 {label}"]
+                for i, entry in enumerate(items, 1):
+                    title = entry.get("title", "無標題")
+                    lines.append(f"{i}. {title}")
+                results.append("\n".join(lines))
+            except Exception:
+                results.append(f"📰 {label}：抓取失敗")
+        return "\n\n".join(results) if results else "無法取得中國新聞"
+    except Exception as e:
+        return f"中國新聞查詢失敗：{e}"
+
+
+def fetch_china_search(query: str, category: str = "其他", count: int = 6) -> str:
+    """全方位中國大陸資訊搜尋：旅遊/美食/文化/戲劇/演員/工作等"""
+    try:
+        count = min(max(count, 1), 10)
+        results = []
+
+        # 1. Google News（中文簡體，抓最新新聞/資訊）
+        try:
+            import feedparser
+            news_query = query
+            # 依分類補充關鍵字讓搜尋更精準
+            category_hints = {
+                "旅遊": f"{query} 旅遊攻略 景點",
+                "美食": f"{query} 美食 餐廳 推薦",
+                "文化風俗": f"{query} 文化 習俗 傳統",
+                "戲劇影視": f"{query} 電視劇 電影 劇情",
+                "演員明星": f"{query} 演員 明星 近況",
+                "工作生活": f"{query} 工作 薪資 生活",
+                "城市介紹": f"{query} 城市 介紹 特色",
+                "歷史": f"{query} 歷史 背景",
+                "科技": f"{query} 科技 技術",
+                "新聞時事": f"{query} 最新 新聞",
+            }
+            news_query = category_hints.get(category, query)
+            url = f"https://news.google.com/rss/search?q={urllib.parse.quote(news_query)}&hl=zh-Hans&gl=CN&ceid=CN:zh-Hans"
+            feed = feedparser.parse(url)
+            if feed.entries:
+                lines = [f"📰 Google 新聞（{category}）"]
+                for i, entry in enumerate(feed.entries[:min(count, 5)], 1):
+                    title = entry.get("title", "").split(" - ")[0]  # 去掉媒體名稱
+                    pub = entry.get("published", "")[:16]
+                    lines.append(f"{i}. {title}（{pub}）")
+                results.append("\n".join(lines))
+        except Exception:
+            pass
+
+        # 2. DuckDuckGo 搜尋（zh-cn 地區，含陸網資料）
+        try:
+            from ddgs import DDGS
+            ddg_results = []
+            with DDGS() as ddgs:
+                for r in ddgs.text(query, region="zh-cn", max_results=count):
+                    title = r.get("title", "")
+                    body  = r.get("body", "")[:150]
+                    href  = r.get("href", "")
+                    ddg_results.append(f"• {title}\n  {body}\n  {href}")
+            if ddg_results:
+                results.append(f"🔍 網路搜尋結果\n" + "\n\n".join(ddg_results))
+        except Exception:
+            pass
+
+        # 3. Wikipedia 中文（適合文化/歷史/人物類）
+        if category in ("文化風俗", "歷史", "演員明星", "城市介紹", "戲劇影視"):
+            try:
+                wiki_url = f"https://zh.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(query.split()[0])}"
+                resp = requests.get(wiki_url, timeout=8)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    extract = data.get("extract", "")
+                    title_w = data.get("title", "")
+                    if extract:
+                        results.append(f"📖 Wikipedia：{title_w}\n{extract[:500]}")
+            except Exception:
+                pass
+
+        if not results:
+            return f"找不到「{query}」的相關資訊，請嘗試更換關鍵字"
+
+        return "\n\n" + "─" * 25 + "\n\n".join(results)
+
+    except Exception as e:
+        return f"中國資訊搜尋失敗：{e}"
+
+
+def fetch_institutional(symbol: str = "", date: str = "") -> str:
+    """台股三大法人買賣超"""
+    try:
+        import datetime
+        if not date:
+            date = datetime.date.today().strftime("%Y%m%d")
+        headers = {"User-Agent": "Mozilla/5.0"}
+
+        if symbol:
+            # 個股三大法人
+            url = f"https://www.twse.com.tw/rwd/zh/fund/T86?response=json&date={date}&selectType=ALL"
+            resp = requests.get(url, timeout=10, headers=headers)
+            data = resp.json()
+            if data.get("stat") != "OK":
+                return f"查無資料（{date}，可能為非交易日）"
+            rows = data.get("data", [])
+            target = None
+            for row in rows:
+                if str(row[0]).strip() == str(symbol).strip():
+                    target = row
+                    break
+            if not target:
+                return f"找不到 {symbol} 的三大法人資料"
+            foreign = int(target[4].replace(",", "").replace("+", ""))
+            trust   = int(target[10].replace(",", "").replace("+", ""))
+            dealer  = int(target[13].replace(",", "").replace("+", "")) if len(target) > 13 else 0
+            total   = foreign + trust + dealer
+            arrow = lambda v: "▲" if v >= 0 else "▼"
+            return (
+                f"📊 {symbol} 三大法人（{date[:4]}/{date[4:6]}/{date[6:]}）\n"
+                f"外資：{arrow(foreign)} {abs(foreign):,} 張\n"
+                f"投信：{arrow(trust)} {abs(trust):,} 張\n"
+                f"自營：{arrow(dealer)} {abs(dealer):,} 張\n"
+                f"合計：{arrow(total)} {abs(total):,} 張"
+            )
+        else:
+            # 市場整體
+            url = f"https://www.twse.com.tw/rwd/zh/fund/BFI82U?response=json&type=day&dayDate={date}"
+            resp = requests.get(url, timeout=10, headers=headers)
+            data = resp.json()
+            if data.get("stat") != "OK":
+                return f"查無三大法人整體資料（{date}，可能為非交易日）"
+            rows = data.get("data", [])
+            lines = [f"📊 台股三大法人整體買賣超（{date[:4]}/{date[4:6]}/{date[6:]}）\n"]
+            for row in rows:
+                name = row[0]
+                buy  = row[1].replace(",", "")
+                sell = row[2].replace(",", "")
+                diff = row[3].replace(",", "")
+                val  = int(diff.replace("+", "")) if diff.replace("+","").replace("-","").isdigit() else 0
+                arrow = "▲" if val >= 0 else "▼"
+                lines.append(f"{name}：{arrow} {diff} 元")
+            return "\n".join(lines)
+    except Exception as e:
+        return f"三大法人查詢失敗：{e}"
+
+
+def fetch_sector(market: str = "us") -> str:
+    """產業類股表現"""
+    try:
+        import yfinance as yf
+        if market == "us":
+            sectors = {
+                "科技": "XLK", "金融": "XLF", "醫療": "XLV", "能源": "XLE",
+                "工業": "XLI", "消費必需": "XLP", "消費選擇": "XLY",
+                "公用事業": "XLU", "材料": "XLB", "通訊": "XLC", "房地產": "XLRE"
+            }
+        else:
+            sectors = {
+                "半導體": "00891.TW", "金融": "0055.TW", "航運": "00895.TW",
+                "電動車": "00893.TW", "ESG": "00878.TW", "高息": "00919.TW",
+                "科技": "0052.TW", "傳產": "0054.TW"
+            }
+
+        results = []
+        for name, sym in sectors.items():
+            try:
+                hist = yf.Ticker(sym).history(period="2d")
+                if len(hist) >= 2:
+                    chg = (hist["Close"].iloc[-1] / hist["Close"].iloc[-2] - 1) * 100
+                    arrow = "▲" if chg >= 0 else "▼"
+                    results.append((chg, f"{arrow} {name}：{chg:+.2f}%"))
+            except Exception:
+                pass
+
+        results.sort(key=lambda x: x[0], reverse=True)
+        market_label = "美股" if market == "us" else "台股"
+        lines = [f"🏭 {market_label}產業類股今日表現\n"]
+        for _, line in results:
+            lines.append(line)
+        if results:
+            lines.append(f"\n最強：{results[0][1].split('：')[0].strip()}")
+            lines.append(f"最弱：{results[-1][1].split('：')[0].strip()}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"類股查詢失敗：{e}"
+
+
+def fetch_commodity(items: list = None) -> str:
+    """黃金/原油/原物料報價"""
+    try:
+        import yfinance as yf
+        commodity_map = {
+            "gold":   ("黃金",   "GC=F",  "USD/盎司"),
+            "oil":    ("WTI原油", "CL=F",  "USD/桶"),
+            "silver": ("白銀",   "SI=F",  "USD/盎司"),
+            "copper": ("銅",     "HG=F",  "USD/磅"),
+            "natgas": ("天然氣", "NG=F",  "USD/MMBtu"),
+            "wheat":  ("小麥",   "ZW=F",  "USd/英斗"),
+            "corn":   ("玉米",   "ZC=F",  "USd/英斗"),
+        }
+        if not items or "all" in items:
+            items = list(commodity_map.keys())
+
+        lines = ["🛢 大宗商品報價\n"]
+        for key in items:
+            if key not in commodity_map:
+                continue
+            name, sym, unit = commodity_map[key]
+            try:
+                hist = yf.Ticker(sym).history(period="2d")
+                if hist.empty:
+                    continue
+                price = hist["Close"].iloc[-1]
+                if len(hist) >= 2:
+                    chg = (price / hist["Close"].iloc[-2] - 1) * 100
+                    arrow = "▲" if chg >= 0 else "▼"
+                    lines.append(f"{name}：{price:.2f} {unit}  {arrow} {chg:+.2f}%")
+                else:
+                    lines.append(f"{name}：{price:.2f} {unit}")
+            except Exception:
+                pass
+        return "\n".join(lines)
+    except Exception as e:
+        return f"商品報價失敗：{e}"
+
+
+def fetch_bond_yield() -> str:
+    """美國公債殖利率"""
+    try:
+        import yfinance as yf
+        bonds = {
+            "3個月": "^IRX",
+            "2年":   "2YY=F",
+            "5年":   "^FVX",
+            "10年":  "^TNX",
+            "30年":  "^TYX",
+        }
+        lines = ["🏦 美國公債殖利率\n"]
+        yields = {}
+        for label, sym in bonds.items():
+            try:
+                hist = yf.Ticker(sym).history(period="2d")
+                if hist.empty:
+                    continue
+                val = hist["Close"].iloc[-1]
+                yields[label] = val
+                if len(hist) >= 2:
+                    chg = val - hist["Close"].iloc[-2]
+                    arrow = "▲" if chg >= 0 else "▼"
+                    lines.append(f"{label}：{val:.3f}%  {arrow} {chg:+.3f}%")
+                else:
+                    lines.append(f"{label}：{val:.3f}%")
+            except Exception:
+                pass
+
+        # 利差分析
+        if "2年" in yields and "10年" in yields:
+            spread = yields["10年"] - yields["2年"]
+            curve = "正斜率（景氣正常）" if spread > 0 else "倒掛（衰退警訊 ⚠️）"
+            lines.append(f"\n10Y-2Y 利差：{spread:+.3f}%  {curve}")
+        if "3個月" in yields and "10年" in yields:
+            spread2 = yields["10年"] - yields["3個月"]
+            curve2 = "正常" if spread2 > 0 else "倒掛 ⚠️"
+            lines.append(f"10Y-3M 利差：{spread2:+.3f}%  {curve2}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"殖利率查詢失敗：{e}"
+
+
+def fetch_dividend_calendar(symbol: str) -> str:
+    """除權息資訊"""
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        name = info.get("longName") or info.get("shortName") or symbol
+        currency = info.get("currency", "")
+
+        div_yield    = info.get("dividendYield", 0) or 0
+        div_rate     = info.get("dividendRate", 0) or 0
+        ex_date      = info.get("exDividendDate")
+        last_div     = info.get("lastDividendValue", 0) or 0
+        payout_ratio = info.get("payoutRatio", 0) or 0
+        price        = info.get("currentPrice") or info.get("regularMarketPrice", 0)
+
+        lines = [f"💰 {name} ({symbol}) 除權息資訊\n"]
+        if div_rate:
+            lines.append(f"年配息：{div_rate:.4f} {currency}")
+        if div_yield:
+            lines.append(f"殖利率：{div_yield*100:.2f}%")
+        if last_div:
+            lines.append(f"上次配息：{last_div:.4f} {currency}")
+        if ex_date:
+            import datetime
+            ex_dt = datetime.datetime.fromtimestamp(ex_date).strftime("%Y-%m-%d")
+            lines.append(f"除息日：{ex_dt}")
+        if payout_ratio:
+            lines.append(f"配息率：{payout_ratio*100:.1f}%")
+
+        # 歷史配息紀錄
+        try:
+            divs = ticker.dividends
+            if divs is not None and not divs.empty:
+                lines.append("\n近5次配息：")
+                for dt, val in divs.tail(5).iloc[::-1].items():
+                    lines.append(f"  {str(dt)[:10]}：{val:.4f} {currency}")
+        except Exception:
+            pass
+
+        return "\n".join(lines) if len(lines) > 1 else f"{symbol} 無配息資料"
+    except Exception as e:
+        return f"除權息查詢失敗：{e}"
+
+
+def fetch_stock_screener(criteria: str, market: str = "us") -> str:
+    """選股篩選器（用 Claude 解讀條件 + yfinance 驗證）"""
+    try:
+        import yfinance as yf
+
+        # 美股用 S&P500 成分股，台股用常見大型股
+        if market == "us":
+            # 取 S&P500 部分成分股做示範
+            candidates = [
+                "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","BRK-B","JPM","V",
+                "XOM","UNH","JNJ","WMT","MA","PG","HD","CVX","MRK","ABBV",
+                "KO","PEP","BAC","PFE","AVGO","COST","TMO","MCD","ABT","CRM",
+                "ACN","LIN","DHR","TXN","NEE","QCOM","PM","HON","IBM","GE",
+                "ORCL","AMGN","SBUX","CAT","INTU","AMD","ISRG","NOW","MDLZ","AXP"
+            ]
+        else:
+            candidates = [
+                "2330.TW","2317.TW","2454.TW","2412.TW","2308.TW","2303.TW",
+                "2881.TW","2882.TW","2886.TW","2891.TW","2002.TW","1301.TW",
+                "0050.TW","0056.TW","00878.TW","00919.TW","2603.TW","2609.TW",
+                "3711.TW","2379.TW","3008.TW","2395.TW","4938.TW","2376.TW"
+            ]
+
+        results = []
+        # 解析條件關鍵字
+        want_high_div   = any(k in criteria for k in ["殖利率", "配息", "dividend"])
+        want_low_pe     = any(k in criteria for k in ["本益比", "PE", "pe"])
+        want_high_roe   = any(k in criteria for k in ["ROE", "roe", "股東權益"])
+        want_top_gain   = any(k in criteria for k in ["漲最多", "漲幅", "漲停", "上漲"])
+        want_large_cap  = any(k in criteria for k in ["市值", "大型", "large"])
+
+        for sym in candidates[:30]:  # 限制查詢數量避免超時
+            try:
+                info = yf.Ticker(sym).info
+                name = info.get("shortName", sym)
+                price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
+                pe    = info.get("trailingPE", 0) or 0
+                div_y = (info.get("dividendYield", 0) or 0) * 100
+                roe   = (info.get("returnOnEquity", 0) or 0) * 100
+                cap   = info.get("marketCap", 0) or 0
+                chg   = info.get("regularMarketChangePercent", 0) or 0
+
+                score = 0
+                if want_high_div and div_y > 3:   score += div_y
+                if want_low_pe   and 0 < pe < 20: score += (20 - pe)
+                if want_high_roe and roe > 15:     score += roe / 10
+                if want_top_gain:                  score += chg
+                if want_large_cap and cap > 1e11:  score += 1
+
+                if score > 0:
+                    results.append((score, sym, name, price, pe, div_y, roe, chg, cap))
+            except Exception:
+                pass
+
+        results.sort(reverse=True)
+        lines = [f"🔎 選股結果（{criteria}）\n"]
+        for i, (_, sym, name, price, pe, div_y, roe, chg, cap) in enumerate(results[:10], 1):
+            cap_str = f"{cap/1e12:.1f}兆" if cap >= 1e12 else f"{cap/1e8:.0f}億"
+            line = f"{i}. {name}（{sym}）  {chg:+.1f}%"
+            if div_y: line += f"  殖利率{div_y:.1f}%"
+            if pe:    line += f"  PE{pe:.0f}"
+            if roe:   line += f"  ROE{roe:.0f}%"
+            lines.append(line)
+        if not results:
+            lines.append("找不到符合條件的股票，試著調整條件")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"選股篩選失敗：{e}"
+
+
+def fetch_margin_trading(symbol: str, date: str = "") -> str:
+    """台股融資融券餘額"""
+    try:
+        import datetime
+        if not date:
+            date = datetime.date.today().strftime("%Y%m%d")
+        # TWSE 融資融券 API
+        url = f"https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN?response=json&date={date}&selectType=ALL"
+        resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        data = resp.json()
+        if data.get("stat") != "OK":
+            return f"查無融資融券資料（{date}，可能為非交易日）"
+        rows = data.get("data", [])
+        target = None
+        for row in rows:
+            if str(row[0]).strip() == str(symbol).strip():
+                target = row
+                break
+        if not target:
+            return f"找不到 {symbol} 的融資融券資料"
+
+        # 欄位：代號, 名稱, 融資買進, 融資賣出, 融資現金償還, 融資餘額, 融資限額,
+        #        融券賣出, 融券買進, 融券現券償還, 融券餘額, 融券限額, 資券互抵
+        name     = target[1]
+        loan_bal = target[5].replace(",", "")   # 融資餘額（千股）
+        short_bal= target[10].replace(",", "")  # 融券餘額（千股）
+        loan_buy = target[2].replace(",", "")
+        loan_sell= target[3].replace(",", "")
+        short_sell=target[7].replace(",", "")
+        short_buy= target[8].replace(",", "")
+
+        return (
+            f"📋 {name}（{symbol}）融資融券（{date[:4]}/{date[4:6]}/{date[6:]}）\n\n"
+            f"── 融資（散戶多單）──\n"
+            f"餘額：{loan_bal} 千股\n"
+            f"今買：{loan_buy} 千股　今賣：{loan_sell} 千股\n\n"
+            f"── 融券（放空）──\n"
+            f"餘額：{short_bal} 千股\n"
+            f"今賣：{short_sell} 千股　今買：{short_buy} 千股\n\n"
+            f"資券比：{int(loan_bal)/(int(short_bal) if int(short_bal) > 0 else 1):.1f}x"
+            if loan_bal.isdigit() and short_bal.isdigit() else ""
+        )
+    except Exception as e:
+        return f"融資融券查詢失敗：{e}"
+
+
+def fetch_options(symbol: str, expiry: str = "") -> str:
+    """選擇權鏈資料"""
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        expirations = ticker.options
+        if not expirations:
+            return f"{symbol} 無選擇權資料"
+
+        exp = expiry if expiry in expirations else expirations[0]
+        chain = ticker.option_chain(exp)
+        calls = chain.calls
+        puts  = chain.puts
+
+        price = ticker.info.get("currentPrice") or ticker.info.get("regularMarketPrice", 0)
+
+        # 取最接近現價的 5 個履約價
+        calls = calls.iloc[(calls["strike"] - price).abs().argsort()[:5]].sort_values("strike")
+        puts  = puts.iloc[(puts["strike"]  - price).abs().argsort()[:5]].sort_values("strike")
+
+        lines = [f"📈 {symbol} 選擇權（到期：{exp}，現價：{price:.2f}）\n"]
+        lines.append("── Call（買權）──")
+        for _, row in calls.iterrows():
+            iv = f"IV {row.get('impliedVolatility', 0)*100:.0f}%" if row.get("impliedVolatility") else ""
+            oi = f"OI {row.get('openInterest', 0):,}" if row.get("openInterest") else ""
+            lines.append(f"  履約 {row['strike']:.0f}：{row.get('lastPrice', 0):.2f}  {iv}  {oi}")
+
+        lines.append("\n── Put（賣權）──")
+        for _, row in puts.iterrows():
+            iv = f"IV {row.get('impliedVolatility', 0)*100:.0f}%" if row.get("impliedVolatility") else ""
+            oi = f"OI {row.get('openInterest', 0):,}" if row.get("openInterest") else ""
+            lines.append(f"  履約 {row['strike']:.0f}：{row.get('lastPrice', 0):.2f}  {iv}  {oi}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"選擇權查詢失敗：{e}"
+
+
+def fetch_futures(items: list = None) -> str:
+    """主要期貨報價"""
+    try:
+        import yfinance as yf
+        futures_map = {
+            "sp500":  ("S&P500期貨",    "ES=F"),
+            "nasdaq": ("那斯達克期貨",  "NQ=F"),
+            "dow":    ("道瓊期貨",      "YM=F"),
+            "gold":   ("黃金期貨",      "GC=F"),
+            "oil":    ("WTI原油期貨",   "CL=F"),
+            "taiex":  ("台指期",        "TAIEX.TW"),
+        }
+        if not items or "all" in items:
+            items = list(futures_map.keys())
+
+        lines = ["📊 期貨報價\n"]
+        for key in items:
+            if key not in futures_map:
+                continue
+            name, sym = futures_map[key]
+            try:
+                hist = yf.Ticker(sym).history(period="2d")
+                if hist.empty:
+                    continue
+                price = hist["Close"].iloc[-1]
+                if len(hist) >= 2:
+                    chg = (price / hist["Close"].iloc[-2] - 1) * 100
+                    arrow = "▲" if chg >= 0 else "▼"
+                    lines.append(f"{name}：{price:,.2f}  {arrow} {chg:+.2f}%")
+                else:
+                    lines.append(f"{name}：{price:,.2f}")
+            except Exception:
+                pass
+        return "\n".join(lines)
+    except Exception as e:
+        return f"期貨查詢失敗：{e}"
+
+
+def fetch_ipo(count: int = 10) -> str:
+    """近期 IPO 行事曆"""
+    try:
+        import feedparser
+        count = min(count, 20)
+        results = []
+
+        # 用 Google 新聞搜尋 IPO 資訊
+        url = f"https://news.google.com/rss/search?q=IPO+新股+上市&hl=zh-Hant&gl=TW&ceid=TW:zh-Hant"
+        feed = feedparser.parse(url)
+        lines = ["🆕 近期 IPO / 新股資訊\n"]
+        for entry in feed.entries[:count]:
+            title = entry.get("title", "").split(" - ")[0]
+            pub   = entry.get("published", "")[:16]
+            lines.append(f"• {title}（{pub}）")
+
+        # 補充美股 IPO（用 DuckDuckGo）
+        try:
+            from ddgs import DDGS
+            with DDGS() as ddgs:
+                for r in ddgs.text("upcoming IPO 2026 stock market", region="us-en", max_results=5):
+                    title = r.get("title", "")
+                    body  = r.get("body", "")[:100]
+                    lines.append(f"🇺🇸 {title}\n   {body}")
+        except Exception:
+            pass
+
+        return "\n".join(lines) if len(lines) > 1 else "暫無 IPO 資訊"
+    except Exception as e:
+        return f"IPO 查詢失敗：{e}"
+
+
+def fetch_backtest(symbol: str, strategy: str = "ma_cross", period: str = "2y") -> str:
+    """回測投資策略"""
+    try:
+        import yfinance as yf
+        import numpy as np
+
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=period)
+        if hist.empty or len(hist) < 30:
+            return f"找不到 {symbol} 的歷史資料"
+
+        name = ticker.info.get("shortName") or symbol
+        close = hist["Close"]
+        n = len(close)
+
+        if strategy == "buy_hold":
+            total_ret = (close.iloc[-1] / close.iloc[0] - 1) * 100
+            annual_ret = ((close.iloc[-1] / close.iloc[0]) ** (252 / n) - 1) * 100
+            max_dd = ((close / close.cummax()) - 1).min() * 100
+            return (
+                f"📈 {name}（{symbol}）買進持有回測（{period}）\n\n"
+                f"起始價：{close.iloc[0]:.2f}\n"
+                f"結束價：{close.iloc[-1]:.2f}\n"
+                f"總報酬：{total_ret:+.2f}%\n"
+                f"年化報酬：{annual_ret:+.2f}%\n"
+                f"最大回撤：{max_dd:.2f}%"
+            )
+
+        elif strategy == "ma_cross":
+            ma5  = close.rolling(5).mean()
+            ma20 = close.rolling(20).mean()
+            signal = (ma5 > ma20).astype(int)
+            signal_prev = signal.shift(1)
+            buy_signals  = (signal == 1) & (signal_prev == 0)
+            sell_signals = (signal == 0) & (signal_prev == 1)
+
+            trades = []
+            buy_price = None
+            for i in range(len(close)):
+                if buy_signals.iloc[i] and buy_price is None:
+                    buy_price = close.iloc[i]
+                elif sell_signals.iloc[i] and buy_price is not None:
+                    ret = (close.iloc[i] / buy_price - 1) * 100
+                    trades.append(ret)
+                    buy_price = None
+
+            if not trades:
+                return f"{symbol} 在 {period} 內無均線交叉訊號"
+
+            wins = sum(1 for t in trades if t > 0)
+            total_ret = sum(trades)
+            avg_ret   = total_ret / len(trades)
+            win_rate  = wins / len(trades) * 100
+            max_dd    = ((close / close.cummax()) - 1).min() * 100
+
+            return (
+                f"📊 {name}（{symbol}）MA5穿MA20 策略回測（{period}）\n\n"
+                f"交易次數：{len(trades)} 次\n"
+                f"勝率：{win_rate:.1f}%\n"
+                f"平均每筆報酬：{avg_ret:+.2f}%\n"
+                f"累計報酬：{total_ret:+.2f}%\n"
+                f"最大回撤：{max_dd:.2f}%\n\n"
+                f"買進持有同期：{(close.iloc[-1]/close.iloc[0]-1)*100:+.2f}%"
+            )
+
+        elif strategy == "dca":
+            # 每月第一個交易日買進固定金額
+            monthly = close.resample("MS").first()
+            shares = 0
+            cost   = 0
+            invest_per_month = 10000  # 每月投入 10000 元
+            for price in monthly:
+                shares += invest_per_month / price
+                cost   += invest_per_month
+            final_value = shares * close.iloc[-1]
+            total_ret   = (final_value / cost - 1) * 100
+
+            return (
+                f"📅 {name}（{symbol}）定期定額回測（{period}，每月10000元）\n\n"
+                f"總投入：{cost:,.0f} 元\n"
+                f"最終市值：{final_value:,.0f} 元\n"
+                f"總報酬：{total_ret:+.2f}%\n"
+                f"累積股數：{shares:.2f} 股\n"
+                f"平均成本：{cost/shares:.2f} 元"
+            )
+
+        return "不支援的策略"
+    except Exception as e:
+        return f"回測失敗：{e}"
+
+
+def fetch_global_market() -> str:
+    try:
+        import yfinance as yf
+        markets = {
+            "🇺🇸 S&P500": "^GSPC", "🇺🇸 那斯達克": "^IXIC", "🇺🇸 道瓊": "^DJI",
+            "🇹🇼 台股": "^TWII", "🇭🇰 恆生": "^HSI", "🇯🇵 日經": "^N225",
+            "🇰🇷 韓股": "^KS11", "🇬🇧 英國": "^FTSE", "🇩🇪 德國": "^GDAXI",
+            "🇫🇷 法國": "^FCHI", "🌏 上證": "000001.SS",
+        }
+        lines = ["🌍 全球市場概覽\n"]
+        for name, sym in markets.items():
+            try:
+                hist = yf.Ticker(sym).history(period="2d")
+                if len(hist) >= 2:
+                    chg = (hist["Close"].iloc[-1] / hist["Close"].iloc[-2] - 1) * 100
+                    price = hist["Close"].iloc[-1]
+                    arrow = "▲" if chg >= 0 else "▼"
+                    lines.append(f"{name}：{price:,.2f}  {arrow} {chg:+.2f}%")
+            except Exception:
+                pass
+        return "\n".join(lines)
+    except Exception as e:
+        return f"全球市場查詢失敗：{e}"
+
+
+def fetch_economic_calendar(count: int = 10) -> str:
+    try:
+        import feedparser
+        results = []
+        # Investing.com RSS 與 Google 新聞
+        urls = [
+            ("https://news.google.com/rss/search?q=CPI+非農+Fed利率+GDP+經濟數據&hl=zh-Hant&gl=TW&ceid=TW:zh-Hant", "財經日曆"),
+            ("https://news.google.com/rss/search?q=economic+calendar+CPI+nonfarm+Fed+GDP&hl=en-US&gl=US&ceid=US:en", "Economic Calendar"),
+        ]
+        lines = ["📅 重要經濟數據行事曆\n"]
+        seen = set()
+        for url, label in urls:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                title = entry.get("title", "").split(" - ")[0]
+                pub = entry.get("published", "")[:16]
+                key = title[:30]
+                if key not in seen:
+                    seen.add(key)
+                    lines.append(f"• {title}（{pub}）")
+                if len(lines) > count + 1:
+                    break
+            if len(lines) > count + 1:
+                break
+        lines.append("\n💡 重點關注：CPI（通膨）、非農就業（NFP）、Fed利率決議、GDP、PPI")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"經濟日曆查詢失敗：{e}"
+
+
+def fetch_earnings_calendar(days: int = 7) -> str:
+    try:
+        import feedparser, datetime
+        lines = [f"📊 未來 {days} 天財報行事曆\n"]
+        url = "https://news.google.com/rss/search?q=earnings+report+quarterly+results&hl=en-US&gl=US&ceid=US:en"
+        feed = feedparser.parse(url)
+        count = 0
+        for entry in feed.entries:
+            title = entry.get("title", "").split(" - ")[0]
+            pub = entry.get("published", "")[:16]
+            lines.append(f"• {title}（{pub}）")
+            count += 1
+            if count >= 10:
+                break
+
+        # 補充重點大型股財報
+        import yfinance as yf
+        watchlist = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"]
+        lines.append("\n重點股財報日：")
+        for sym in watchlist:
+            try:
+                cal = yf.Ticker(sym).calendar
+                if cal and "Earnings Date" in cal:
+                    ed = cal["Earnings Date"]
+                    if hasattr(ed, '__iter__'):
+                        ed = list(ed)[0]
+                    lines.append(f"  {sym}：{str(ed)[:10]}")
+            except Exception:
+                pass
+        return "\n".join(lines)
+    except Exception as e:
+        return f"財報日曆查詢失敗：{e}"
+
+
+def fetch_analyst_ratings(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        name = ticker.info.get("shortName") or symbol
+
+        upgrades = ticker.upgrades_downgrades
+        if upgrades is None or upgrades.empty:
+            return f"{symbol} 無分析師評級資料"
+
+        upgrades = upgrades.reset_index()
+        recent = upgrades.head(10)
+        lines = [f"📋 {name}（{symbol}）分析師評級\n"]
+        for _, row in recent.iterrows():
+            date = str(row.get("GradeDate", ""))[:10]
+            firm = row.get("Firm", "")
+            action = row.get("Action", "")
+            to_grade = row.get("ToGrade", "")
+            from_grade = row.get("FromGrade", "")
+            emoji = "📈" if "up" in str(action).lower() or "initiat" in str(action).lower() else ("📉" if "down" in str(action).lower() else "➡️")
+            lines.append(f"{emoji} {date} {firm}：{from_grade}→{to_grade}（{action}）")
+
+        price = ticker.info.get("currentPrice", 0)
+        target = ticker.info.get("targetMeanPrice", 0)
+        if price and target:
+            upside = (target / price - 1) * 100
+            lines.append(f"\n分析師均價目標：{target:.2f}（現價 {price:.2f}，空間 {upside:+.1f}%）")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"分析師評級查詢失敗：{e}"
+
+
+def fetch_short_interest(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        info = yf.Ticker(symbol).info
+        name = info.get("shortName") or symbol
+
+        short_pct = info.get("shortPercentOfFloat", 0) or 0
+        short_ratio = info.get("shortRatio", 0) or 0
+        shares_short = info.get("sharesShort", 0) or 0
+        shares_out = info.get("sharesOutstanding", 1) or 1
+
+        if short_pct >= 0.20:
+            risk = "極高空頭壓力（軋空機會大 ⚠️）"
+        elif short_pct >= 0.10:
+            risk = "高空頭比率（需留意）"
+        elif short_pct >= 0.05:
+            risk = "中等空頭比率"
+        else:
+            risk = "低空頭比率（市場偏多）"
+
+        return (
+            f"🩳 {name}（{symbol}）空頭資料\n\n"
+            f"做空比率：{short_pct*100:.2f}%\n"
+            f"回補天數（Short Ratio）：{short_ratio:.1f} 天\n"
+            f"借券賣出股數：{shares_short:,}\n"
+            f"風險評估：{risk}"
+        )
+    except Exception as e:
+        return f"空頭資料查詢失敗：{e}"
+
+
+def fetch_correlation(symbols: list, period: str = "1y") -> str:
+    try:
+        import yfinance as yf
+        import pandas as pd
+        data = {}
+        for sym in symbols[:5]:
+            hist = yf.Ticker(sym).history(period=period)
+            if not hist.empty:
+                data[sym] = hist["Close"].pct_change().dropna()
+
+        if len(data) < 2:
+            return "至少需要 2 個有效的股票代號"
+
+        df = pd.DataFrame(data).dropna()
+        corr = df.corr()
+
+        lines = [f"📊 相關性矩陣（{period}）\n"]
+        syms = list(corr.columns)
+        header = "      " + "  ".join(f"{s:>8}" for s in syms)
+        lines.append(header)
+        for s1 in syms:
+            row = f"{s1:>6}"
+            for s2 in syms:
+                val = corr.loc[s1, s2]
+                row += f"  {val:>8.3f}"
+            lines.append(row)
+
+        lines.append("\n💡 相關係數：1.0=完全正相關，0=無關，-1.0=完全負相關")
+        lines.append("分散風險建議選相關係數 < 0.5 的資產")
+
+        # 找最低相關配對
+        pairs = []
+        for i, s1 in enumerate(syms):
+            for s2 in syms[i+1:]:
+                pairs.append((corr.loc[s1, s2], s1, s2))
+        pairs.sort()
+        if pairs:
+            v, s1, s2 = pairs[0]
+            lines.append(f"最低相關：{s1} & {s2}（{v:.3f}）← 最佳分散組合")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"相關性分析失敗：{e}"
+
+
+def fetch_risk_metrics(symbol: str, period: str = "1y") -> str:
+    try:
+        import yfinance as yf
+        import numpy as np
+
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=period)
+        bench = yf.Ticker("^GSPC").history(period=period)
+        name = ticker.info.get("shortName") or symbol
+
+        if hist.empty or bench.empty:
+            return f"找不到 {symbol} 資料"
+
+        ret = hist["Close"].pct_change().dropna()
+        bench_ret = bench["Close"].pct_change().dropna()
+        aligned = ret.align(bench_ret, join="inner")
+        ret, bench_ret = aligned[0], aligned[1]
+
+        # Beta
+        cov = np.cov(ret, bench_ret)
+        beta = cov[0][1] / cov[1][1] if cov[1][1] != 0 else 0
+
+        # 年化報酬 & 波動率
+        annual_ret = ret.mean() * 252 * 100
+        annual_vol = ret.std() * (252 ** 0.5) * 100
+
+        # 夏普比率（無風險利率 5%）
+        rf = 0.05
+        sharpe = (annual_ret/100 - rf) / (annual_vol/100) if annual_vol != 0 else 0
+
+        # 最大回撤
+        cumret = (1 + ret).cumprod()
+        max_dd = ((cumret / cumret.cummax()) - 1).min() * 100
+
+        # VaR 95%
+        var_95 = np.percentile(ret, 5) * 100
+
+        return (
+            f"⚖️ {name}（{symbol}）風險指標（{period}）\n\n"
+            f"Beta（市場敏感度）：{beta:.2f}{'（高波動）' if beta>1.2 else '（低波動）' if beta<0.8 else '（接近大盤）'}\n"
+            f"年化報酬：{annual_ret:+.2f}%\n"
+            f"年化波動率：{annual_vol:.2f}%\n"
+            f"夏普比率：{sharpe:.2f}{'（優秀）' if sharpe>1 else '（尚可）' if sharpe>0.5 else '（偏低）'}\n"
+            f"最大回撤：{max_dd:.2f}%\n"
+            f"VaR 95%（單日）：{var_95:.2f}%"
+        )
+    except Exception as e:
+        return f"風險指標計算失敗：{e}"
+
+
+def fetch_money_flow(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="20d")
+        info = ticker.info
+        name = info.get("shortName") or symbol
+
+        if hist.empty:
+            return f"找不到 {symbol} 資料"
+
+        # 資金流向：(收盤-開盤)/當日振幅 * 成交量 估算買賣壓
+        typical = (hist["High"] + hist["Low"] + hist["Close"]) / 3
+        raw_mf = typical * hist["Volume"]
+        pos_mf = raw_mf[hist["Close"] >= hist["Open"]].tail(10).sum()
+        neg_mf = raw_mf[hist["Close"] < hist["Open"]].tail(10).sum()
+        mfi = 100 - (100 / (1 + pos_mf / neg_mf)) if neg_mf else 100
+
+        today_vol = hist["Volume"].iloc[-1]
+        avg_vol = hist["Volume"].tail(20).mean()
+        vol_ratio = today_vol / avg_vol if avg_vol else 1
+
+        price = hist["Close"].iloc[-1]
+        chg = (price / hist["Close"].iloc[-2] - 1) * 100 if len(hist) > 1 else 0
+
+        flow = "淨流入 📥" if mfi > 55 else "淨流出 📤" if mfi < 45 else "中性"
+        return (
+            f"💰 {name}（{symbol}）資金流向\n\n"
+            f"今日漲跌：{chg:+.2f}%\n"
+            f"成交量：{today_vol:,}（均量 {vol_ratio:.1f}x）\n"
+            f"資金流向指標（MFI）：{mfi:.1f} → {flow}\n"
+            f"近10日正向資金：{pos_mf/1e8:.1f}億\n"
+            f"近10日負向資金：{neg_mf/1e8:.1f}億"
+        )
+    except Exception as e:
+        return f"資金流向查詢失敗：{e}"
+
+
+def fetch_concept_stocks(theme: str) -> str:
+    try:
+        # 台股概念股資料庫
+        concepts = {
+            "AI": ["2330.TW","2303.TW","2454.TW","3711.TW","2379.TW","2308.TW","6488.TW","3017.TW","2382.TW","5274.TW"],
+            "電動車": ["2308.TW","1590.TW","2207.TW","6239.TW","1802.TW","2049.TW","3665.TW","1537.TW","6227.TW","2371.TW"],
+            "軍工": ["1323.TW","2409.TW","2348.TW","8112.TW","1536.TW","2634.TW","6245.TW","1513.TW"],
+            "低軌衛星": ["3045.TW","2230.TW","6438.TW","3413.TW","2365.TW","3508.TW","6285.TW","4306.TW"],
+            "半導體": ["2330.TW","2303.TW","2454.TW","2308.TW","3711.TW","5347.TW","6770.TW","3034.TW","2379.TW","4919.TW"],
+            "5G": ["2412.TW","3045.TW","2498.TW","2356.TW","3231.TW","6488.TW","2439.TW","3293.TW"],
+            "儲能": ["1907.TW","1504.TW","6409.TW","3481.TW","2023.TW","6121.TW","1590.TW"],
+            "DRAM": ["2303.TW","3450.TW","4967.TW","3260.TW","2408.TW"],
+            "CoWoS": ["2330.TW","6235.TW","3711.TW","2454.TW","3036.TW","8046.TW","6415.TW"],
+            "矽光子": ["2330.TW","3008.TW","2454.TW","6510.TW","3081.TW"],
+            "機器人": ["2308.TW","1590.TW","2049.TW","1537.TW","3665.TW","6288.TW","2382.TW"],
+            "航運": ["2603.TW","2609.TW","2615.TW","2610.TW","2618.TW","5608.TW"],
+            "金融": ["2881.TW","2882.TW","2886.TW","2891.TW","2884.TW","2892.TW","5876.TW"],
+        }
+
+        # 模糊比對
+        import yfinance as yf
+        matched_key = None
+        for key in concepts:
+            if key in theme or theme in key:
+                matched_key = key
+                break
+
+        if not matched_key:
+            # 用 DuckDuckGo 搜尋
+            try:
+                from ddgs import DDGS
+                with DDGS() as ddgs:
+                    results = list(ddgs.text(f"台股 {theme} 概念股 相關股票", region="zh-tw", max_results=5))
+                lines = [f"🏭 {theme} 概念股\n（搜尋結果）"]
+                for r in results:
+                    lines.append(f"• {r.get('title','')}\n  {r.get('body','')[:100]}")
+                return "\n\n".join(lines)
+            except Exception:
+                return f"找不到「{theme}」概念股，支援：{'、'.join(concepts.keys())}"
+
+        syms = concepts[matched_key]
+        lines = [f"🏭 {matched_key} 概念股（台股）\n"]
+        for sym in syms:
+            try:
+                hist = yf.Ticker(sym).history(period="2d")
+                info = yf.Ticker(sym).info
+                name = info.get("shortName") or sym.replace(".TW","")
+                if len(hist) >= 2:
+                    chg = (hist["Close"].iloc[-1] / hist["Close"].iloc[-2] - 1) * 100
+                    price = hist["Close"].iloc[-1]
+                    arrow = "▲" if chg >= 0 else "▼"
+                    lines.append(f"{sym.replace('.TW','')} {name}：{price:.1f}  {arrow}{chg:+.1f}%")
+            except Exception:
+                lines.append(sym.replace(".TW",""))
+        return "\n".join(lines)
+    except Exception as e:
+        return f"概念股查詢失敗：{e}"
+
+
+def fetch_crypto_depth(coin: str = "bitcoin") -> str:
+    try:
+        coin_map = {
+            "btc": "bitcoin", "eth": "ethereum", "sol": "solana",
+            "bnb": "binancecoin", "xrp": "ripple", "doge": "dogecoin",
+        }
+        coin_id = coin_map.get(coin.lower(), coin.lower())
+
+        # CoinGecko 詳細資料
+        resp = requests.get(
+            f"https://api.coingecko.com/api/v3/coins/{coin_id}"
+            "?localization=false&tickers=false&community_data=true&developer_data=false",
+            timeout=10
+        )
+        data = resp.json()
+        if "error" in data:
+            return f"找不到幣種「{coin}」"
+
+        md = data["market_data"]
+        name = data["name"]
+        sym = data["symbol"].upper()
+        price = md["current_price"]["usd"]
+        ch24 = md.get("price_change_percentage_24h") or 0
+        ch7d = md.get("price_change_percentage_7d") or 0
+        mcap = md["market_cap"]["usd"]
+        vol = md["total_volume"]["usd"]
+        dom = data.get("market_cap_percentage", {}).get(coin_id.split("-")[0], 0)
+
+        # 資金費率（用 DuckDuckGo 補充）
+        funding_note = ""
+        try:
+            from ddgs import DDGS
+            with DDGS() as ddgs:
+                r = list(ddgs.text(f"{sym} funding rate perpetual", max_results=1))
+                if r:
+                    funding_note = f"\n資金費率參考：{r[0].get('body','')[:80]}"
+        except Exception:
+            pass
+
+        return (
+            f"🔗 {name}（{sym}）鏈上深度\n\n"
+            f"現價：${price:,.4f}\n"
+            f"24h：{ch24:+.2f}%　7d：{ch7d:+.2f}%\n"
+            f"市值：${mcap/1e9:.2f}B\n"
+            f"24h 成交量：${vol/1e9:.2f}B\n"
+            f"社群分數：{data.get('community_score',0):.0f}/100\n"
+            f"開發者分數：{data.get('developer_score',0):.0f}/100"
+            + funding_note
+        )
+    except Exception as e:
+        return f"加密幣深度查詢失敗：{e}"
+
+
+def fetch_drip_calculator(symbol: str, shares: float, years: int = 10, monthly_invest: float = 0) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        name = info.get("shortName") or symbol
+        price = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+        div_yield = (info.get("dividendYield") or 0)
+        div_rate = info.get("dividendRate") or (price * div_yield)
+        payout_freq = 4  # 假設季配
+
+        if not price:
+            return f"找不到 {symbol} 的股價資料"
+
+        total_shares = shares
+        total_invested = shares * price
+        annual_divs = []
+
+        for year in range(1, years + 1):
+            # 年度股息 → 再買股
+            annual_div = total_shares * div_rate
+            new_shares = annual_div / price if price > 0 else 0
+            total_shares += new_shares
+
+            # 每月定期追加
+            if monthly_invest > 0:
+                monthly_shares = (monthly_invest * 12) / price
+                total_shares += monthly_shares
+                total_invested += monthly_invest * 12
+
+            annual_divs.append(annual_div)
+
+        final_value = total_shares * price
+        total_div = sum(annual_divs)
+        total_return = (final_value / total_invested - 1) * 100 if total_invested > 0 else 0
+
+        lines = [
+            f"💰 {name}（{symbol}）DRIP 股息再投資試算\n",
+            f"初始：{shares:.0f} 股 × {price:.2f} = {shares*price:,.0f} 元",
+        ]
+        if monthly_invest > 0:
+            lines.append(f"每月追加：{monthly_invest:,.0f} 元")
+        lines += [
+            f"殖利率：{div_yield*100:.2f}%　每股年配：{div_rate:.4f}",
+            f"\n{years} 年後：",
+            f"持股數：{total_shares:,.1f} 股",
+            f"總市值：{final_value:,.0f} 元",
+            f"總投入：{total_invested:,.0f} 元",
+            f"累積股息：{total_div:,.0f} 元",
+            f"總報酬：{total_return:+.1f}%",
+            f"年配息（第{years}年）：{annual_divs[-1]:,.0f} 元",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"DRIP 試算失敗：{e}"
+
+
+def fetch_forex_chart(pair: str, period: str = "3mo") -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(pair)
+        hist = ticker.history(period="6mo")
+        info = ticker.info
+
+        if hist.empty:
+            return f"找不到匯率「{pair}」，請確認格式（如 USDTWD=X）"
+
+        name = info.get("shortName") or pair
+        close = hist["Close"]
+        current = close.iloc[-1]
+        prev = close.iloc[-2] if len(close) > 1 else current
+        chg = (current / prev - 1) * 100
+
+        ma5  = close.tail(5).mean()
+        ma20 = close.tail(20).mean()
+        ma60 = close.tail(60).mean() if len(close) >= 60 else close.mean()
+        rsi  = calc_rsi(close) if len(close) >= 15 else None
+
+        if ma5 > ma20 > ma60:   trend = "強勢升值 📈"
+        elif ma5 < ma20 < ma60: trend = "強勢貶值 📉"
+        elif ma5 > ma20:        trend = "短線偏強 🔼"
+        else:                   trend = "短線偏弱 🔽"
+
+        from ta.volatility import BollingerBands
+        bb = BollingerBands(close)
+        bb_upper = bb.bollinger_hband().iloc[-1]
+        bb_lower = bb.bollinger_lband().iloc[-1]
+        bb_pos = "近上軌（偏強）" if current >= bb_upper * 0.99 else "近下軌（偏弱）" if current <= bb_lower * 1.01 else "通道中間"
+
+        result = (
+            f"💱 {name} 技術分析\n"
+            f"現值：{current:.4f}  {'▲' if chg >= 0 else '▼'} {chg:+.2f}%\n\n"
+            f"MA5：{ma5:.4f}　MA20：{ma20:.4f}　MA60：{ma60:.4f}\n"
+            f"趨勢：{trend}\n"
+            f"布林：{bb_pos}\n"
+        )
+        if rsi:
+            rsi_note = "超買" if rsi >= 70 else "超賣" if rsi <= 30 else "中性"
+            result += f"RSI(14)：{rsi}（{rsi_note}）\n"
+        result += (
+            f"\n52週高：{hist['High'].max():.4f}\n"
+            f"52週低：{hist['Low'].min():.4f}"
+        )
+        return result
+    except Exception as e:
+        return f"外匯技術分析失敗：{e}"
+
+
+def fetch_warrant(underlying: str) -> str:
+    try:
+        # TWSE 權證查詢
+        url = f"https://www.twse.com.tw/rwd/zh/warrant/MNO01?response=json&stockNo={underlying}"
+        resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        data = resp.json()
+
+        if data.get("stat") != "OK" or not data.get("data"):
+            # 改用搜尋提示
+            try:
+                from ddgs import DDGS
+                with DDGS() as ddgs:
+                    r = list(ddgs.text(f"台股 {underlying} 權證 認購 認售", region="zh-tw", max_results=3))
+                lines = [f"🎫 {underlying} 相關權證資訊\n"]
+                for item in r:
+                    lines.append(f"• {item.get('title','')}\n  {item.get('body','')[:100]}")
+                return "\n\n".join(lines)
+            except Exception:
+                return f"查無 {underlying} 的權證資料，請至台灣證券交易所查詢"
+
+        rows = data.get("data", [])[:10]
+        lines = [f"🎫 {underlying} 相關權證（前10筆）\n"]
+        for row in rows:
+            w_code = row[0]
+            w_name = row[1]
+            w_type = "認購" if "購" in w_name else "認售"
+            strike = row[3] if len(row) > 3 else "-"
+            exp = row[4] if len(row) > 4 else "-"
+            lines.append(f"{w_code} {w_name}（{w_type}）　履約{strike}　到期{exp}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"權證查詢失敗：{e}"
+
+
+def fetch_portfolio_risk(holdings: list, period: str = "1y") -> str:
+    try:
+        import yfinance as yf
+        import numpy as np
+        import pandas as pd
+
+        weights = [h["weight"] for h in holdings]
+        symbols = [h["symbol"] for h in holdings]
+
+        # 標準化權重
+        total_w = sum(weights)
+        weights = [w / total_w for w in weights]
+
+        data = {}
+        for sym in symbols:
+            hist = yf.Ticker(sym).history(period=period)
+            if not hist.empty:
+                data[sym] = hist["Close"].pct_change().dropna()
+
+        if not data:
+            return "無法取得任何股票資料"
+
+        df = pd.DataFrame(data).dropna()
+        valid_syms = list(df.columns)
+        valid_weights = [weights[symbols.index(s)] for s in valid_syms]
+        valid_weights = [w / sum(valid_weights) for w in valid_weights]
+
+        # 組合報酬
+        portfolio_ret = (df * valid_weights).sum(axis=1)
+        annual_ret = portfolio_ret.mean() * 252 * 100
+        annual_vol = portfolio_ret.std() * (252 ** 0.5) * 100
+        sharpe = (annual_ret/100 - 0.05) / (annual_vol/100) if annual_vol else 0
+        max_dd = ((1 + portfolio_ret).cumprod() / (1 + portfolio_ret).cumprod().cummax() - 1).min() * 100
+        var_95 = np.percentile(portfolio_ret, 5) * 100
+
+        # 相關性
+        corr = df.corr()
+
+        lines = [f"📊 投資組合風險分析（{period}）\n"]
+        lines.append("持倉配置：")
+        for sym, w in zip(valid_syms, valid_weights):
+            lines.append(f"  {sym}：{w*100:.1f}%")
+
+        lines += [
+            f"\n── 組合風險指標 ──",
+            f"年化報酬：{annual_ret:+.2f}%",
+            f"年化波動率：{annual_vol:.2f}%",
+            f"夏普比率：{sharpe:.2f}",
+            f"最大回撤：{max_dd:.2f}%",
+            f"VaR 95%（單日）：{var_95:.2f}%",
+        ]
+
+        if len(valid_syms) >= 2:
+            lines.append("\n── 相關性（越低越分散）──")
+            for i, s1 in enumerate(valid_syms):
+                for s2 in valid_syms[i+1:]:
+                    v = corr.loc[s1, s2]
+                    note = "⚠️高度相關" if v > 0.7 else "✅低相關" if v < 0.3 else ""
+                    lines.append(f"  {s1} & {s2}：{v:.3f} {note}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        return f"投資組合風險分析失敗：{e}"
+
+
+def fetch_retirement_calculator(current_age: int, current_savings: float, monthly_save: float,
+                                 retire_age: int = 65, annual_return: float = 6.0,
+                                 monthly_expense: float = 50000) -> str:
+    try:
+        years = retire_age - current_age
+        if years <= 0:
+            return "退休年齡必須大於目前年齡"
+        r_monthly = annual_return / 100 / 12
+        # 現有資產複利成長
+        future_current = current_savings * 10000 * ((1 + r_monthly) ** (years * 12))
+        # 每月儲蓄複利成長（年金終值）
+        if r_monthly > 0:
+            future_monthly = monthly_save * (((1 + r_monthly) ** (years * 12) - 1) / r_monthly)
+        else:
+            future_monthly = monthly_save * years * 12
+        total_at_retire = future_current + future_monthly
+        # 退休後可用年數（假設活到85歲）
+        retire_years = 85 - retire_age
+        total_needed = monthly_expense * 12 * retire_years
+        gap = total_at_retire - total_needed
+        status = "✅ 達標" if gap >= 0 else "⚠️ 不足"
+
+        lines = [
+            f"🏖️ 退休規劃試算\n",
+            f"目前年齡：{current_age} 歲　預計退休：{retire_age} 歲",
+            f"距退休：{years} 年　預期報酬：{annual_return}%/年",
+            f"",
+            f"── 退休時預估資產 ──",
+            f"現有資產成長至：{future_current/10000:.0f} 萬元",
+            f"累積儲蓄成長至：{future_monthly/10000:.0f} 萬元",
+            f"退休時總資產：{total_at_retire/10000:.0f} 萬元",
+            f"",
+            f"── 退休所需評估（活至85歲）──",
+            f"月生活費：{monthly_expense:,.0f} 元",
+            f"退休後需要：{total_needed/10000:.0f} 萬元",
+            f"缺口/剩餘：{gap/10000:+.0f} 萬元　{status}",
+        ]
+        if gap < 0:
+            extra = abs(gap) / (years * 12)
+            lines.append(f"\n每月需額外存：{extra:,.0f} 元 才能達標")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"退休試算失敗：{e}"
+
+
+def fetch_loan_calculator(principal: float, annual_rate: float, years: int,
+                           loan_type: str = "等額本息") -> str:
+    try:
+        p = principal * 10000
+        r = annual_rate / 100 / 12
+        n = years * 12
+        total_interest = 0
+        lines = [f"🏦 貸款試算（{loan_type}）\n",
+                 f"貸款金額：{principal:.0f} 萬元",
+                 f"年利率：{annual_rate}%　期數：{n} 期（{years} 年）\n"]
+        if loan_type == "等額本息":
+            if r > 0:
+                payment = p * r * (1 + r) ** n / ((1 + r) ** n - 1)
+            else:
+                payment = p / n
+            total_pay = payment * n
+            total_interest = total_pay - p
+            lines += [
+                f"── 等額本息 ──",
+                f"每月還款：{payment:,.0f} 元",
+                f"總還款額：{total_pay/10000:.2f} 萬元",
+                f"總利息：{total_interest/10000:.2f} 萬元",
+            ]
+        else:  # 等額本金
+            principal_payment = p / n
+            first_payment = principal_payment + p * r
+            last_payment = principal_payment + principal_payment * r
+            total_interest = sum(principal_payment * r * (n - i) for i in range(n))
+            lines += [
+                f"── 等額本金 ──",
+                f"每期本金：{principal_payment:,.0f} 元",
+                f"第1期還款：{first_payment:,.0f} 元",
+                f"最後1期還款：{last_payment:,.0f} 元",
+                f"總利息：{total_interest/10000:.2f} 萬元",
+                f"總還款額：{(p + total_interest)/10000:.2f} 萬元",
+            ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"貸款試算失敗：{e}"
+
+
+def fetch_compound_calculator(principal: float, annual_rate: float, years: int,
+                               monthly_add: float = 0, compound_freq: int = 12) -> str:
+    try:
+        r = annual_rate / 100 / compound_freq
+        n = compound_freq * years
+        # 本金複利
+        future_principal = principal * (1 + r) ** n
+        # 每月定期投入（按月計算）
+        if monthly_add > 0:
+            r_m = annual_rate / 100 / 12
+            n_m = years * 12
+            future_monthly = monthly_add * (((1 + r_m) ** n_m - 1) / r_m) if r_m > 0 else monthly_add * n_m
+        else:
+            future_monthly = 0
+        total = future_principal + future_monthly
+        total_invest = principal + monthly_add * years * 12
+        profit = total - total_invest
+        lines = [
+            f"📈 複利計算器\n",
+            f"本金：{principal:,.0f} 元",
+            f"年化報酬：{annual_rate}%　期間：{years} 年",
+            f"每月追加：{monthly_add:,.0f} 元",
+            f"",
+            f"── 試算結果 ──",
+            f"本金複利成長：{future_principal:,.0f} 元",
+        ]
+        if monthly_add > 0:
+            lines.append(f"追加投入成長：{future_monthly:,.0f} 元")
+        lines += [
+            f"期末總資產：{total:,.0f} 元",
+            f"總投入成本：{total_invest:,.0f} 元",
+            f"獲利：{profit:,.0f} 元（{profit/total_invest*100:.1f}%）",
+            f"",
+            f"── 72法則 ──",
+            f"資產翻倍需：{72/annual_rate:.1f} 年（年報酬 {annual_rate}%）",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"複利計算失敗：{e}"
+
+
+def fetch_asset_allocation(age: int, risk_level: str, goal: str = "退休",
+                            investment_horizon: int = None) -> str:
+    try:
+        horizon = investment_horizon or max(65 - age, 5)
+        # 基本股債比（110法則）
+        base_stock = min(110 - age, 90)
+        if risk_level == "保守":
+            stock = max(base_stock - 20, 10)
+        elif risk_level == "積極":
+            stock = min(base_stock + 15, 90)
+        else:
+            stock = base_stock
+        bond = max(100 - stock - 10, 0)
+        cash = 100 - stock - bond
+
+        # 細分配置
+        tw_stock = round(stock * 0.4)
+        us_stock = round(stock * 0.35)
+        intl_stock = stock - tw_stock - us_stock
+        tw_bond = round(bond * 0.3)
+        us_bond = bond - tw_bond
+
+        lines = [
+            f"📊 資產配置建議\n",
+            f"年齡：{age} 歲　風險偏好：{risk_level}",
+            f"目標：{goal}　投資期間：{horizon} 年\n",
+            f"── 大類配置 ──",
+            f"股票：{stock}%　債券：{bond}%　現金：{cash}%\n",
+            f"── 細分建議 ──",
+            f"台股（0050/0056）：{tw_stock}%",
+            f"美股（VTI/VOO）：{us_stock}%",
+            f"國際股（VEA/VWO）：{intl_stock}%",
+            f"台灣公債/ETF：{tw_bond}%",
+            f"美債（BND/TLT）：{us_bond}%",
+            f"現金/定存：{cash}%\n",
+            f"── 再平衡建議 ──",
+            f"每年或偏離5%以上時再平衡",
+            f"隨年齡增長逐步降低股票比例",
+        ]
+        if risk_level == "保守":
+            lines.append("\n⚠️ 保守型：優先保本，適合距退休較近者")
+        elif risk_level == "積極":
+            lines.append("\n💡 積極型：承受較大波動換取長期成長，需有10年以上視野")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"資產配置建議失敗：{e}"
+
+
+def fetch_tw_tax_calculator(dividend_income: float, other_income: float = 0,
+                             tax_bracket: float = None, sell_amount: float = 0) -> str:
+    try:
+        # 健保補充保費（2.11%，超過2萬才扣）
+        nhi_surcharge = dividend_income * 0.0211 if dividend_income >= 20000 else 0
+        # 股利可抵減稅額（8.5%，上限8萬）
+        tax_credit = min(dividend_income * 0.085, 80000)
+        # 分離課稅（28%）
+        separate_tax = dividend_income * 0.28
+        # 合併申報
+        if tax_bracket:
+            total_income = dividend_income + other_income
+            combined_tax = total_income * (tax_bracket / 100) - tax_credit
+            combined_tax = max(combined_tax, 0)
+        else:
+            combined_tax = None
+        # 證交稅（0.3%）
+        securities_tax = sell_amount * 0.003
+
+        lines = [
+            f"💰 台股稅務試算\n",
+            f"股利所得：{dividend_income:,.0f} 元",
+        ]
+        if other_income:
+            lines.append(f"其他收入：{other_income:,.0f} 元")
+        lines += [
+            f"",
+            f"── 健保補充保費（2.11%）──",
+            f"補充保費：{nhi_surcharge:,.0f} 元",
+            f"",
+            f"── 方案一：分離課稅（28%）──",
+            f"應繳稅額：{separate_tax:,.0f} 元",
+            f"稅後股利：{dividend_income - separate_tax - nhi_surcharge:,.0f} 元",
+        ]
+        if combined_tax is not None:
+            lines += [
+                f"",
+                f"── 方案二：合併申報（稅率{tax_bracket}%）──",
+                f"可抵減稅額：{tax_credit:,.0f} 元",
+                f"應繳稅額：{combined_tax:,.0f} 元",
+                f"稅後股利：{dividend_income - combined_tax - nhi_surcharge:,.0f} 元",
+                f"",
+                f"建議：{'合併申報' if combined_tax < separate_tax else '分離課稅'} 節稅 {abs(separate_tax - combined_tax):,.0f} 元",
+            ]
+        if sell_amount > 0:
+            lines += [
+                f"",
+                f"── 證券交易稅（0.3%）──",
+                f"賣出金額：{sell_amount:,.0f} 元",
+                f"證交稅：{securities_tax:,.0f} 元",
+            ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"稅務試算失敗：{e}"
+
+
+def fetch_currency_converter(amount: float, from_currency: str, to_currency: str) -> str:
+    try:
+        import yfinance as yf
+        fc = from_currency.upper()
+        tc = to_currency.upper()
+        if fc == tc:
+            return f"{amount:,.2f} {fc} = {amount:,.2f} {tc}"
+        # 嘗試直接查匯率
+        pair = f"{fc}{tc}=X"
+        ticker = yf.Ticker(pair)
+        hist = ticker.history(period="2d")
+        if hist.empty:
+            # 嘗試反向
+            pair2 = f"{tc}{fc}=X"
+            hist2 = yf.Ticker(pair2).history(period="2d")
+            if hist2.empty:
+                return f"無法取得 {fc}/{tc} 匯率資料"
+            rate = 1 / hist2["Close"].iloc[-1]
+        else:
+            rate = hist["Close"].iloc[-1]
+        result = amount * rate
+        lines = [
+            f"💱 外幣換算\n",
+            f"{amount:,.2f} {fc}",
+            f"= {result:,.4f} {tc}",
+            f"\n即時匯率：1 {fc} = {rate:.4f} {tc}",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"外幣換算失敗：{e}"
+
+
+def fetch_fund(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period="1y")
+        if hist.empty:
+            return f"找不到 {symbol} 的基金資料"
+        price = hist["Close"].iloc[-1]
+        price_1m = hist["Close"].iloc[-22] if len(hist) > 22 else hist["Close"].iloc[0]
+        price_3m = hist["Close"].iloc[-66] if len(hist) > 66 else hist["Close"].iloc[0]
+        price_1y = hist["Close"].iloc[0]
+        ret_1m = (price / price_1m - 1) * 100
+        ret_3m = (price / price_3m - 1) * 100
+        ret_1y = (price / price_1y - 1) * 100
+        name = info.get("longName") or info.get("shortName") or symbol
+        expense = info.get("annualReportExpenseRatio")
+        category = info.get("category") or info.get("fundFamily") or "—"
+        nav = info.get("navPrice") or price
+        lines = [
+            f"📦 基金查詢：{name}\n",
+            f"代號：{symbol}　類別：{category}",
+            f"淨值/價格：{nav:.2f}",
+        ]
+        if expense:
+            lines.append(f"費用率：{expense*100:.2f}%")
+        lines += [
+            f"",
+            f"── 績效 ──",
+            f"近1月：{ret_1m:+.2f}%",
+            f"近3月：{ret_3m:+.2f}%",
+            f"近1年：{ret_1y:+.2f}%",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"基金查詢失敗：{e}"
+
+
+def fetch_reits(symbol: str) -> str:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period="1y")
+        if hist.empty:
+            return f"找不到 {symbol} 的REITs資料"
+        price = hist["Close"].iloc[-1]
+        price_1y = hist["Close"].iloc[0]
+        ret_1y = (price / price_1y - 1) * 100
+        name = info.get("longName") or info.get("shortName") or symbol
+        div_yield = info.get("dividendYield") or 0
+        trailing_annual_div = info.get("trailingAnnualDividendYield") or div_yield
+        market_cap = info.get("marketCap") or 0
+        sector = info.get("sector") or info.get("category") or "不動產"
+        nav = info.get("bookValue") or info.get("navPrice") or 0
+        lines = [
+            f"🏢 REITs查詢：{name}\n",
+            f"代號：{symbol}　類別：{sector}",
+            f"現價：{price:.2f}",
+        ]
+        if div_yield:
+            lines.append(f"股息殖利率：{trailing_annual_div*100:.2f}%")
+        if market_cap:
+            lines.append(f"市值：{market_cap/1e8:.1f} 億")
+        if nav:
+            premium = (price / nav - 1) * 100
+            lines.append(f"NAV：{nav:.2f}（折溢價：{premium:+.1f}%）")
+        lines += [
+            f"",
+            f"近1年報酬：{ret_1y:+.2f}%",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"REITs查詢失敗：{e}"
+
+
+def fetch_inflation_adjusted(nominal_return: float, years: int, amount: float,
+                              inflation_rate: float = 2.0) -> str:
+    try:
+        # 費雪方程式：實質報酬 ≈ 名目報酬 - 通膨率
+        real_return = ((1 + nominal_return / 100) / (1 + inflation_rate / 100) - 1) * 100
+        # 名目終值
+        nominal_fv = amount * (1 + nominal_return / 100) ** years
+        # 實質終值（通膨調整後的購買力）
+        real_fv = amount * (1 + real_return / 100) ** years
+        # 通膨吃掉的部分
+        inflation_loss = nominal_fv - real_fv
+        lines = [
+            f"📉 通膨調整報酬試算\n",
+            f"本金：{amount:,.0f} 元",
+            f"名目報酬率：{nominal_return}%　通膨率：{inflation_rate}%",
+            f"實質報酬率：{real_return:.2f}%　期間：{years} 年",
+            f"",
+            f"── {years}年後 ──",
+            f"名目終值：{nominal_fv:,.0f} 元",
+            f"實質購買力：{real_fv:,.0f} 元",
+            f"通膨吃掉：{inflation_loss:,.0f} 元（{inflation_loss/nominal_fv*100:.1f}%）",
+            f"",
+            f"💡 今天 {amount:,.0f} 元的東西，{years}年後需要 {amount*(1+inflation_rate/100)**years:,.0f} 元才買得到",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"通膨調整試算失敗：{e}"
+
+
+def fetch_defi_calculator(principal_usd: float, apy: float, days: int,
+                           compound: bool = True, protocol: str = "") -> str:
+    try:
+        import yfinance as yf
+        # 查詢USD/TWD匯率
+        try:
+            usdtwd = yf.Ticker("USDTWD=X").history(period="2d")["Close"].iloc[-1]
+        except Exception:
+            usdtwd = 32.0
+        if compound:
+            daily_rate = apy / 100 / 365
+            final_usd = principal_usd * (1 + daily_rate) ** days
+        else:
+            final_usd = principal_usd * (1 + apy / 100 * days / 365)
+        profit_usd = final_usd - principal_usd
+        lines = [
+            f"🔗 DeFi收益試算\n",
+        ]
+        if protocol:
+            lines.append(f"協議：{protocol}")
+        lines += [
+            f"本金：${principal_usd:,.2f} USD（約 {principal_usd*usdtwd:,.0f} TWD）",
+            f"APY：{apy}%　質押天數：{days} 天",
+            f"複利：{'是' if compound else '否'}",
+            f"",
+            f"── 試算結果 ──",
+            f"到期本利和：${final_usd:,.4f} USD",
+            f"獲利：${profit_usd:,.4f} USD（約 {profit_usd*usdtwd:,.0f} TWD）",
+            f"實際年化（{days}天）：{(final_usd/principal_usd-1)*365/days*100:.2f}%",
+            f"",
+            f"⚠️ DeFi有智能合約風險、無常損失風險，本試算僅供參考",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"DeFi試算失敗：{e}"
+
+
+def fetch_gold_calculator(weight: float, unit: str = "公克", currency: str = "TWD") -> str:
+    try:
+        import yfinance as yf
+        # 查詢黃金價格（美元/盎司）
+        gold = yf.Ticker("GC=F").history(period="2d")
+        if gold.empty:
+            gold = yf.Ticker("GLD").history(period="2d")
+            if gold.empty:
+                return "無法取得黃金價格"
+            gold_usd_oz = gold["Close"].iloc[-1] / 0.0965835  # GLD每股≈0.0965835盎司
+        else:
+            gold_usd_oz = gold["Close"].iloc[-1]
+        # 換算匯率
+        try:
+            usdtwd = yf.Ticker("USDTWD=X").history(period="2d")["Close"].iloc[-1]
+        except Exception:
+            usdtwd = 32.0
+        # 單位換算為公克
+        unit_map = {"公克": 1, "錢": 3.75, "兩": 37.5, "盎司": 31.1035}
+        gram = weight * unit_map.get(unit, 1)
+        # 公克換算盎司
+        oz = gram / 31.1035
+        value_usd = oz * gold_usd_oz
+        value_twd = value_usd * usdtwd
+        gold_per_gram_twd = gold_usd_oz / 31.1035 * usdtwd
+        lines = [
+            f"🥇 黃金換算\n",
+            f"國際金價：${gold_usd_oz:,.2f}/盎司",
+            f"每公克：{gold_per_gram_twd:,.0f} TWD　${gold_usd_oz/31.1035:.2f} USD",
+            f"",
+            f"── 換算結果 ──",
+            f"{weight} {unit} = {gram:.4f} 公克 = {oz:.6f} 盎司",
+        ]
+        if currency == "TWD":
+            lines.append(f"價值：{value_twd:,.0f} 新台幣（匯率 {usdtwd:.2f}）")
+        else:
+            lines.append(f"價值：${value_usd:,.2f} USD")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"黃金換算失敗：{e}"
+
+
+def fetch_forex_deposit(amount_twd: float, currency: str, annual_rate: float, months: int,
+                         buy_rate: float = None, sell_rate: float = None) -> str:
+    try:
+        import yfinance as yf
+        cur = currency.upper()
+        # 查詢即時匯率
+        if not buy_rate:
+            pair = f"TWD{cur}=X"
+            hist = yf.Ticker(pair).history(period="2d")
+            if hist.empty:
+                pair2 = f"{cur}TWD=X"
+                hist2 = yf.Ticker(pair2).history(period="2d")
+                if not hist2.empty:
+                    rate_per_twd = 1 / hist2["Close"].iloc[-1]
+                else:
+                    return f"無法取得 {cur}/TWD 匯率"
+            else:
+                rate_per_twd = hist["Close"].iloc[-1]
+            buy_rate_actual = 1 / rate_per_twd  # TWD→外幣
+        else:
+            rate_per_twd = 1 / buy_rate
+            buy_rate_actual = buy_rate
+        if not sell_rate:
+            sell_rate_actual = buy_rate_actual  # 保守假設相同
+        else:
+            sell_rate_actual = sell_rate
+        # 換算外幣本金
+        foreign_principal = amount_twd / buy_rate_actual
+        # 計算外幣到期本利和
+        foreign_final = foreign_principal * (1 + annual_rate / 100 * months / 12)
+        foreign_interest = foreign_final - foreign_principal
+        # 換回台幣
+        twd_final = foreign_final * sell_rate_actual
+        twd_profit = twd_final - amount_twd
+        effective_rate = twd_profit / amount_twd / (months / 12) * 100
+        lines = [
+            f"🌐 外幣定存試算（{cur}）\n",
+            f"台幣本金：{amount_twd:,.0f} 元",
+            f"買入匯率：1 {cur} = {buy_rate_actual:.4f} TWD",
+            f"外幣本金：{foreign_principal:,.2f} {cur}",
+            f"年利率：{annual_rate}%　存款期：{months} 個月",
+            f"",
+            f"── 到期結果 ──",
+            f"外幣本利和：{foreign_final:,.4f} {cur}",
+            f"外幣利息：{foreign_interest:,.4f} {cur}",
+            f"賣出匯率：1 {cur} = {sell_rate_actual:.4f} TWD",
+            f"換回台幣：{twd_final:,.0f} 元",
+            f"台幣獲利：{twd_profit:+,.0f} 元",
+            f"等效台幣年利率：{effective_rate:.2f}%",
+        ]
+        if abs(buy_rate_actual - sell_rate_actual) < 0.001:
+            lines.append("\n⚠️ 未考慮匯差手續費及匯率變動風險")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"外幣定存試算失敗：{e}"
+
+
+def fetch_financial_health(monthly_income: float, monthly_expense: float,
+                            total_assets: float, total_debt: float,
+                            emergency_fund_months: float = 0,
+                            has_insurance: bool = False,
+                            investment_ratio: float = 0) -> str:
+    try:
+        score = 100
+        issues = []
+        goods = []
+        # 儲蓄率
+        save_rate = (monthly_income - monthly_expense) / monthly_income * 100 if monthly_income > 0 else 0
+        if save_rate < 0:
+            score -= 30; issues.append("每月支出超過收入（負儲蓄）")
+        elif save_rate < 10:
+            score -= 15; issues.append(f"儲蓄率偏低（{save_rate:.1f}%，建議≥20%）")
+        elif save_rate >= 20:
+            goods.append(f"儲蓄率良好（{save_rate:.1f}%）")
+        # 負債比
+        debt_ratio = total_debt / total_assets * 100 if total_assets > 0 else 100
+        if debt_ratio > 70:
+            score -= 25; issues.append(f"負債比過高（{debt_ratio:.1f}%，建議＜50%）")
+        elif debt_ratio > 50:
+            score -= 10; issues.append(f"負債比偏高（{debt_ratio:.1f}%）")
+        else:
+            goods.append(f"負債比健康（{debt_ratio:.1f}%）")
+        # 緊急備用金
+        if emergency_fund_months < 3:
+            score -= 20; issues.append(f"緊急備用金不足（{emergency_fund_months}個月，建議≥6個月）")
+        elif emergency_fund_months >= 6:
+            goods.append(f"緊急備用金充足（{emergency_fund_months}個月）")
+        # 保險
+        if not has_insurance:
+            score -= 10; issues.append("缺乏壽險/重疾險保障")
+        else:
+            goods.append("有保險保障")
+        # 投資比例
+        if investment_ratio >= 20:
+            goods.append(f"積極投資（{investment_ratio}%收入）")
+        elif investment_ratio > 0:
+            issues.append(f"投資比例偏低（{investment_ratio}%，建議≥20%）")
+            score -= 5
+        # 評分
+        score = max(0, min(100, score))
+        if score >= 80:
+            grade, emoji = "優良", "🟢"
+        elif score >= 60:
+            grade, emoji = "尚可", "🟡"
+        elif score >= 40:
+            grade, emoji = "需改善", "🟠"
+        else:
+            grade, emoji = "高風險", "🔴"
+        lines = [
+            f"💊 財務健康診斷\n",
+            f"月收入：{monthly_income:,.0f}　月支出：{monthly_expense:,.0f}",
+            f"總資產：{total_assets/10000:,.0f}萬　總負債：{total_debt/10000:,.0f}萬",
+            f"",
+            f"── 健康評分 ──",
+            f"{emoji} {score} 分 / 100（{grade}）",
+            f"儲蓄率：{save_rate:.1f}%　負債比：{debt_ratio:.1f}%",
+        ]
+        if goods:
+            lines.append("\n✅ 優點：" + "、".join(goods))
+        if issues:
+            lines.append("\n⚠️ 待改善：")
+            for i in issues:
+                lines.append(f"  • {i}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"財務健康診斷失敗：{e}"
+
+
+def fetch_deep_research(topic: str, lang: str = "zh-tw", depth: int = 5) -> str:
+    try:
+        from duckduckgo_search import DDGS
+        depth = min(max(depth, 3), 8)
+        # 自動生成子問題
+        sub_questions = [
+            f"{topic} 是什麼 基本介紹",
+            f"{topic} 最新發展 現況",
+            f"{topic} 數據 統計 報告",
+            f"{topic} 爭議 問題 缺點",
+            f"{topic} 未來趨勢 預測",
+            f"{topic} 專家看法 分析",
+            f"{topic} 影響 重要性",
+            f"{topic} 解決方案 建議",
+        ][:depth]
+        results = {}
+        with DDGS() as ddgs:
+            for q in sub_questions:
+                hits = list(ddgs.text(q, region="tw-tzh" if lang == "zh-tw" else "us-en", max_results=3))
+                if hits:
+                    results[q] = hits
+        lines = [f"📚 深度研究：{topic}\n"]
+        for q, hits in results.items():
+            lines.append(f"【{q}】")
+            for h in hits:
+                title = h.get("title", "")
+                body = h.get("body", "")[:200]
+                lines.append(f"  • {title}：{body}")
+            lines.append("")
+        lines.append(f"共蒐集 {len(results)} 個面向，{sum(len(v) for v in results.values())} 筆資料")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"深度研究失敗：{e}"
+
+
+def fetch_fact_check(claim: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{claim} 真假 查核",
+            f"{claim} 事實查核",
+            f"{claim} 錯誤 謠言",
+            f"{claim} 正確 證實",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        # 簡單關鍵字判斷情緒
+        text_blob = " ".join(h.get("title","") + " " + h.get("body","") for h in all_hits).lower()
+        false_kw = ["假", "謠言", "錯誤", "誤導", "不實", "false", "fake", "wrong", "misleading"]
+        true_kw = ["真", "確認", "屬實", "正確", "true", "confirmed", "correct", "verified"]
+        false_score = sum(text_blob.count(k) for k in false_kw)
+        true_score = sum(text_blob.count(k) for k in true_kw)
+        if false_score > true_score * 2:
+            verdict = "❌ 可能為假/誤導"
+        elif true_score > false_score * 2:
+            verdict = "✅ 可能屬實"
+        elif false_score > 0 or true_score > 0:
+            verdict = "⚠️ 有爭議，需進一步確認"
+        else:
+            verdict = "❓ 資料不足，無法判斷"
+        lines = [f"🔍 事實查核\n", f"說法：「{claim}」\n", f"查核結果：{verdict}\n", f"── 相關資料 ──"]
+        for h in all_hits[:6]:
+            title = h.get("title", "")
+            body = h.get("body", "")[:150]
+            url = h.get("href", "")
+            lines.append(f"• {title}\n  {body}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"事實查核失敗：{e}"
+
+
+def fetch_timeline_events(topic: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{topic} 歷史 時間軸 發展",
+            f"{topic} 大事記 年表",
+            f"{topic} 起源 始末 過程",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=4))
+                all_hits.extend(hits)
+        lines = [f"📅 時間軸：{topic}\n"]
+        seen = set()
+        for h in all_hits:
+            title = h.get("title", "")
+            if title in seen:
+                continue
+            seen.add(title)
+            body = h.get("body", "")[:300]
+            lines.append(f"【{title}】\n{body}\n")
+        lines.append(f"（共 {len(seen)} 筆資料，建議搭配 Wikipedia 查詢完整年表）")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"時間軸整理失敗：{e}"
+
+
+def fetch_sentiment_scan(topic: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{topic} 正面 支持 優點",
+            f"{topic} 負面 反對 批評 缺點",
+            f"{topic} 民眾看法 輿論 評價",
+        ]
+        pos_hits, neg_hits, neutral_hits = [], [], []
+        with DDGS() as ddgs:
+            pos_hits = list(ddgs.text(queries[0], region=region, max_results=4))
+            neg_hits = list(ddgs.text(queries[1], region=region, max_results=4))
+            neutral_hits = list(ddgs.text(queries[2], region=region, max_results=3))
+        total = len(pos_hits) + len(neg_hits) + len(neutral_hits)
+        pos_pct = round(len(pos_hits) / total * 100) if total else 0
+        neg_pct = round(len(neg_hits) / total * 100) if total else 0
+        neu_pct = 100 - pos_pct - neg_pct
+        lines = [
+            f"📊 輿情掃描：{topic}\n",
+            f"正面 {pos_pct}% ｜ 負面 {neg_pct}% ｜ 中立 {neu_pct}%\n",
+            f"── 正面觀點 ──",
+        ]
+        for h in pos_hits[:2]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:120]}")
+        lines.append(f"\n── 負面觀點 ──")
+        for h in neg_hits[:2]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:120]}")
+        lines.append(f"\n── 中立/綜合 ──")
+        for h in neutral_hits[:2]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:120]}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"輿情掃描失敗：{e}"
+
+
+def fetch_compare_analysis(items: list, dimensions: list = None, context: str = "") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        ctx = f" {context}" if context else ""
+        data = {}
+        with DDGS() as ddgs:
+            for item in items[:5]:
+                hits = list(ddgs.text(f"{item}{ctx} 評價 特點 優缺點", region="tw-tzh", max_results=3))
+                data[item] = " ".join(h.get("body","") for h in hits)[:500]
+        lines = [f"⚖️ 比較分析：{' vs '.join(items)}\n"]
+        if context:
+            lines.append(f"背景：{context}\n")
+        for item in items[:5]:
+            lines.append(f"【{item}】")
+            lines.append(data.get(item, "資料不足")[:400])
+            lines.append("")
+        lines.append("── 綜合建議 ──")
+        lines.append(f"以上為各項資料彙整，請根據您的需求與優先考量做最終選擇。")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"比較分析失敗：{e}"
+
+
+def fetch_pros_cons_analysis(subject: str, context: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        ctx = f" {context}" if context else ""
+        pros_hits, cons_hits = [], []
+        with DDGS() as ddgs:
+            pros_hits = list(ddgs.text(f"{subject}{ctx} 優點 好處 支持", region=region, max_results=4))
+            cons_hits = list(ddgs.text(f"{subject}{ctx} 缺點 壞處 風險 問題", region=region, max_results=4))
+        lines = [f"📋 優缺點分析：{subject}\n"]
+        if context:
+            lines.append(f"背景：{context}\n")
+        lines.append("── 優點 / 支持論點 ──")
+        for h in pros_hits[:3]:
+            lines.append(f"✅ {h.get('title','')}：{h.get('body','')[:150]}")
+        lines.append("\n── 缺點 / 反對論點 ──")
+        for h in cons_hits[:3]:
+            lines.append(f"⚠️ {h.get('title','')}：{h.get('body','')[:150]}")
+        confidence = "高" if len(pros_hits) + len(cons_hits) >= 6 else "中"
+        lines.append(f"\n資料信心度：{confidence}（共 {len(pros_hits)+len(cons_hits)} 筆）")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"優缺點分析失敗：{e}"
+
+
+def fetch_research_report(topic: str, purpose: str = "一般研究", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        sections = {
+            "背景與定義": f"{topic} 定義 介紹 背景",
+            "現況與數據": f"{topic} 現況 統計 數據 規模",
+            "主要發現": f"{topic} 研究 發現 結果 報告",
+            "爭議與挑戰": f"{topic} 問題 挑戰 爭議",
+            "趨勢與展望": f"{topic} 趨勢 未來 預測 展望",
+        }
+        collected = {}
+        with DDGS() as ddgs:
+            for sec, q in sections.items():
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                collected[sec] = hits
+        lines = [
+            f"📄 研究報告：{topic}",
+            f"目的：{purpose}\n",
+            f"═══ 執行摘要 ═══",
+            f"本報告針對「{topic}」進行多面向資料蒐集，涵蓋背景、數據、爭議與展望。\n",
+        ]
+        for sec, hits in collected.items():
+            lines.append(f"── {sec} ──")
+            for h in hits[:2]:
+                lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+            lines.append("")
+        lines += [
+            "═══ 結論與建議 ═══",
+            f"根據蒐集資料，「{topic}」是一個值得深入關注的議題。",
+            f"建議進一步參閱原始來源以獲得更完整資訊。",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"研究報告生成失敗：{e}"
+
+
+def fetch_opinion_writer(topic: str, stance: str = "中立", style: str = "正式") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        hits = []
+        with DDGS() as ddgs:
+            hits = list(ddgs.text(f"{topic} 分析 觀點 評論", region="tw-tzh", max_results=6))
+        context = "\n".join(f"- {h.get('title','')}：{h.get('body','')[:200]}" for h in hits)
+        lines = [f"✍️ 觀點撰寫：{topic}",
+                 f"立場：{stance}　文風：{style}\n",
+                 f"── 資料基礎 ──",
+                 context,
+                 f"\n── {stance}立場分析 ──",
+        ]
+        if stance == "支持":
+            lines.append(f"從現有資料來看，「{topic}」有其正面價值。以下論點支持此立場：")
+        elif stance == "反對":
+            lines.append(f"從現有資料來看，「{topic}」存在值得警惕的問題。以下論點提出質疑：")
+        elif stance == "批判":
+            lines.append(f"以批判性視角審視「{topic}」，可發現以下值得深究之處：")
+        else:
+            lines.append(f"綜合現有資料，「{topic}」可從多角度理解：")
+        lines.append(f"（本節由 Claude 依蒐集資料整合後發表看法）")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"觀點撰寫失敗：{e}"
+
+
+def fetch_trend_forecast(topic: str, timeframe: str = "全部", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{topic} 未來趨勢 預測 展望",
+            f"{topic} 短期 發展 2024 2025",
+            f"{topic} 長期 影響 趨勢",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        lines = [f"🔮 趨勢預測：{topic}", f"預測範圍：{timeframe}\n"]
+        if timeframe in ("短期(1年內)", "全部"):
+            lines.append("── 短期（1年內）──")
+            for h in all_hits[:3]:
+                lines.append(f"• {h.get('title','')}：{h.get('body','')[:180]}")
+            lines.append("")
+        if timeframe in ("中期(1-3年)", "全部"):
+            lines.append("── 中期（1–3年）──")
+            for h in all_hits[3:6]:
+                lines.append(f"• {h.get('title','')}：{h.get('body','')[:180]}")
+            lines.append("")
+        if timeframe in ("長期(3年以上)", "全部"):
+            lines.append("── 長期（3年以上）──")
+            for h in all_hits[6:9]:
+                lines.append(f"• {h.get('title','')}：{h.get('body','')[:180]}")
+            lines.append("")
+        lines.append(f"⚠️ 預測基於現有公開資料，實際發展受多重因素影響")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"趨勢預測失敗：{e}"
+
+
+def fetch_debate_simulator(motion: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        pro_hits, con_hits = [], []
+        with DDGS() as ddgs:
+            pro_hits = list(ddgs.text(f"{motion} 支持 贊成 優點 好處", region=region, max_results=4))
+            con_hits = list(ddgs.text(f"{motion} 反對 質疑 缺點 問題", region=region, max_results=4))
+        lines = [
+            f"⚔️ 辯論模擬：{motion}\n",
+            f"══ 正方論點 ══",
+        ]
+        for h in pro_hits[:3]:
+            lines.append(f"✅ {h.get('title','')}：{h.get('body','')[:180]}")
+        lines += [f"\n══ 反方論點 ══"]
+        for h in con_hits[:3]:
+            lines.append(f"❌ {h.get('title','')}：{h.get('body','')[:180]}")
+        pro_strength = len(pro_hits)
+        con_strength = len(con_hits)
+        if pro_strength > con_strength:
+            verdict = "正方論據較充分"
+        elif con_strength > pro_strength:
+            verdict = "反方論據較充分"
+        else:
+            verdict = "雙方論據相當，難以定論"
+        lines += [
+            f"\n══ 綜合判斷 ══",
+            f"議題：「{motion}」",
+            f"評估：{verdict}",
+            f"此議題涉及多方面考量，建議結合個人價值觀與具體情境做判斷。",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"辯論模擬失敗：{e}"
+
+
+def fetch_academic_search(query: str, field: str = "", lang: str = "en") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "us-en" if lang == "en" else "tw-tzh"
+        field_tag = f" {field}" if field else ""
+        queries = [
+            f"{query}{field_tag} site:scholar.google.com OR site:pubmed.ncbi.nlm.nih.gov OR site:semanticscholar.org",
+            f"{query}{field_tag} research study findings",
+            f"{query}{field_tag} academic paper review",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=4))
+                all_hits.extend(hits)
+        seen, lines = set(), [f"🎓 學術搜尋：{query}\n"]
+        if field:
+            lines.append(f"領域：{field}\n")
+        count = 0
+        for h in all_hits:
+            title = h.get("title", "")
+            if title in seen:
+                continue
+            seen.add(title)
+            body = h.get("body", "")[:250]
+            url = h.get("href", "")
+            lines.append(f"📄 {title}\n   {body}")
+            if url:
+                lines.append(f"   {url}")
+            lines.append("")
+            count += 1
+            if count >= 6:
+                break
+        lines.append(f"共找到 {count} 篇相關學術資料（建議至 Google Scholar 完整查閱）")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"學術搜尋失敗：{e}"
+
+
+def fetch_health_research(topic: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{topic} 症狀 原因 說明",
+            f"{topic} 治療 建議 注意事項",
+            f"{topic} 衛福部 醫學 研究",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        lines = [
+            f"🏥 健康資訊：{topic}\n",
+            f"⚠️ 以下資訊僅供參考，不替代醫師診斷，如有不適請就醫。\n",
+        ]
+        seen = set()
+        for h in all_hits[:6]:
+            title = h.get("title", "")
+            if title in seen:
+                continue
+            seen.add(title)
+            body = h.get("body", "")[:250]
+            lines.append(f"• {title}\n  {body}\n")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"健康資訊搜尋失敗：{e}"
+
+
+def fetch_law_research(topic: str, jurisdiction: str = "台灣", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{jurisdiction} {topic} 法律 法規 條文",
+            f"{jurisdiction} {topic} 判例 實務 見解",
+            f"{topic} 法律問題 解答",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        lines = [
+            f"⚖️ 法規查詢：{topic}（{jurisdiction}）\n",
+            f"⚠️ 以下資訊僅供參考，不構成法律意見，具體情況建議諮詢律師。\n",
+        ]
+        seen = set()
+        for h in all_hits[:6]:
+            title = h.get("title", "")
+            if title in seen:
+                continue
+            seen.add(title)
+            body = h.get("body", "")[:250]
+            lines.append(f"• {title}\n  {body}\n")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"法規查詢失敗：{e}"
+
+
+def fetch_person_research(name: str, context: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        ctx = f" {context}" if context else ""
+        queries = [
+            f"{name}{ctx} 背景 經歷 介紹",
+            f"{name}{ctx} 成就 評價 貢獻",
+            f"{name}{ctx} 爭議 批評 問題",
+        ]
+        sections = {"背景與經歷": [], "成就與評價": [], "爭議與批評": []}
+        sec_keys = list(sections.keys())
+        with DDGS() as ddgs:
+            for i, q in enumerate(queries):
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                sections[sec_keys[i]] = hits
+        lines = [f"👤 人物研究：{name}\n"]
+        if context:
+            lines.append(f"背景：{context}\n")
+        for sec, hits in sections.items():
+            if hits:
+                lines.append(f"── {sec} ──")
+                for h in hits[:2]:
+                    lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+                lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"人物研究失敗：{e}"
+
+
+def fetch_company_research(company: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        import yfinance as yf
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        lines = [f"🏢 公司研究：{company}\n"]
+        # 嘗試取得財務數據
+        try:
+            ticker = yf.Ticker(company)
+            info = ticker.info
+            name = info.get("longName") or info.get("shortName") or company
+            sector = info.get("sector") or "—"
+            industry = info.get("industry") or "—"
+            employees = info.get("fullTimeEmployees") or "—"
+            revenue = info.get("totalRevenue")
+            market_cap = info.get("marketCap")
+            lines += [
+                f"── 基本資料 ──",
+                f"公司：{name}　產業：{sector} / {industry}",
+            ]
+            if employees != "—":
+                lines.append(f"員工數：{employees:,}")
+            if revenue:
+                lines.append(f"年營收：${revenue/1e8:.1f}億")
+            if market_cap:
+                lines.append(f"市值：${market_cap/1e8:.1f}億")
+            lines.append("")
+        except Exception:
+            pass
+        # 搜尋新聞與評價
+        queries = {
+            "公司動態": f"{company} 最新消息 發展",
+            "產品評價": f"{company} 產品 服務 評價",
+            "競爭分析": f"{company} 競爭對手 市場地位",
+        }
+        with DDGS() as ddgs:
+            for sec, q in queries.items():
+                hits = list(ddgs.text(q, region=region, max_results=2))
+                if hits:
+                    lines.append(f"── {sec} ──")
+                    for h in hits:
+                        lines.append(f"• {h.get('title','')}：{h.get('body','')[:180]}")
+                    lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"公司研究失敗：{e}"
+
+
+def fetch_product_review(product: str, category: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        cat = f" {category}" if category else ""
+        queries = [
+            f"{product}{cat} 評測 開箱 評價",
+            f"{product}{cat} 優點 缺點 推薦",
+            f"{product}{cat} 使用心得 評分",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        pos_kw = ["推薦", "好用", "優秀", "值得", "滿意", "excellent", "great", "recommend"]
+        neg_kw = ["不推", "缺點", "問題", "失望", "差", "poor", "bad", "issue"]
+        all_text = " ".join(h.get("body","") for h in all_hits).lower()
+        pos_score = sum(all_text.count(k) for k in pos_kw)
+        neg_score = sum(all_text.count(k) for k in neg_kw)
+        total = pos_score + neg_score
+        rating = round(pos_score / total * 5, 1) if total > 0 else 3.0
+        lines = [
+            f"⭐ 產品評測：{product}",
+            f"綜合評分：{rating}/5.0　（正面{pos_score}則 / 負面{neg_score}則）\n",
+            f"── 評測彙整 ──",
+        ]
+        seen = set()
+        for h in all_hits[:6]:
+            title = h.get("title","")
+            if title in seen:
+                continue
+            seen.add(title)
+            body = h.get("body","")[:200]
+            lines.append(f"• {title}：{body}\n")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"產品評測失敗：{e}"
+
+
+def fetch_travel_research(destination: str, days: int = None, style: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        style_tag = f" {style}" if style else ""
+        days_tag = f" {days}天" if days else ""
+        queries = {
+            "景點": f"{destination} 必去景點 推薦",
+            "美食": f"{destination} 必吃美食 餐廳",
+            "交通住宿": f"{destination} 交通 住宿 費用",
+            "注意事項": f"{destination} 旅遊注意 簽證 安全",
+        }
+        lines = [f"✈️ 旅遊研究：{destination}"]
+        if days:
+            lines.append(f"行程天數：{days} 天")
+        if style:
+            lines.append(f"旅遊風格：{style}")
+        lines.append("")
+        with DDGS() as ddgs:
+            for sec, q in queries.items():
+                hits = list(ddgs.text(q + style_tag + days_tag, region=region, max_results=2))
+                if hits:
+                    lines.append(f"── {sec} ──")
+                    for h in hits:
+                        lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+                    lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"旅遊研究失敗：{e}"
+
+
+def fetch_job_market(job_title: str, location: str = "台灣", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = {
+            "薪資行情": f"{location} {job_title} 薪資 薪水 行情",
+            "技能需求": f"{job_title} 必備技能 技術要求 條件",
+            "市場需求": f"{location} {job_title} 職缺 需求 前景",
+            "未來趨勢": f"{job_title} 產業趨勢 未來發展 AI影響",
+        }
+        lines = [f"💼 職涯市場分析：{job_title}（{location}）\n"]
+        with DDGS() as ddgs:
+            for sec, q in queries.items():
+                hits = list(ddgs.text(q, region=region, max_results=2))
+                if hits:
+                    lines.append(f"── {sec} ──")
+                    for h in hits:
+                        lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+                    lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"職涯市場分析失敗：{e}"
+
+
+def fetch_impact_analysis(event: str, scope: list = None, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        if not scope:
+            scope = ["個人", "企業", "社會", "經濟"]
+        lines = [f"🌐 影響力分析：{event}\n"]
+        with DDGS() as ddgs:
+            for s in scope:
+                hits = list(ddgs.text(f"{event} 對{s}的影響", region=region, max_results=2))
+                if hits:
+                    lines.append(f"── 對{s}的影響 ──")
+                    for h in hits:
+                        lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+                    lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"影響力分析失敗：{e}"
+
+
+def fetch_scenario_planning(topic: str, horizon: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        h_tag = f" {horizon}" if horizon else ""
+        scenarios = {
+            "樂觀情境": f"{topic}{h_tag} 最好情況 成功 機會",
+            "基準情境": f"{topic}{h_tag} 預測 可能發展 趨勢",
+            "悲觀情境": f"{topic}{h_tag} 風險 失敗 最壞情況",
+        }
+        lines = [f"🔭 情境規劃：{topic}"]
+        if horizon:
+            lines.append(f"時間範圍：{horizon}")
+        lines.append("")
+        with DDGS() as ddgs:
+            for sc, q in scenarios.items():
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                lines.append(f"══ {sc} ══")
+                for h in hits[:2]:
+                    lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+                lines.append("")
+        lines.append("💡 建議針對各情境預先制定因應策略，提高應變能力")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"情境規劃失敗：{e}"
+
+
+def fetch_decision_helper(question: str, options: list = None, criteria: list = None) -> str:
+    try:
+        from duckduckgo_search import DDGS
+        lines = [f"🤔 決策輔助：{question}\n"]
+        if options:
+            lines.append(f"選項：{' vs '.join(options)}\n")
+        if criteria:
+            lines.append(f"考量標準：{', '.join(criteria)}\n")
+        # 搜尋相關資訊
+        with DDGS() as ddgs:
+            hits = list(ddgs.text(f"{question} 建議 分析 怎麼決定", region="tw-tzh", max_results=5))
+        lines.append("── 相關資訊 ──")
+        for h in hits[:4]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+        lines.append("")
+        if options:
+            lines.append("── 各選項分析 ──")
+            with DDGS() as ddgs:
+                for opt in options[:3]:
+                    opt_hits = list(ddgs.text(f"{opt} 優缺點 評價", region="tw-tzh", max_results=2))
+                    lines.append(f"【{opt}】")
+                    for h in opt_hits[:1]:
+                        lines.append(f"  {h.get('body','')[:180]}")
+                    lines.append("")
+        lines.append("── 建議框架 ──")
+        if criteria:
+            for c in criteria:
+                lines.append(f"□ {c}：請根據您的具體情況評分")
+        lines.append("\n綜合以上資訊，建議依個人優先順序做最終判斷。")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"決策輔助失敗：{e}"
+
+
+def fetch_devil_advocate(position: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{position} 反對 批評 缺點 問題",
+            f"{position} 失敗案例 風險 危險",
+            f"{position} 質疑 挑戰 反駁",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        lines = [
+            f"😈 魔鬼代言人：挑戰「{position}」\n",
+            f"以下從相反角度提出最強反駁，幫助您找出盲點：\n",
+            f"── 反駁論點 ──",
+        ]
+        seen = set()
+        for h in all_hits[:6]:
+            title = h.get("title","")
+            if title in seen:
+                continue
+            seen.add(title)
+            body = h.get("body","")[:200]
+            lines.append(f"⚡ {title}：{body}\n")
+        lines.append("── 結語 ──")
+        lines.append("以上為刻意的反面論點，目的是強化您的思考。若能反駁以上論點，您的立場將更為穩固。")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"魔鬼代言人失敗：{e}"
+
+
+def fetch_summary_writer(topic: str, max_points: int = 7, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in [topic, f"{topic} 重點 整理", f"{topic} 分析 摘要"]:
+                hits = list(ddgs.text(q, region=region, max_results=4))
+                all_hits.extend(hits)
+        # 去重並提取文字
+        seen, texts = set(), []
+        for h in all_hits:
+            title = h.get("title", "")
+            body = h.get("body", "")
+            if title not in seen and body:
+                seen.add(title)
+                texts.append(f"{title}：{body}")
+        combined = "\n".join(texts[:10])
+        # 從文字中提取句子當重點
+        import re
+        sentences = re.split(r'[。！？\n]', combined)
+        sentences = [s.strip() for s in sentences if len(s.strip()) > 15][:max_points * 3]
+        # 去重相似句
+        points, seen_short = [], set()
+        for s in sentences:
+            key = s[:10]
+            if key not in seen_short:
+                seen_short.add(key)
+                points.append(s[:120])
+            if len(points) >= max_points:
+                break
+        lines = [f"📝 摘要：{topic}\n", f"── 核心重點（{len(points)} 項）──"]
+        for i, p in enumerate(points, 1):
+            lines.append(f"{i}. {p}")
+        lines.append(f"\n共整合 {len(seen)} 篇資料來源")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"摘要失敗：{e}"
+
+
+def fetch_key_insights(topic: str, count: int = 5, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{topic} 關鍵發現 重要結論",
+            f"{topic} 研究結果 數據 證明",
+            f"{topic} 專家觀點 核心",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=4))
+                all_hits.extend(hits)
+        # 找含數字或強烈結論的句子（通常是洞察）
+        import re
+        insight_kw = ["發現", "證明", "研究", "顯示", "指出", "表明", "關鍵", "重要", "核心",
+                      "shows", "reveals", "found", "key", "critical", "significant"]
+        candidates = []
+        for h in all_hits:
+            body = h.get("body", "")
+            title = h.get("title", "")
+            score = sum(body.count(k) + title.count(k) for k in insight_kw)
+            has_num = bool(re.search(r'\d+[%倍億萬]', body))
+            candidates.append((score + (2 if has_num else 0), title, body[:200]))
+        candidates.sort(reverse=True)
+        lines = [f"💡 核心洞察：{topic}\n"]
+        seen_t = set()
+        idx = 1
+        for score, title, body in candidates:
+            if title in seen_t or not body:
+                continue
+            seen_t.add(title)
+            lines.append(f"#{idx} {title}\n   → {body}\n")
+            idx += 1
+            if idx > count:
+                break
+        lines.append(f"洞察來自 {len(all_hits)} 筆資料，依相關性與數據強度排序")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"洞察萃取失敗：{e}"
+
+
+def fetch_bias_detector(topic: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{topic} 媒體偏見 立場",
+            f"{topic} 支持方 反對方 爭議",
+            f"{topic} 批評 質疑 偏頗",
+        ]
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        # 分析立場傾向
+        pro_kw = ["支持", "推崇", "認同", "正面", "優秀", "progressive", "support", "advocate"]
+        con_kw = ["反對", "批評", "質疑", "保守", "警告", "oppose", "criticize", "concern"]
+        left_kw = ["進步", "左派", "liberal", "progressive", "left"]
+        right_kw = ["保守", "右派", "conservative", "right", "traditional"]
+        all_text = " ".join(h.get("body","") + h.get("title","") for h in all_hits).lower()
+        pro_s = sum(all_text.count(k) for k in pro_kw)
+        con_s = sum(all_text.count(k) for k in con_kw)
+        left_s = sum(all_text.count(k) for k in left_kw)
+        right_s = sum(all_text.count(k) for k in right_kw)
+        bias_dir = "中立" if abs(pro_s - con_s) < 3 else ("偏正面/支持" if pro_s > con_s else "偏負面/批評")
+        political = "中立" if abs(left_s - right_s) < 2 else ("偏進步/左派" if left_s > right_s else "偏保守/右派")
+        lines = [
+            f"🔍 偏見偵測：{topic}\n",
+            f"── 立場分析 ──",
+            f"情感傾向：{bias_dir}（正面訊號{pro_s} vs 負面訊號{con_s}）",
+            f"政治傾向：{political}",
+            f"",
+            f"── 各方觀點樣本 ──",
+        ]
+        seen = set()
+        for h in all_hits[:6]:
+            title = h.get("title","")
+            if title in seen:
+                continue
+            seen.add(title)
+            body = h.get("body","")[:150]
+            lines.append(f"• {title}：{body}")
+        lines.append(f"\n⚠️ 閱讀此議題資料時建議多方比對，避免單一來源形成片面認知")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"偏見偵測失敗：{e}"
+
+
+def fetch_second_opinion(question: str, experts: list = None, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        if not experts:
+            experts = ["經濟學家", "心理學家", "社會學家", "科技專家", "實務工作者"]
+        lines = [f"🎓 多專家視角：{question}\n"]
+        with DDGS() as ddgs:
+            for expert in experts[:5]:
+                hits = list(ddgs.text(f"{question} {expert} 觀點 看法", region=region, max_results=2))
+                lines.append(f"── {expert}的角度 ──")
+                if hits:
+                    for h in hits[:1]:
+                        lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+                else:
+                    lines.append(f"• 資料不足，需進一步搜尋")
+                lines.append("")
+        lines.append("💡 不同專業背景會產生截然不同的分析框架，綜合參考才能形成全面判斷")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"多專家視角失敗：{e}"
+
+
+def fetch_brainstorm(problem: str, count: int = 8, style: str = "實用", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        style_map = {
+            "實用": "解決方案 方法 做法",
+            "創意": "創新 新穎 非傳統 獨特",
+            "顛覆": "顛覆 革命性 完全不同 打破慣例",
+        }
+        style_q = style_map.get(style, "解決方案 方法")
+        all_hits = []
+        with DDGS() as ddgs:
+            for q in [f"{problem} {style_q}", f"{problem} 案例 成功", f"{problem} 創意 想法"]:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                all_hits.extend(hits)
+        lines = [f"🧠 腦力激盪：{problem}", f"風格：{style}　目標：{count} 個方案\n"]
+        # 從搜尋結果萃取方向
+        seen, ideas = set(), []
+        for h in all_hits:
+            title = h.get("title","")
+            body = h.get("body","")
+            if title not in seen and body:
+                seen.add(title)
+                ideas.append(f"{title}：{body[:120]}")
+        lines.append("── 方案清單 ──")
+        for i, idea in enumerate(ideas[:count], 1):
+            lines.append(f"{i}. {idea}\n")
+        if len(ideas) < count:
+            lines.append(f"（已蒐集 {len(ideas)} 個方向，可進一步細化）")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"腦力激盪失敗：{e}"
+
+
+def fetch_benchmark_analysis(subject: str, industry: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        ind_tag = f" {industry}" if industry else ""
+        queries = {
+            "業界標竿": f"{industry or subject} 最佳實踐 業界標準 領導者",
+            "對標案例": f"{subject}{ind_tag} 對標 學習 比較 領先",
+            "改進方向": f"{subject}{ind_tag} 改善 優化 提升 差距",
+        }
+        lines = [f"📐 標竿分析：{subject}"]
+        if industry:
+            lines.append(f"產業：{industry}")
+        lines.append("")
+        with DDGS() as ddgs:
+            for sec, q in queries.items():
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                lines.append(f"── {sec} ──")
+                for h in hits[:2]:
+                    lines.append(f"• {h.get('title','')}：{h.get('body','')[:200]}")
+                lines.append("")
+        lines.append("── 建議行動 ──")
+        lines.append(f"1. 找出領域內 Top 3 標竿對象，深入研究其核心做法")
+        lines.append(f"2. 識別 {subject} 與標竿的具體差距")
+        lines.append(f"3. 制定可量化的追趕目標與時間表")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"標竿分析失敗：{e}"
+
+
+def fetch_steel_man(opposing_view: str, own_position: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        # 搜尋支持對立觀點的最強論據
+        pro_hits, counter_hits = [], []
+        with DDGS() as ddgs:
+            pro_hits = list(ddgs.text(f"{opposing_view} 支持 論據 最強理由", region=region, max_results=4))
+            if own_position:
+                counter_hits = list(ddgs.text(f"{own_position} 論據 支持", region=region, max_results=3))
+        lines = [
+            f"⚔️ 鋼人論證\n",
+            f"對立觀點：「{opposing_view}」\n",
+            f"══ 鋼人化：對方最強論點 ══",
+            f"（以下為對方觀點的最有力版本，非我方立場）\n",
+        ]
+        for h in pro_hits[:4]:
+            lines.append(f"✦ {h.get('title','')}：{h.get('body','')[:180]}\n")
+        if own_position:
+            lines += [
+                f"══ 我方回應 ══",
+                f"立場：「{own_position}」\n",
+            ]
+            for h in counter_hits[:3]:
+                lines.append(f"→ {h.get('title','')}：{h.get('body','')[:180]}\n")
+        lines.append("💡 鋼人論證要求：先真正理解對方最強版本，才能給出真正有力的回應。")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"鋼人論證失敗：{e}"
+
+
+def fetch_socratic_questioning(topic: str, depth: int = 5, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        # 搜尋議題背景，生成有依據的問題層次
+        with DDGS() as ddgs:
+            hits = list(ddgs.text(f"{topic} 核心問題 爭議 本質", region=region, max_results=4))
+        context = " ".join(h.get("body","")[:150] for h in hits)
+        # 問題層次設計
+        layers = [
+            ("釐清概念", f"「{topic}」的核心定義是什麼？我們所說的究竟指的是哪個層面？"),
+            ("探究假設", f"這個說法背後有哪些未被檢驗的假設？是否所有人都認同這些前提？"),
+            ("檢驗證據", f"支持這個立場的證據有多可靠？有沒有相反的證據被忽略？"),
+            ("探索觀點", f"從不同利益關係人的角度來看，這件事會有什麼不同的詮釋？"),
+            ("追問影響", f"如果這個觀點是對的，它會帶來什麼後果？我們準備好接受這些後果了嗎？"),
+            ("質疑問題本身", f"我們是否問了正確的問題？有沒有更根本的問題應該先被回答？"),
+            ("尋找矛盾", f"這個立場內部有沒有自相矛盾之處？邊界條件在哪裡？"),
+            ("回歸本質", f"剝除所有表象後，這個議題的最核心本質究竟是什麼？"),
+        ][:depth]
+        lines = [f"🏛️ 蘇格拉底式提問：{topic}\n"]
+        for i, (layer_name, question) in enumerate(layers, 1):
+            lines.append(f"第{i}層【{layer_name}】")
+            lines.append(f"  ❓ {question}\n")
+        lines.append(f"── 背景參考 ──")
+        for h in hits[:2]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:150]}")
+        lines.append("\n💡 真正的理解來自不斷追問，而非接受第一個答案。")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"蘇格拉底提問失敗：{e}"
+
+
+def fetch_analogy_maker(concept: str, audience: str = "一般大眾", count: int = 3, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        with DDGS() as ddgs:
+            hits = list(ddgs.text(f"{concept} 類比 比喻 解釋 說明", region=region, max_results=4))
+        context = "\n".join(f"{h.get('title','')}：{h.get('body','')[:200]}" for h in hits[:4])
+        lines = [
+            f"🎯 類比說明：{concept}",
+            f"目標受眾：{audience}\n",
+            f"── 類比方案 ──\n",
+        ]
+        # 從搜尋結果找已有的類比，並提示生成
+        existing = []
+        for h in hits:
+            body = h.get("body","")
+            if any(kw in body for kw in ["就像", "好比", "類似", "如同", "比喻", "像是", "like", "similar to"]):
+                existing.append(body[:200])
+        for i, ex in enumerate(existing[:count], 1):
+            lines.append(f"類比 {i}：{ex}\n")
+        if len(existing) < count:
+            lines.append(f"（以上為搜尋到的現有類比，Claude 會在回應中補充更多針對「{audience}」的類比說明）")
+        lines.append(f"\n── 原始資料 ──")
+        for h in hits[:2]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:150]}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"類比說明失敗：{e}"
+
+
+def fetch_narrative_builder(topic: str, key_message: str = "", audience: str = "", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        with DDGS() as ddgs:
+            hits = list(ddgs.text(f"{topic} 問題 現況 挑戰 衝突", region=region, max_results=5))
+        context = {
+            "問題/現況": [],
+            "衝突/張力": [],
+            "洞察/轉折": [],
+            "結論/行動": [],
+        }
+        for h in hits[:5]:
+            body = h.get("body","")[:200]
+            title = h.get("title","")
+            context["問題/現況"].append(f"{title}：{body}")
+        lines = [
+            f"📖 敘事架構：{topic}\n",
+        ]
+        if key_message:
+            lines.append(f"核心訊息：{key_message}")
+        if audience:
+            lines.append(f"目標受眾：{audience}")
+        lines.append("")
+        lines += [
+            f"══ 第一幕：問題／現況 ══",
+            f"（建立共鳴，讓受眾認識到問題的存在）",
+        ]
+        for item in context["問題/現況"][:2]:
+            lines.append(f"• {item[:180]}")
+        lines += [
+            f"\n══ 第二幕：衝突／張力 ══",
+            f"（說明為何現有方案不夠，製造戲劇張力）",
+            f"• 現有做法的局限：需進一步搜尋或分析",
+            f"\n══ 第三幕：洞察／轉折 ══",
+            f"（提出新視角或解法，這是故事的核心）",
+            f"• 核心洞察：{key_message or '待Claude結合數據補充'}",
+            f"\n══ 第四幕：結論／行動 ══",
+            f"（清楚的號召行動或結語）",
+            f"• 建議行動：根據以上分析，Claude 將在回應中提出具體建議",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"敘事架構失敗：{e}"
+
+
+def fetch_critique_writer(subject: str, type_: str = "觀點", lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        queries = [
+            f"{subject} 評論 分析 優點",
+            f"{subject} 批評 缺點 問題 盲點",
+            f"{subject} 背景 脈絡 假設",
+        ]
+        sections = {}
+        with DDGS() as ddgs:
+            for q in queries:
+                hits = list(ddgs.text(q, region=region, max_results=3))
+                sections[q] = hits
+        lines = [f"🔬 批判性評析：{subject}（{type_}）\n"]
+        lines.append("── 優點與貢獻 ──")
+        for h in sections[queries[0]][:2]:
+            lines.append(f"✅ {h.get('title','')}：{h.get('body','')[:180]}")
+        lines.append("\n── 盲點與缺失 ──")
+        for h in sections[queries[1]][:2]:
+            lines.append(f"⚠️ {h.get('title','')}：{h.get('body','')[:180]}")
+        lines.append("\n── 隱藏假設與脈絡 ──")
+        for h in sections[queries[2]][:2]:
+            lines.append(f"🔍 {h.get('title','')}：{h.get('body','')[:180]}")
+        lines += [
+            "\n── 改進建議 ──",
+            "（Claude 將根據以上資料，在回應中提出具體改進方向）",
+            "\n💡 好的批判不是否定，而是幫助對象看見自己看不見的角落。",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"批判性評析失敗：{e}"
+
+
+def fetch_position_statement(issue: str, stance: str, lang: str = "zh-tw") -> str:
+    try:
+        from duckduckgo_search import DDGS
+        region = "tw-tzh" if lang == "zh-tw" else "us-en"
+        stance_q = "支持 贊成 優點" if stance == "支持" else ("反對 問題 缺點" if stance == "反對" else "條件 但書 前提")
+        queries = [
+            f"{issue} {stance_q} 論據 證據",
+            f"{issue} 數據 研究 案例",
+            f"{issue} 反對方 質疑 反駁",
+        ]
+        evidence, data, counter = [], [], []
+        with DDGS() as ddgs:
+            evidence = list(ddgs.text(queries[0], region=region, max_results=4))
+            data = list(ddgs.text(queries[1], region=region, max_results=3))
+            counter = list(ddgs.text(queries[2], region=region, max_results=3))
+        lines = [
+            f"📣 立場聲明：{issue}",
+            f"立場：{stance}\n",
+            f"══ 論點（Claim）══",
+            f"對於「{issue}」，我的立場是【{stance}】，理由如下：\n",
+            f"── 論據與證據 ──",
+        ]
+        for h in evidence[:3]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:180]}")
+        lines.append("\n── 數據支撐 ──")
+        for h in data[:2]:
+            lines.append(f"• {h.get('title','')}：{h.get('body','')[:180]}")
+        lines.append("\n── 預判反駁與回應 ──")
+        for h in counter[:2]:
+            lines.append(f"反方：{h.get('title','')}：{h.get('body','')[:150]}")
+        lines += [
+            "\n── 結論 ──",
+            f"綜合以上，{stance}「{issue}」的立場是有根據且可辯護的。",
+            "（Claude 將在回應中整合以上資料，給出完整系統性論述）",
+        ]
+        return "\n".join(lines)
+    except Exception as e:
+        return f"立場聲明失敗：{e}"
+
+
 def fetch_crypto(coin: str, vs_currency: str = "usd") -> str:
     try:
         ticker_map = {
@@ -3570,7 +7346,7 @@ def fetch_etf(symbol: str) -> str:
                 top_items = []
                 for _, row in holdings.head(5).iterrows():
                     n = row.get("Name") or row.get("name") or ""
-                    w = row.get("holdingPercent") or row.get("weight") or 0
+                    w = row.get("Holding Percent") or row.get("holdingPercent") or row.get("weight") or 0
                     top_items.append(f"  {n}（{w*100:.1f}%）")
                 if top_items:
                     top_str = "\n前5大持股：\n" + "\n".join(top_items)
@@ -3602,17 +7378,17 @@ def fetch_earnings(symbol: str) -> str:
 
         lines = [f"📊 {name} ({symbol}) 財報趨勢\n"]
 
-        # 季度財報
+        # 季度財報（用 quarterly_income_stmt，quarterly_earnings 已棄用）
         try:
-            qe = ticker.quarterly_earnings
-            if qe is not None and not qe.empty:
+            qi = ticker.quarterly_income_stmt
+            if qi is not None and not qi.empty and "Basic EPS" in qi.index:
                 lines.append("── 近幾季 EPS ──")
-                for idx, row in qe.head(6).iterrows():
-                    actual = row.get("Actual") or row.get("actual", 0)
-                    estimate = row.get("Estimate") or row.get("estimate", 0)
-                    beat = actual - estimate if estimate else 0
-                    beat_str = f"超預期 {beat:+.2f}" if beat > 0 else (f"低於預期 {beat:+.2f}" if beat < 0 else "符合預期")
-                    lines.append(f"  {idx}：EPS {actual:.2f}（預期 {estimate:.2f}）{beat_str}")
+                eps_row = qi.loc["Basic EPS"]
+                for col in eps_row.index[:6]:
+                    val = eps_row[col]
+                    if val is not None and str(val) != "nan":
+                        quarter = str(col)[:10]
+                        lines.append(f"  {quarter}：EPS {float(val):.2f}")
         except Exception:
             pass
 
@@ -11892,6 +15668,690 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                 )
 
+            elif tool_use.name == "china_search":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_china_search,
+                    tool_use.input["query"],
+                    tool_use.input.get("category", "其他"),
+                    tool_use.input.get("count", 6))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1500, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_ashare":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_ashare,
+                    tool_use.input["code"], tool_use.input.get("period", "1mo"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_cn_news":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_cn_news,
+                    tool_use.input.get("source", "all"), tool_use.input.get("count", 5))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "get_institutional":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_institutional,
+                    tool_use.input.get("symbol", ""), tool_use.input.get("date", ""))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_sector":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_sector,
+                    tool_use.input.get("market", "us"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_commodity":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_commodity,
+                    tool_use.input.get("items", ["all"]))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_bond_yield":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_bond_yield)
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_dividend_calendar":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_dividend_calendar,
+                    tool_use.input["symbol"])
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "stock_screener":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_stock_screener,
+                    tool_use.input["criteria"], tool_use.input.get("market", "us"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1500, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_margin_trading":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_margin_trading,
+                    tool_use.input["symbol"], tool_use.input.get("date", ""))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_options":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_options,
+                    tool_use.input["symbol"], tool_use.input.get("expiry", ""))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_futures":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_futures,
+                    tool_use.input.get("items", ["all"]))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_ipo":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_ipo,
+                    tool_use.input.get("count", 10))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "backtest":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_backtest,
+                    tool_use.input["symbol"],
+                    tool_use.input.get("strategy", "ma_cross"),
+                    tool_use.input.get("period", "2y"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_global_market":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_global_market)
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_economic_calendar":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_economic_calendar,
+                    tool_use.input.get("count", 10))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_earnings_calendar":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_earnings_calendar,
+                    tool_use.input.get("days", 7))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_analyst_ratings":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_analyst_ratings,
+                    tool_use.input["symbol"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_short_interest":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_short_interest,
+                    tool_use.input["symbol"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_correlation":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_correlation,
+                    tool_use.input["symbols"], tool_use.input.get("period", "1y"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_risk_metrics":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_risk_metrics,
+                    tool_use.input["symbol"], tool_use.input.get("period", "1y"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_money_flow":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_money_flow,
+                    tool_use.input["symbol"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_concept_stocks":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_concept_stocks,
+                    tool_use.input["theme"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1500, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_crypto_depth":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_crypto_depth,
+                    tool_use.input.get("coin", "bitcoin"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "drip_calculator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_drip_calculator,
+                    tool_use.input["symbol"], tool_use.input["shares"],
+                    tool_use.input.get("years", 10), tool_use.input.get("monthly_invest", 0))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_forex_chart":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_forex_chart,
+                    tool_use.input["pair"], tool_use.input.get("period", "3mo"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_warrant":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_warrant,
+                    tool_use.input["underlying"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_portfolio_risk":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_portfolio_risk,
+                    tool_use.input["holdings"], tool_use.input.get("period", "1y"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1500, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "retirement_calculator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_retirement_calculator,
+                    tool_use.input["current_age"], tool_use.input["current_savings"],
+                    tool_use.input["monthly_save"], tool_use.input.get("retire_age", 65),
+                    tool_use.input.get("annual_return", 6.0), tool_use.input.get("monthly_expense", 50000))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "loan_calculator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_loan_calculator,
+                    tool_use.input["principal"], tool_use.input["annual_rate"],
+                    tool_use.input["years"], tool_use.input.get("loan_type", "等額本息"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "compound_calculator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_compound_calculator,
+                    tool_use.input["principal"], tool_use.input["annual_rate"],
+                    tool_use.input["years"], tool_use.input.get("monthly_add", 0),
+                    tool_use.input.get("compound_freq", 12))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "asset_allocation":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_asset_allocation,
+                    tool_use.input["age"], tool_use.input["risk_level"],
+                    tool_use.input.get("goal", "退休"), tool_use.input.get("investment_horizon"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "tw_tax_calculator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_tw_tax_calculator,
+                    tool_use.input["dividend_income"], tool_use.input.get("other_income", 0),
+                    tool_use.input.get("tax_bracket"), tool_use.input.get("sell_amount", 0))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "currency_converter":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_currency_converter,
+                    tool_use.input["amount"], tool_use.input["from_currency"],
+                    tool_use.input["to_currency"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_fund":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_fund,
+                    tool_use.input["symbol"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "get_reits":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_reits,
+                    tool_use.input["symbol"])
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "inflation_adjusted":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_inflation_adjusted,
+                    tool_use.input["nominal_return"], tool_use.input["years"],
+                    tool_use.input["amount"], tool_use.input.get("inflation_rate", 2.0))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "defi_calculator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_defi_calculator,
+                    tool_use.input["principal_usd"], tool_use.input["apy"],
+                    tool_use.input["days"], tool_use.input.get("compound", True),
+                    tool_use.input.get("protocol", ""))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "gold_calculator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_gold_calculator,
+                    tool_use.input["weight"], tool_use.input.get("unit", "公克"),
+                    tool_use.input.get("currency", "TWD"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=512, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "forex_deposit":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_forex_deposit,
+                    tool_use.input["amount_twd"], tool_use.input["currency"],
+                    tool_use.input["annual_rate"], tool_use.input["months"],
+                    tool_use.input.get("buy_rate"), tool_use.input.get("sell_rate"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "financial_health":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_financial_health,
+                    tool_use.input["monthly_income"], tool_use.input["monthly_expense"],
+                    tool_use.input["total_assets"], tool_use.input["total_debt"],
+                    tool_use.input.get("emergency_fund_months", 0),
+                    tool_use.input.get("has_insurance", False),
+                    tool_use.input.get("investment_ratio", 0))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "deep_research":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_deep_research,
+                    tool_use.input["topic"], tool_use.input.get("lang", "zh-tw"),
+                    tool_use.input.get("depth", 5))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "fact_check":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_fact_check,
+                    tool_use.input["claim"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "timeline_events":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_timeline_events,
+                    tool_use.input["topic"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "sentiment_scan":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_sentiment_scan,
+                    tool_use.input["topic"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "compare_analysis":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_compare_analysis,
+                    tool_use.input["items"], tool_use.input.get("dimensions"),
+                    tool_use.input.get("context", ""))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "pros_cons_analysis":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_pros_cons_analysis,
+                    tool_use.input["subject"], tool_use.input.get("context", ""),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "research_report":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_research_report,
+                    tool_use.input["topic"], tool_use.input.get("purpose", "一般研究"),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "opinion_writer":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_opinion_writer,
+                    tool_use.input["topic"], tool_use.input.get("stance", "中立"),
+                    tool_use.input.get("style", "正式"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "trend_forecast":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_trend_forecast,
+                    tool_use.input["topic"], tool_use.input.get("timeframe", "全部"),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "debate_simulator":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_debate_simulator,
+                    tool_use.input["motion"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "academic_search":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_academic_search,
+                    tool_use.input["query"], tool_use.input.get("field", ""),
+                    tool_use.input.get("lang", "en"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "health_research":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_health_research,
+                    tool_use.input["topic"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "law_research":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_law_research,
+                    tool_use.input["topic"], tool_use.input.get("jurisdiction", "台灣"),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "person_research":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_person_research,
+                    tool_use.input["name"], tool_use.input.get("context", ""),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "company_research":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_company_research,
+                    tool_use.input["company"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "product_review":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_product_review,
+                    tool_use.input["product"], tool_use.input.get("category", ""),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "travel_research":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_travel_research,
+                    tool_use.input["destination"], tool_use.input.get("days"),
+                    tool_use.input.get("style", ""), tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "job_market":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_job_market,
+                    tool_use.input["job_title"], tool_use.input.get("location", "台灣"),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "impact_analysis":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_impact_analysis,
+                    tool_use.input["event"], tool_use.input.get("scope"),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "scenario_planning":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_scenario_planning,
+                    tool_use.input["topic"], tool_use.input.get("horizon", ""),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "decision_helper":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_decision_helper,
+                    tool_use.input["question"], tool_use.input.get("options"),
+                    tool_use.input.get("criteria"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "devil_advocate":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_devil_advocate,
+                    tool_use.input["position"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "summary_writer":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_summary_writer,
+                    tool_use.input["topic"], tool_use.input.get("max_points", 7),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "key_insights":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_key_insights,
+                    tool_use.input["topic"], tool_use.input.get("count", 5),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "bias_detector":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_bias_detector,
+                    tool_use.input["topic"], tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "second_opinion":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_second_opinion,
+                    tool_use.input["question"], tool_use.input.get("experts"),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "brainstorm":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_brainstorm,
+                    tool_use.input["problem"], tool_use.input.get("count", 8),
+                    tool_use.input.get("style", "實用"), tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "benchmark_analysis":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_benchmark_analysis,
+                    tool_use.input["subject"], tool_use.input.get("industry", ""),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "steel_man":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_steel_man,
+                    tool_use.input["opposing_view"], tool_use.input.get("own_position", ""),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "socratic_questioning":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_socratic_questioning,
+                    tool_use.input["topic"], tool_use.input.get("depth", 5),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "analogy_maker":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_analogy_maker,
+                    tool_use.input["concept"], tool_use.input.get("audience", "一般大眾"),
+                    tool_use.input.get("count", 3), tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=1536, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "narrative_builder":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_narrative_builder,
+                    tool_use.input["topic"], tool_use.input.get("key_message", ""),
+                    tool_use.input.get("audience", ""), tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "critique_writer":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_critique_writer,
+                    tool_use.input["subject"], tool_use.input.get("type", "觀點"),
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
+            elif tool_use.name == "position_statement":
+                import asyncio; loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_position_statement,
+                    tool_use.input["issue"], tool_use.input["stance"],
+                    tool_use.input.get("lang", "zh-tw"))
+                response = client.messages.create(model="claude-sonnet-4-6", max_tokens=2048, system=system, tools=TOOLS,
+                    messages=history + [{"role": "assistant", "content": response.content},
+                    {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}])
+
             elif tool_use.name == "ptt_search":
                 import asyncio
                 loop = asyncio.get_running_loop()
@@ -12271,8 +16731,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 final_text = reply if is_owner else _fix_group_reply(reply, sender_name)
                 await sent_msg.edit_text(final_text)
-            except Exception:
-                await _fr(reply)
+            except Exception as _edit_err:
+                # "Message is not modified" 代表內容一樣，不需要再送一則，其餘錯誤才補發
+                if "not modified" not in str(_edit_err).lower():
+                    await _fr(reply)
         else:
             await _fr(reply)
 
@@ -12438,6 +16900,155 @@ async def daily_learn_and_push(context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=OWNER_ID, text=msg)
 
 
+def collect_daily_report() -> str:
+    """收集今天電腦的活動記錄，回傳給 Claude 整理成報告"""
+    import subprocess, datetime
+    lines = []
+    today = datetime.date.today().strftime("%Y-%m-%d")
+
+    # 1. 系統開關機 / 重開機事件
+    try:
+        ps = subprocess.run(
+            ["powershell", "-Command",
+             f"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+             f"Get-WinEvent -FilterHashtable @{{LogName='System';Id=@(1074,6005,6006,6008,41);StartTime='{today}'}} "
+             f"-ErrorAction SilentlyContinue | Select-Object TimeCreated,Id,Message | ConvertTo-Csv -NoTypeInformation"],
+            capture_output=True, text=True, encoding="utf-8"
+        )
+        if ps.stdout.strip():
+            lines.append("【開關機/重開機事件】\n" + ps.stdout.strip()[:800])
+    except Exception:
+        pass
+
+    # 2. 安裝或更新的程式
+    try:
+        ps = subprocess.run(
+            ["powershell", "-Command",
+             f"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+             f"Get-WinEvent -FilterHashtable @{{LogName='System';Id=@(19,20,43);StartTime='{today}'}} "
+             f"-ErrorAction SilentlyContinue | Select-Object TimeCreated,Message | ConvertTo-Csv -NoTypeInformation"],
+            capture_output=True, text=True, encoding="utf-8"
+        )
+        if ps.stdout.strip():
+            lines.append("【程式安裝/更新】\n" + ps.stdout.strip()[:500])
+    except Exception:
+        pass
+
+    # 3. 今天執行過的程式（Security 事件 4688）
+    try:
+        ps = subprocess.run(
+            ["powershell", "-Command",
+             f"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
+             f"Get-WinEvent -FilterHashtable @{{LogName='Security';Id=4688;StartTime='{today}'}} "
+             f"-ErrorAction SilentlyContinue -MaxEvents 50 | "
+             f"Select-Object TimeCreated,@{{N='Process';E={{($_.Message -split '新增處理程序名稱:')[1] -split '\`n' | Select-Object -First 1}}}} | "
+             f"ConvertTo-Csv -NoTypeInformation"],
+            capture_output=True, text=True, encoding="utf-8"
+        )
+        if ps.stdout.strip():
+            lines.append("【今日執行程式（前50筆）】\n" + ps.stdout.strip()[:800])
+    except Exception:
+        pass
+
+    # 4. 今天詢問小牛馬的對話數據表（從 memory.db）
+    try:
+        import sqlite3
+        db_path = Path(__file__).parent / "memory.db"
+        if db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            cur = conn.cursor()
+
+            # 今日所有訊息
+            cur.execute(
+                "SELECT chat_id, role, content, created_at FROM chat_history WHERE created_at >= ? ORDER BY created_at",
+                (today,)
+            )
+            rows = cur.fetchall()
+            conn.close()
+
+            if rows:
+                # 統計各維度
+                total_user = sum(1 for r in rows if r[1] == "user")
+                total_bot  = sum(1 for r in rows if r[1] == "assistant")
+
+                # 每個 chat_id 的問題數
+                from collections import Counter
+                chat_counts = Counter(r[0] for r in rows if r[1] == "user")
+
+                # 時段分布（每2小時一格）
+                hour_counts = Counter()
+                for r in rows:
+                    if r[1] == "user":
+                        try:
+                            h = int(r[3][11:13])  # HH from "YYYY-MM-DD HH:MM:SS"
+                            slot = f"{h:02d}:00~{h+2:02d}:00" if h % 2 == 0 else f"{h-1:02d}:00~{h+1:02d}:00"
+                            hour_counts[f"{(h//2)*2:02d}:00"] += 1
+                        except Exception:
+                            pass
+
+                # 用戶訊息清單（給 Claude 分析主題用）
+                user_msgs = [r[2][:80] for r in rows if r[1] == "user"]
+
+                table = (
+                    f"【小牛馬今日對話數據表】\n"
+                    f"{'─'*30}\n"
+                    f"用戶提問總數：{total_user} 則\n"
+                    f"小牛馬回覆數：{total_bot} 則\n"
+                    f"活躍聊天室數：{len(chat_counts)} 個\n"
+                    f"\n各聊天室提問數：\n"
+                    + "\n".join(f"  chat_id {cid}：{cnt} 則" for cid, cnt in chat_counts.most_common())
+                    + f"\n\n時段分布：\n"
+                    + "\n".join(f"  {slot}：{'█' * cnt} {cnt}則" for slot, cnt in sorted(hour_counts.items()))
+                    + f"\n\n今日問題內容（供分析主題）：\n"
+                    + "\n".join(f"  - {m}" for m in user_msgs[:20])
+                )
+                lines.append(table)
+            else:
+                lines.append("【小牛馬今日對話數據表】\n今日無對話記錄")
+    except Exception as e:
+        lines.append(f"【小牛馬今日對話數據表】讀取失敗：{e}")
+
+    # 5. 目前系統資源
+    try:
+        import psutil
+        cpu = psutil.cpu_percent(interval=1)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage("C:\\")
+        lines.append(
+            f"【目前系統狀態】\n"
+            f"CPU：{cpu}%　記憶體：{mem.percent}%（{mem.used//1024//1024//1024:.1f}GB / {mem.total//1024//1024//1024:.1f}GB）\n"
+            f"磁碟C：使用 {disk.percent}%（剩餘 {disk.free//1024//1024//1024:.1f}GB）"
+        )
+    except Exception:
+        pass
+
+    return "\n\n".join(lines) if lines else "今日無特殊活動記錄"
+
+
+async def daily_pc_report(context: ContextTypes.DEFAULT_TYPE):
+    """每天晚上 10:00 台灣時間：匯報今天電腦做了什麼"""
+    import asyncio
+    loop = asyncio.get_running_loop()
+
+    raw_data = await loop.run_in_executor(None, collect_daily_report)
+
+    def generate_report():
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1000,
+            system=(
+                "你是小牛馬，于晏哥的貼身助理。現在是晚上10點，你要把今天這台電腦的活動整理成一份有條理的日報給于晏哥。"
+                "風格要簡潔專業，用繁體中文條列式呈現，分成幾個區塊。如果沒什麼特別的就直說，不要廢話。"
+                "結尾可以加一句嘴賤的話。"
+            ),
+            messages=[{"role": "user", "content": f"以下是今天的電腦活動原始資料，請整理成日報：\n\n{raw_data}"}]
+        )
+        return response.content[0].text
+
+    report = await loop.run_in_executor(None, generate_report)
+    await context.bot.send_message(chat_id=OWNER_ID, text=f"📋 今日電腦日報\n\n{report}")
+
+
 if __name__ == "__main__":
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     app = ApplicationBuilder().token(token).build()
@@ -12446,6 +17057,11 @@ if __name__ == "__main__":
     app.job_queue.run_daily(
         goodmorning,
         time=datetime.time(hour=3, minute=0, tzinfo=datetime.timezone.utc)
+    )
+    # 每天晚上 10:00 台灣時間（UTC+8）= 14:00 UTC
+    app.job_queue.run_daily(
+        daily_pc_report,
+        time=datetime.time(hour=14, minute=0, tzinfo=datetime.timezone.utc)
     )
     # 每天晚上 10:30 台灣時間（UTC+8）= 14:30 UTC
     app.job_queue.run_daily(
