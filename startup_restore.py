@@ -113,25 +113,21 @@ def get_existing_tasks() -> set:
     return tasks
 
 def create_task(name: str, trigger_type: str, time_hhmm, script: str, desc: str):
+    # 所有排程統一最強設定：WakeToRun + StartWhenAvailable + 失敗重試3次
+    _SETTINGS = ("New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
+                 "-StartWhenAvailable -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Days 0) "
+                 "-RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)")
     if trigger_type == "Daily":
         trigger_ps = f"New-ScheduledTaskTrigger -Daily -At '{time_hhmm}'"
-        settings_ps = "New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable"
     elif trigger_type == "Logon":
         trigger_ps = "New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME"
-        settings_ps = "New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable"
     elif trigger_type == "Hourly":
-        # 每小時：用 RepetitionInterval
-        trigger_ps = (
-            "$t = New-ScheduledTaskTrigger -Daily -At '00:00'; "
-            "$t.Repetition = (New-Object Microsoft.Win32.TaskScheduler.RepetitionPattern); "
-            # 直接用 XML 方式更可靠，改用簡單方法
-            "New-ScheduledTaskTrigger -Once -At '00:00' "
-            "-RepetitionInterval (New-TimeSpan -Hours 1) "
-            "-RepetitionDuration ([TimeSpan]::MaxValue)"
-        )
-        settings_ps = "New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable"
+        trigger_ps = ("New-ScheduledTaskTrigger -Once -At '00:00' "
+                      "-RepetitionInterval (New-TimeSpan -Hours 1) "
+                      "-RepetitionDuration ([TimeSpan]::MaxValue)")
     else:
         return
+    settings_ps = _SETTINGS
 
     ps = (
         f"$action = New-ScheduledTaskAction -Execute '{PYTHONW}' -Argument '{script}';"
