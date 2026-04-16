@@ -7122,6 +7122,128 @@ def _cap_monitor_logical(monitor: int):
     return img, mon["left"], mon["top"]
 
 
+# ── 智慧等待：偵測螢幕停止變化 ─────────────────────────────────────────
+def _wait_screen_stable(monitor: int = 1, threshold: float = 0.5, timeout: float = 15.0, interval: float = 0.5):
+    """連續截圖比對，直到畫面穩定（差異低於 threshold%）或超時"""
+    import time, numpy as np
+    img_a, _, _ = _cap_monitor_logical(monitor)
+    arr_a = np.array(img_a)
+    start = time.time()
+    while time.time() - start < timeout:
+        time.sleep(interval)
+        img_b, _, _ = _cap_monitor_logical(monitor)
+        arr_b = np.array(img_b)
+        if arr_a.shape == arr_b.shape:
+            diff = np.mean(np.abs(arr_a.astype(float) - arr_b.astype(float)))
+            diff_pct = diff / 255 * 100
+            if diff_pct < threshold:
+                return True  # 畫面穩定
+        arr_a = arr_b
+    return False  # 超時
+
+
+# ── 動作驗證迴圈：點擊後確認畫面有變化 ────────────────────────────────
+def _action_with_verify(action_fn, monitor: int = 1, max_retries: int = 3, wait: float = 0.8):
+    """執行動作 → 比對前後截圖 → 沒變化就重試
+    action_fn: 無參數的 callable，執行實際動作（如點擊）
+    回傳 True 如果畫面有變化，False 如果重試後仍無變化
+    """
+    import time, numpy as np
+    for attempt in range(max_retries):
+        img_before, _, _ = _cap_monitor_logical(monitor)
+        arr_before = np.array(img_before)
+        action_fn()
+        time.sleep(wait)
+        img_after, _, _ = _cap_monitor_logical(monitor)
+        arr_after = np.array(img_after)
+        if arr_before.shape == arr_after.shape:
+            diff = np.mean(np.abs(arr_before.astype(float) - arr_after.astype(float)))
+            diff_pct = diff / 255 * 100
+            if diff_pct > 0.5:  # 畫面有變化 = 動作成功
+                return True
+        # 沒變化，重試
+        time.sleep(0.3)
+    return False
+
+
+# ── UIA 元素偵測：用 Windows UI Automation 找元素 ─────────────────────
+def _uia_find_element(description: str, window_title: str = None):
+    """用 pywinauto UIA 在前景視窗中搜尋元素，回傳 (center_x, center_y) 或 (None, None)
+    比 vision_locate 快 10 倍，不需截圖和 API
+    """
+    try:
+        from pywinauto import Desktop
+        import re
+
+        desktop = Desktop(backend="uia")
+
+        # 找目標視窗
+        if window_title:
+            wins = desktop.windows(title_re=f".*{re.escape(window_title)}.*", visible_only=True)
+        else:
+            # 用前景視窗
+            import win32gui
+            hwnd = win32gui.GetForegroundWindow()
+            wins = [desktop.window(handle=hwnd)]
+
+        if not wins:
+            return None, None
+
+        win = wins[0]
+        desc_lower = description.lower()
+
+        # 搜尋策略：先精確匹配，再模糊匹配
+        best = None
+        best_score = 0
+
+        try:
+            # 取得所有子元素（限深度避免太慢）
+            children = win.descendants(depth=8)
+        except Exception:
+            return None, None
+
+        for child in children:
+            try:
+                name = (child.window_text() or "").strip()
+                ctrl_type = (child.friendly_class_name() or "").lower()
+                if not name:
+                    continue
+
+                name_lower = name.lower()
+                score = 0
+
+                # 精確包含
+                if desc_lower in name_lower:
+                    score = 100
+                # 關鍵字匹配
+                else:
+                    keywords = [w for w in desc_lower.split() if len(w) > 1]
+                    if keywords:
+                        matched = sum(1 for kw in keywords if kw in name_lower)
+                        score = matched / len(keywords) * 80
+
+                # 可點擊元素加分
+                if ctrl_type in ("button", "hyperlink", "listitem", "menuitem", "treeitem", "tabitem"):
+                    score += 10
+
+                if score > best_score:
+                    rect = child.rectangle()
+                    cx = (rect.left + rect.right) // 2
+                    cy = (rect.top + rect.bottom) // 2
+                    # 確保座標在合理範圍
+                    if -4000 < cx < 8000 and -2000 < cy < 4000:
+                        best = (cx, cy)
+                        best_score = score
+            except Exception:
+                continue
+
+        if best and best_score >= 50:
+            return best
+        return None, None
+    except Exception:
+        return None, None
+
+
 def _vision_find(img, description: str):
     """截圖 → OCR輔助 + Claude Vision → 回傳 (rx, ry) resized圖像像素，找不到回傳 (None, None)"""
     import anthropic, base64, io, json, re
@@ -7244,7 +7366,8 @@ def fetch_vision_locate(description: str, monitor: int = 1, action: str = "click
     try:
         # 嘗試把瀏覽器切到前景並最大化（如果描述中提到影片、YouTube等）
         _desc_lower = description.lower()
-        if any(k in _desc_lower for k in ["影片", "video", "youtube", "縮圖", "thumbnail", "搜尋結果", "第一"]):
+        _browser_kw = any(k in _desc_lower for k in ["影片", "video", "youtube", "縮圖", "thumbnail", "搜尋結果", "第一", "chrome", "網頁"])
+        if _browser_kw:
             try:
                 import win32gui, win32con
                 def _find_chrome(h, results):
@@ -7255,19 +7378,36 @@ def fetch_vision_locate(description: str, monitor: int = 1, action: str = "click
                     return True
                 _browser_wins = []
                 win32gui.EnumWindows(_find_chrome, _browser_wins)
-                # 優先找包含 youtube 的視窗
                 _yt_wins = [h for h, t in _browser_wins if "youtube" in t]
                 _target = _yt_wins[0] if _yt_wins else (_browser_wins[0][0] if _browser_wins else None)
                 if _target:
-                    # 還原（如果最小化）→ 最大化 → 前景
                     win32gui.ShowWindow(_target, win32con.SW_RESTORE)
                     win32gui.ShowWindow(_target, win32con.SW_MAXIMIZE)
                     import ctypes
                     ctypes.windll.user32.SetForegroundWindow(_target)
-                    import time; time.sleep(0.8)
+                    import time; time.sleep(0.5)
             except Exception:
                 pass
-        # 截圖（mss 邏輯座標）
+
+        # ── 策略1：UIA 快速搜尋（不需截圖和 API，最快） ──
+        if not region and action != "locate_only":
+            uia_x, uia_y = _uia_find_element(description)
+            if uia_x is not None:
+                if action != "locate_only":
+                    # 用動作驗證迴圈點擊
+                    _det_mon = monitor if not _browser_kw else (2 if monitor == 1 else monitor)
+                    success = _action_with_verify(
+                        lambda: _si_universal(uia_x, uia_y, action),
+                        monitor=_det_mon
+                    )
+                    v = "已驗證" if success else "未驗證"
+                    return f"✅ UIA找到「{description}」，已在 ({uia_x}, {uia_y}) 執行 {action}（{v}）"
+                return f"✅ UIA找到「{description}」，位置 ({uia_x}, {uia_y})"
+
+        # ── 策略2：智慧等待 + 視覺辨識（截圖 + Sonnet） ──
+        # 等螢幕穩定再截圖
+        _wait_screen_stable(monitor, threshold=0.5, timeout=3.0, interval=0.3)
+
         img, mon_left, mon_top = _cap_monitor_logical(monitor)
 
         if region:
@@ -7285,8 +7425,13 @@ def fetch_vision_locate(description: str, monitor: int = 1, action: str = "click
         if action == "locate_only":
             return f"✅ 找到「{description}」，位置 ({abs_x}, {abs_y})"
 
-        _si_universal(abs_x, abs_y, action)
-        return f"✅ 視覺找到「{description}」，已在 ({abs_x}, {abs_y}) 執行 {action}"
+        # 用動作驗證迴圈點擊
+        success = _action_with_verify(
+            lambda: _si_universal(abs_x, abs_y, action),
+            monitor=monitor
+        )
+        v = "已驗證" if success else "未驗證"
+        return f"✅ 視覺找到「{description}」，已在 ({abs_x}, {abs_y}) 執行 {action}（{v}）"
     except Exception as e:
         return f"視覺定位失敗：{e}"
 
@@ -15758,8 +15903,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _s = sender_name if not is_owner else "于晏哥"
                 # Step 1: 開 YouTube 搜尋頁
                 _msg = await update.message.reply_text(f"正在搜尋 {_kw}... 🔍")
-                import webbrowser, time as _t_pf
-                await _loop_pf.run_in_executor(None, lambda: (webbrowser.open(f"https://www.youtube.com/results?search_query={_kw.replace(' ', '+')}"), _t_pf.sleep(4)))
+                import webbrowser
+                def _open_and_wait():
+                    webbrowser.open(f"https://www.youtube.com/results?search_query={_kw.replace(' ', '+')}")
+                    _wait_screen_stable(2, threshold=0.5, timeout=8.0, interval=0.5)
+                await _loop_pf.run_in_executor(None, _open_and_wait)
                 # Step 2: vision_locate 點影片
                 await _msg.edit_text(f"搜尋到了，正在點播... 🎵")
                 # 先往下滾跳過廣告區域
