@@ -15700,6 +15700,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history = load_history(chat_id)
         await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
+        # ── 快速路徑：用戶要求「播放/撥放 XXX」→ 直接開 YouTube 搜尋 + 點擊影片 ──
+        import re as _re_play_fast
+        _play_fast = _re_play_fast.search(r'(?:撥放|播放)\s*(.+?)(?:的歌[曲]?|的音樂|的影片|的MV)?$', user_text or "")
+        if not _play_fast:
+            _play_fast = _re_play_fast.search(r'(?:youtube|yt).*?(?:撥放|播放)\s*(.+?)(?:的歌[曲]?|的音樂|的影片|的MV)?$', user_text or "", _re_play_fast.IGNORECASE)
+        if not _play_fast:
+            _play_fast = _re_play_fast.search(r'(?:撥放|播放)\s*(.+)', user_text or "")
+        if _play_fast:
+            _kw = _play_fast.group(1).strip().rstrip("的歌曲的音樂的影片的MV")
+            if _kw and len(_kw) > 0:
+                import asyncio as _aio_pf
+                _loop_pf = _aio_pf.get_running_loop()
+                _s = sender_name if not is_owner else "于晏哥"
+                # Step 1: 開 YouTube 搜尋頁
+                _msg = await update.message.reply_text(f"正在搜尋 {_kw}... 🔍")
+                import webbrowser, time as _t_pf
+                await _loop_pf.run_in_executor(None, lambda: (webbrowser.open(f"https://www.youtube.com/results?search_query={_kw.replace(' ', '+')}"), _t_pf.sleep(4)))
+                # Step 2: vision_locate 點影片
+                await _msg.edit_text(f"搜尋到了，正在點播... 🎵")
+                _vl = await _loop_pf.run_in_executor(
+                    None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
+                )
+                if "找不到" in str(_vl):
+                    _vl = await _loop_pf.run_in_executor(
+                        None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 1, "click"
+                    )
+                if "找到" in str(_vl) and "找不到" not in str(_vl):
+                    _reply = f"點好了{_s}！！{_kw} 開始播了！！🎵🐮🐴"
+                else:
+                    _reply = f"YouTube搜尋頁開好了但找不到影片耶{_s}😅 你看一下螢幕，可能還在載入🐮🐴"
+                await _msg.edit_text(_reply)
+                save_message(chat_id, "assistant", _reply)
+                log_message("<<", "小牛馬", chat_id, _reply)
+                return
+
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
 
         # 群組：注入當前說話者身份，讓 Claude 知道此訊息是誰發的
