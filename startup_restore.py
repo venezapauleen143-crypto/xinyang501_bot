@@ -15,8 +15,8 @@ from pathlib import Path
 if sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
-PYTHONW    = r"C:\Users\blue_\AppData\Local\Python\bin\pythonw.exe"
-PYTHON     = r"C:\Users\blue_\AppData\Local\Python\pythoncore-3.14-64\python.exe"
+PYTHONW    = r"C:\Users\blue_\AppData\Local\Microsoft\WindowsApps\pythonw3.12.exe"
+PYTHON     = r"C:\Users\blue_\AppData\Local\Microsoft\WindowsApps\python3.12.exe"
 BOT_SCRIPT = r"C:\Users\blue_\claude-telegram-bot\bot.py"
 BOT_DIR    = r"C:\Users\blue_\claude-telegram-bot"
 REPO_PATH  = r"C:\Users\blue_\xinyang501_bot"

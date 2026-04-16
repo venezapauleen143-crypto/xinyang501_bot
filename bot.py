@@ -1,18 +1,3 @@
-# ── Monkey-patch slow platform functions ──────────────────────────────────────
-# Python 3.14 on Windows after crash: platform.uname() hangs (WMI/registry issue).
-# All derived functions (system, machine, platform, node, release, version) also hang.
-# Anthropic SDK calls these in platform_headers() → used in every API request.
-# Fix: patch root + derivatives so the SDK's lru_cached platform_headers is instant.
-import platform as _pm
-_pm.system   = lambda: "Windows"
-_pm.machine  = lambda: "AMD64"
-_pm.platform = lambda terse=False, aliased=False: "Windows-11-10.0.26200"
-_pm.node     = lambda: "PC"
-_pm.release  = lambda: "11"
-_pm.version  = lambda: "10.0.26200"
-_pm.processor = lambda: "Intel64 Family 6"
-# ──────────────────────────────────────────────────────────────────────────────
-
 import os
 import io
 import time
@@ -22,7 +7,6 @@ import logging
 import subprocess
 import urllib.parse
 import requests
-# pyautogui / yfinance 改為懶加載（避免重開機後 hang）
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
@@ -36,7 +20,7 @@ if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
     sys.exit(0)
 # ──────────────────────────────────────────────────────────
 
-pyautogui = None  # 懶加載，用到時才 import（避免重開機 hang）
+import pyautogui
 
 load_dotenv(Path(__file__).parent / ".env")
 from anthropic import Anthropic
@@ -9245,7 +9229,7 @@ def execute_browser_control(action: str, url: str = "", selector: str = "", text
     try:
         from playwright.sync_api import sync_playwright
     except (ImportError, OSError) as _dll_err:
-        # Playwright DLL 不可用（Python 3.14 憑證過期），用 start 指令開網址
+        # Playwright 不可用，用 start 指令開網址
         if action in ("open", "goto") and url:
             import subprocess as _sp
             _sp.Popen(f'start "" "{url}"', shell=True)
@@ -15605,6 +15589,90 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         _typing_task.cancel()
         response = await api_future
 
+        # ── 攔截：上下文感知 — Chrome/YouTube 已開啟時，輸入關鍵字就直接搜尋/播放 ──
+        if response.stop_reason != "tool_use":
+            import re as _re_ctx
+            # 檢查對話歷史：最近是否剛打開 Chrome/YouTube
+            _recent_msgs = [h.get("content","") for h in history[-6:] if isinstance(h.get("content"), str)]
+            _recent_text = " ".join(_recent_msgs).lower()
+            _chrome_open = any(k in _recent_text for k in ["chrome開好", "chrome 開好", "已開啟並切換到：chrome", "youtube開好", "youtube 開好"])
+            _ut = (user_text or "").strip()
+            # 如果 Chrome/YouTube 剛開好，且用戶輸入的不是指令（沒有「打開」「播放」等），就當作搜尋關鍵字
+            _is_command = bool(_re_ctx.search(r'(?:打開|開啟|播放|幫我|控制|螢幕|截圖)', _ut))
+            if _chrome_open and not _is_command and len(_ut) > 0 and len(_ut) < 50:
+                import asyncio as _aio_type
+                _loop_type = _aio_type.get_running_loop()
+                # 在 Chrome 地址欄或 YouTube 搜尋框輸入關鍵字
+                _yt_open = "youtube" in _recent_text
+                if _yt_open:
+                    # YouTube 已開啟：點搜尋框 → 輸入 → Enter
+                    async def _yt_search():
+                        import pyautogui, pyperclip, time
+                        pyautogui.hotkey("ctrl", "l")  # 聚焦地址欄
+                        time.sleep(0.3)
+                        pyperclip.copy(f"https://www.youtube.com/results?search_query={_ut}")
+                        pyautogui.hotkey("ctrl", "v")
+                        time.sleep(0.2)
+                        pyautogui.press("enter")
+                        return f"已在 YouTube 搜尋：{_ut}"
+                    _search_result = await _loop_type.run_in_executor(None, lambda: __import__('asyncio').get_event_loop().run_until_complete(_yt_search()) if False else None)
+                    # 同步版本
+                    def _do_yt_search():
+                        import pyautogui, pyperclip, time
+                        pyautogui.hotkey("ctrl", "l")
+                        time.sleep(0.3)
+                        pyperclip.copy(f"https://www.youtube.com/results?search_query={_ut}")
+                        pyautogui.hotkey("ctrl", "v")
+                        time.sleep(0.2)
+                        pyautogui.press("enter")
+                        return f"已在 YouTube 搜尋：{_ut}"
+                    _search_result = await _loop_type.run_in_executor(None, _do_yt_search)
+                else:
+                    # Chrome 已開啟：地址欄輸入網址或搜尋
+                    def _do_chrome_nav():
+                        import pyautogui, pyperclip, time
+                        pyautogui.hotkey("ctrl", "l")
+                        time.sleep(0.3)
+                        pyperclip.copy(_ut)
+                        pyautogui.hotkey("ctrl", "v")
+                        time.sleep(0.2)
+                        pyautogui.press("enter")
+                        return f"已在 Chrome 輸入：{_ut}"
+                    _search_result = await _loop_type.run_in_executor(None, _do_chrome_nav)
+                if sent_msg:
+                    try:
+                        await sent_msg.edit_text(f"✅ {_search_result}")
+                    except Exception:
+                        await update.message.reply_text(f"✅ {_search_result}")
+                else:
+                    await update.message.reply_text(f"✅ {_search_result}")
+                save_message(chat_id, "assistant", _search_result)
+                return
+
+        # ── 攔截：播放/點擊相關指令 → 用 vision_locate 點擊螢幕上的目標 ──
+        if response.stop_reason != "tool_use":
+            import re as _re_play
+            _play_match = _re_play.search(r'(?:幫我播|播放|幫我點|點擊|幫我按|按下|幫我選|選擇)', user_text or "")
+            if _play_match:
+                import asyncio as _aio_play
+                _loop_play = _aio_play.get_running_loop()
+                # 從用戶文字或對話歷史推斷要點什麼
+                _play_desc = user_text.replace("幫我", "").replace("你", "").strip()
+                if len(_play_desc) < 5:
+                    _play_desc = "YouTube 搜尋結果頁面上的第一個影片縮圖"
+                _play_result = await _loop_play.run_in_executor(
+                    None, fetch_vision_locate, _play_desc, 1, "click"
+                )
+                if sent_msg:
+                    try:
+                        await sent_msg.edit_text(f"✅ {_play_result}")
+                    except Exception:
+                        await update.message.reply_text(f"✅ {_play_result}")
+                else:
+                    await update.message.reply_text(f"✅ {_play_result}")
+                save_message(chat_id, "assistant", str(_play_result))
+                return
+
         # ── 攔截：模型沒呼叫工具但用戶要求打開程式/網站 → 強制呼叫 desktop_control open_app ──
         if response.stop_reason != "tool_use":
             import re as _re_open
@@ -18007,8 +18075,11 @@ async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
             messages=[{"role": "user", "content": f"生成今天的早安訊息。\n\n今日新聞標題：\n{news_raw}"}]
         )
         return response.content[0].text
-    msg = await loop.run_in_executor(None, generate_goodmorning)
-    await context.bot.send_message(chat_id=group_id, text=msg)
+    try:
+        msg = await loop.run_in_executor(None, generate_goodmorning)
+        await context.bot.send_message(chat_id=group_id, text=msg)
+    except Exception as e:
+        logging.error(f"goodmorning 發送失敗：{e}", exc_info=True)
 
 async def goodnight(context: ContextTypes.DEFAULT_TYPE):
     group_id = int(os.getenv("GROUP_CHAT_ID"))
@@ -18022,8 +18093,11 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
             messages=[{"role": "user", "content": "生成今晚的晚安訊息"}]
         )
         return response.content[0].text
-    msg = await loop.run_in_executor(None, generate_goodnight)
-    await context.bot.send_message(chat_id=group_id, text=msg)
+    try:
+        msg = await loop.run_in_executor(None, generate_goodnight)
+        await context.bot.send_message(chat_id=group_id, text=msg)
+    except Exception as e:
+        logging.error(f"goodnight 發送失敗：{e}", exc_info=True)
 
 _report_today: str = ""  # 防止同一天重複執行
 

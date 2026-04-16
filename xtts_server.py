@@ -58,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(wav_bytes)
         except Exception as e:
             print(f"[XTTS] 生成失敗：{e}")
-            self.send_error(500, str(e))
+            self.send_error(500, str(e).encode("ascii", errors="replace").decode("ascii"))
 
     def do_GET(self):
         if self.path == "/health":
