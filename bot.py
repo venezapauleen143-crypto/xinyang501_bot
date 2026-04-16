@@ -7135,6 +7135,275 @@ def _cap_monitor_logical(monitor: int):
     return img, mon["left"], mon["top"]
 
 
+# ── YOLO UI 偵測器 ────────────────────────────────────────────────────
+_yolo_model = None
+
+def _yolo_detect(img, conf=0.4):
+    """用 YOLO 偵測螢幕上的 UI 元素，回傳 [(label, x_center, y_center, w, h, confidence), ...]
+    第一次呼叫會自動載入模型（~2秒），之後每次 ~0.05秒
+    """
+    global _yolo_model
+    try:
+        if _yolo_model is None:
+            from ultralytics import YOLO
+            from pathlib import Path
+            custom_model = Path(__file__).parent / "yolo_ui.pt"
+            if custom_model.exists():
+                _yolo_model = YOLO(str(custom_model))
+            else:
+                # 用預訓練的通用模型（能偵測 person, monitor, keyboard, mouse, cell phone 等）
+                _yolo_model = YOLO("yolov8n.pt")
+        import numpy as np
+        from PIL import Image as _PI
+        if isinstance(img, _PI.Image):
+            img_arr = np.array(img)
+        else:
+            img_arr = img
+        results = _yolo_model(img_arr, conf=conf, verbose=False)
+        detections = []
+        for r in results:
+            for box in r.boxes:
+                cls_id = int(box.cls[0])
+                label = _yolo_model.names[cls_id]
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+                w, h = int(x2 - x1), int(y2 - y1)
+                detections.append((label, cx, cy, w, h, float(box.conf[0])))
+        return detections
+    except Exception as e:
+        return []
+
+
+# ── 螢幕變化事件流 ───────────────────────────────────────────────────
+import threading
+
+class ScreenEventStream:
+    """背景持續監控螢幕，偵測變化事件"""
+
+    def __init__(self, monitor=1, fps=2):
+        self._monitor = monitor
+        self._interval = 1.0 / fps
+        self._running = False
+        self._thread = None
+        self._callbacks = {
+            "stable": [],      # 畫面穩定（載入完成）
+            "change": [],      # 畫面大幅變化（彈窗/頁面切換）
+            "motion": [],      # 持續有動態（影片播放中）
+        }
+        self._last_frame = None
+        self._stable_count = 0
+
+    def on(self, event: str, callback):
+        """註冊事件回調：event = 'stable' | 'change' | 'motion'"""
+        if event in self._callbacks:
+            self._callbacks[event].append(callback)
+
+    def start(self):
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=3)
+
+    @property
+    def is_running(self):
+        return self._running
+
+    def _loop(self):
+        import numpy as np, time
+        while self._running:
+            try:
+                img, _, _ = _cap_monitor_logical(self._monitor)
+                frame = np.array(img)
+
+                if self._last_frame is not None and frame.shape == self._last_frame.shape:
+                    diff = np.mean(np.abs(frame.astype(float) - self._last_frame.astype(float)))
+                    diff_pct = diff / 255 * 100
+
+                    if diff_pct < 0.3:
+                        self._stable_count += 1
+                        if self._stable_count == 3:  # 連續 3 幀穩定
+                            for cb in self._callbacks["stable"]:
+                                try: cb(diff_pct)
+                                except Exception: pass
+                    elif diff_pct > 5.0:
+                        self._stable_count = 0
+                        for cb in self._callbacks["change"]:
+                            try: cb(diff_pct)
+                            except Exception: pass
+                    else:
+                        self._stable_count = 0
+                        for cb in self._callbacks["motion"]:
+                            try: cb(diff_pct)
+                            except Exception: pass
+
+                self._last_frame = frame
+            except Exception:
+                pass
+            time.sleep(self._interval)
+
+    def wait_for_stable(self, timeout=15.0):
+        """阻塞等待畫面穩定，回傳 True=穩定 / False=超時"""
+        import time
+        event = threading.Event()
+        def _on_stable(diff):
+            event.set()
+        self.on("stable", _on_stable)
+        was_running = self._running
+        if not was_running:
+            self.start()
+        result = event.wait(timeout=timeout)
+        if not was_running:
+            self.stop()
+        # 清掉這個一次性回調
+        try: self._callbacks["stable"].remove(_on_stable)
+        except ValueError: pass
+        return result
+
+    def wait_for_change(self, timeout=30.0):
+        """阻塞等待畫面出現大幅變化"""
+        import time
+        event = threading.Event()
+        def _on_change(diff):
+            event.set()
+        self.on("change", _on_change)
+        was_running = self._running
+        if not was_running:
+            self.start()
+        result = event.wait(timeout=timeout)
+        if not was_running:
+            self.stop()
+        try: self._callbacks["change"].remove(_on_change)
+        except ValueError: pass
+        return result
+
+
+# ── 操作狀態機 ───────────────────────────────────────────────────────
+class OperationStateMachine:
+    """多步驟操作的狀態機，每一步有成功/失敗判斷和重試"""
+
+    def __init__(self, name="operation"):
+        self.name = name
+        self.steps = []
+        self.current = 0
+        self.results = []
+
+    def add_step(self, name: str, action, verify=None, max_retries=3, on_fail="retry"):
+        """加入一步
+        action: callable，執行動作，回傳 any
+        verify: callable(result) → bool，驗證成功與否（None=不驗證）
+        on_fail: "retry" | "skip" | "abort"
+        """
+        self.steps.append({
+            "name": name,
+            "action": action,
+            "verify": verify,
+            "max_retries": max_retries,
+            "on_fail": on_fail,
+        })
+
+    def run(self) -> dict:
+        """執行所有步驟，回傳 {"ok": bool, "results": [...], "failed_step": str|None}"""
+        self.current = 0
+        self.results = []
+        for i, step in enumerate(self.steps):
+            self.current = i
+            success = False
+            result = None
+            for attempt in range(step["max_retries"]):
+                try:
+                    result = step["action"]()
+                    if step["verify"] is None:
+                        success = True
+                        break
+                    elif step["verify"](result):
+                        success = True
+                        break
+                except Exception as e:
+                    result = str(e)
+                import time; time.sleep(0.5)
+
+            self.results.append({
+                "step": step["name"],
+                "success": success,
+                "result": result,
+            })
+
+            if not success:
+                if step["on_fail"] == "abort":
+                    return {"ok": False, "results": self.results, "failed_step": step["name"]}
+                elif step["on_fail"] == "skip":
+                    continue
+                else:  # retry exhausted
+                    return {"ok": False, "results": self.results, "failed_step": step["name"]}
+
+        return {"ok": True, "results": self.results, "failed_step": None}
+
+
+# 預定義常用操作流程
+def youtube_play_flow(keyword: str, monitor: int = 2) -> dict:
+    """YouTube 搜尋並播放的完整狀態機流程"""
+    import webbrowser, time as _t_yt
+
+    sm = OperationStateMachine("youtube_play")
+
+    # Step 1: 開 YouTube 搜尋頁
+    def _open():
+        webbrowser.open(f"https://www.youtube.com/results?search_query={keyword.replace(' ', '+')}")
+        return True
+    sm.add_step("open_search", _open, max_retries=2, on_fail="abort")
+
+    # Step 2: 等頁面載入
+    def _wait_load():
+        _t_yt.sleep(1)  # 給瀏覽器反應時間
+        return _wait_screen_stable(monitor, threshold=0.5, timeout=10.0)
+    def _verify_load(result):
+        return result  # True = 穩定了
+    sm.add_step("wait_load", _wait_load, _verify_load, max_retries=2, on_fail="abort")
+
+    # Step 3: 滾過廣告
+    def _scroll():
+        import pyautogui, win32gui, win32con, ctypes
+        wins = []
+        def _fb(h, _):
+            if win32gui.IsWindowVisible(h):
+                t = win32gui.GetWindowText(h).lower()
+                if 'youtube' in t or 'chrome' in t:
+                    wins.append(h)
+            return True
+        win32gui.EnumWindows(_fb, None)
+        if wins:
+            ctypes.windll.user32.SetForegroundWindow(wins[0])
+            _t_yt.sleep(0.5)
+        pyautogui.scroll(-3)
+        _t_yt.sleep(1)
+        return True
+    sm.add_step("scroll_past_ads", _scroll, max_retries=1, on_fail="skip")
+
+    # Step 4: vision_locate 點擊影片
+    def _click_video():
+        return fetch_vision_locate(
+            f"YouTube搜尋結果中{keyword}的官方MV或歌曲影片縮圖（有OFFICIAL標誌的優先，跳過贊助商廣告）",
+            monitor, "click"
+        )
+    def _verify_click(result):
+        return "找到" in str(result) and "找不到" not in str(result)
+    sm.add_step("click_video", _click_video, _verify_click, max_retries=3, on_fail="abort")
+
+    # Step 5: 等影片開始播放
+    def _wait_play():
+        _t_yt.sleep(1)
+        return _wait_screen_stable(monitor, threshold=0.3, timeout=5.0)
+    sm.add_step("wait_play", _wait_play, max_retries=1, on_fail="skip")
+
+    return sm.run()
+
+
 # ── 智慧等待：偵測螢幕停止變化 ─────────────────────────────────────────
 def _wait_screen_stable(monitor: int = 1, threshold: float = 0.5, timeout: float = 15.0, interval: float = 0.5):
     """連續截圖比對，直到畫面穩定（差異低於 threshold%）或超時"""
@@ -15914,45 +16183,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 import asyncio as _aio_pf
                 _loop_pf = _aio_pf.get_running_loop()
                 _s = sender_name if not is_owner else "于晏哥"
-                # Step 1: 開 YouTube 搜尋頁
                 _msg = await update.message.reply_text(f"正在搜尋 {_kw}... 🔍")
-                import webbrowser
-                def _open_and_wait():
-                    webbrowser.open(f"https://www.youtube.com/results?search_query={_kw.replace(' ', '+')}")
-                    _wait_screen_stable(2, threshold=0.5, timeout=8.0, interval=0.5)
-                await _loop_pf.run_in_executor(None, _open_and_wait)
-                # Step 2: vision_locate 點影片
-                await _msg.edit_text(f"搜尋到了，正在點播... 🎵")
-                # 先往下滾跳過廣告區域
-                def _scroll_and_click():
-                    import pyautogui, time as _t_sc
-                    # 把焦點給瀏覽器並往下滾 3 格跳過廣告
-                    import win32gui, win32con, ctypes as _ct_sc
-                    _wins = []
-                    def _fb(h, _):
-                        if win32gui.IsWindowVisible(h):
-                            t = win32gui.GetWindowText(h).lower()
-                            if 'youtube' in t or 'blackpink' in t or 'chrome' in t:
-                                _wins.append(h)
-                        return True
-                    win32gui.EnumWindows(_fb, None)
-                    if _wins:
-                        _ct_sc.windll.user32.SetForegroundWindow(_wins[0])
-                        _t_sc.sleep(0.5)
-                    pyautogui.scroll(-3)  # 往下滾 3 格
-                    _t_sc.sleep(1)
-                await _loop_pf.run_in_executor(None, _scroll_and_click)
-                _vl = await _loop_pf.run_in_executor(
-                    None, fetch_vision_locate, f"YouTube搜尋結果中{_kw}的官方MV或歌曲影片縮圖（有OFFICIAL標誌的優先，跳過廣告）", 2, "click"
-                )
-                if "找不到" in str(_vl):
-                    _vl = await _loop_pf.run_in_executor(
-                        None, fetch_vision_locate, f"YouTube搜尋結果中{_kw}的官方MV或歌曲影片縮圖", 1, "click"
-                    )
-                if "找到" in str(_vl) and "找不到" not in str(_vl):
+                # 用狀態機執行完整播放流程
+                _sm_result = await _loop_pf.run_in_executor(None, youtube_play_flow, _kw, 2)
+                if _sm_result["ok"]:
                     _reply = f"點好了{_s}！！{_kw} 開始播了！！🎵🐮🐴"
                 else:
-                    _reply = f"YouTube搜尋頁開好了但找不到影片耶{_s}😅 你看一下螢幕，可能還在載入🐮🐴"
+                    _failed = _sm_result.get("failed_step", "unknown")
+                    _reply = f"YouTube搜尋頁開好了但{_failed}失敗了{_s}😅 你看一下螢幕🐮🐴"
                 await _msg.edit_text(_reply)
                 save_message(chat_id, "assistant", _reply)
                 log_message("<<", "小牛馬", chat_id, _reply)
