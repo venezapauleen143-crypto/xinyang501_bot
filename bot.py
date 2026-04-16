@@ -15978,6 +15978,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_message(chat_id, "assistant", _open_msg)
                     return
 
+        # ── 攔截：streaming 文字裡說「幫你點」→ 不管 tool_use 是什麼，直接 vision_locate ──
+        _streamed_check = (streamed_text or "") + _all_resp_text
+        if _re_force.search(r'幫你點第一|幫你點|現在.*點第一|點第一首', _streamed_check):
+            _vl_s = await loop.run_in_executor(
+                None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
+            )
+            if "找不到" in str(_vl_s):
+                _vl_s = await loop.run_in_executor(
+                    None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 1, "click"
+                )
+            _s = sender_name if not is_owner else "于晏哥"
+            if "找到" in str(_vl_s) and "找不到" not in str(_vl_s):
+                _reply = f"點好了{_s}！！影片開始播了！！🎵🐮🐴"
+            else:
+                _reply = f"找不到影片耶{_s}，螢幕上可能沒有YouTube搜尋結果頁面😅🐮🐴"
+            if sent_msg:
+                try: await sent_msg.edit_text(_reply)
+                except Exception: await update.message.reply_text(_reply)
+            else:
+                await update.message.reply_text(_reply)
+            save_message(chat_id, "assistant", _reply)
+            return
+
         # 處理工具呼叫
         if response.stop_reason == "tool_use":
             tool_use = next(b for b in response.content if b.type == "tool_use")
@@ -18268,6 +18291,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 reply = f"找不到影片耶{_s}，螢幕上可能沒有YouTube搜尋結果頁面😅🐮🐴"
 
+        logging.error(f"DEBUG_FINAL_REPLY: [{reply[:60]}]")
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬", chat_id, reply)
         # 若 streaming 已送出部分訊息，直接 edit 最終完整內容
