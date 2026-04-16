@@ -15847,7 +15847,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = await api_future
 
         # ── 攔截：不管模型做了什麼，只要文字中說「幫你點」就強制 vision_locate ──
-        _all_resp_text = ""
+        _all_resp_text = streamed_text or ""
         for _b in response.content:
             if hasattr(_b, "text"):
                 _all_resp_text += _b.text
