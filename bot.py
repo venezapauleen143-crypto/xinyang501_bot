@@ -15719,12 +15719,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _loop_pf.run_in_executor(None, lambda: (webbrowser.open(f"https://www.youtube.com/results?search_query={_kw.replace(' ', '+')}"), _t_pf.sleep(4)))
                 # Step 2: vision_locate 點影片
                 await _msg.edit_text(f"搜尋到了，正在點播... 🎵")
+                # 先往下滾跳過廣告區域
+                def _scroll_and_click():
+                    import pyautogui, time as _t_sc
+                    # 把焦點給瀏覽器並往下滾 3 格跳過廣告
+                    import win32gui, win32con, ctypes as _ct_sc
+                    _wins = []
+                    def _fb(h, _):
+                        if win32gui.IsWindowVisible(h):
+                            t = win32gui.GetWindowText(h).lower()
+                            if 'youtube' in t or 'blackpink' in t or 'chrome' in t:
+                                _wins.append(h)
+                        return True
+                    win32gui.EnumWindows(_fb, None)
+                    if _wins:
+                        _ct_sc.windll.user32.SetForegroundWindow(_wins[0])
+                        _t_sc.sleep(0.5)
+                    pyautogui.scroll(-3)  # 往下滾 3 格
+                    _t_sc.sleep(1)
+                await _loop_pf.run_in_executor(None, _scroll_and_click)
                 _vl = await _loop_pf.run_in_executor(
-                    None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
+                    None, fetch_vision_locate, f"YouTube搜尋結果中{_kw}的官方MV或歌曲影片縮圖（有OFFICIAL標誌的優先，跳過廣告）", 2, "click"
                 )
                 if "找不到" in str(_vl):
                     _vl = await _loop_pf.run_in_executor(
-                        None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 1, "click"
+                        None, fetch_vision_locate, f"YouTube搜尋結果中{_kw}的官方MV或歌曲影片縮圖", 1, "click"
                     )
                 if "找到" in str(_vl) and "找不到" not in str(_vl):
                     _reply = f"點好了{_s}！！{_kw} 開始播了！！🎵🐮🐴"
