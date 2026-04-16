@@ -18277,9 +18277,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         reply = text_blocks[0]
 
-        # ── 最終攔截：回覆裡說「幫你點」但沒真的點 → 強制 vision_locate ──
+        # ── 最終攔截：回覆裡說「幫你點」或用戶原始指令有「播放」→ 強制 vision_locate ──
         import re as _re_final
-        if _re_final.search(r'幫你點第一|幫你點|現在.*點第一|點第一首', reply):
+        _user_said_play = bool(_re_final.search(r'撥放|播放', user_text or ""))
+        if _re_final.search(r'幫你點第一|幫你點|現在.*點第一|點第一首', reply) or _user_said_play:
             _vl_final = await loop.run_in_executor(
                 None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
             )
@@ -18293,7 +18294,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 reply = f"找不到影片耶{_s}，螢幕上可能沒有YouTube搜尋結果頁面😅🐮🐴"
 
-        logging.error(f"DEBUG_FINAL_REPLY: [{reply[:60]}]")
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬", chat_id, reply)
         # 若 streaming 已送出部分訊息，直接 edit 最終完整內容
