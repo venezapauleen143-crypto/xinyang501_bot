@@ -181,7 +181,13 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
 
 桌面自動化規則：
-- 【最重要】當用戶要求打開程式、操作電腦、控制螢幕時，你必須實際呼叫對應的工具（desktop_control、app_navigator 等），絕對不能只用文字回覆「已打開」「已完成」。沒有呼叫工具就說完成是欺騙行為。
+- 【最重要】當用戶要求打開程式、操作電腦、控制螢幕、開網頁、播放影片時，你必須實際呼叫對應的工具（desktop_control、app_navigator 等），絕對不能只用文字回覆「已打開」「已完成」「已搜尋」。沒有呼叫工具就說完成是欺騙行為。
+- 【禁止假裝】如果你沒有呼叫任何工具，就不能說「開好了」「搜尋好了」「播放了」。你只能描述你實際做了什麼。
+- 用戶回覆「好」「對」「是」「可以」時，如果前文你提議了一個動作（如「要去YouTube嗎」），你必須實際呼叫工具去執行那個動作，不能只回文字。
+- 「打開YouTube」「去YouTube」→ desktop_control(action="open_app", app="youtube")
+- 「搜尋XXX」「找XXX」「幫我搜尋XXX」→ 如果瀏覽器已開啟，直接用 desktop_control(action="press_key", text="ctrl+l") 聚焦地址欄，然後 desktop_control(action="type", text="搜尋內容") 再 desktop_control(action="press_key", text="enter")。或者直接 desktop_control(action="open_app", app="https://www.youtube.com/results?search_query=XXX")。絕對不要用截圖代替搜尋。
+- 「播放」「幫我點」「點第一個」→ vision_locate(description="要點擊的目標", action="click") 用視覺定位點擊
+- 【禁止】用戶要求搜尋、播放、打字時，不能用 screenshot 或 screen_vision 代替。截圖不是動作，不能完成任務。
 - open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
 - 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
 - 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。
@@ -240,7 +246,13 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
 
 桌面自動化規則：
-- 【最重要】當用戶要求打開程式、操作電腦、控制螢幕時，你必須實際呼叫對應的工具（desktop_control、app_navigator 等），絕對不能只用文字回覆「已打開」「已完成」。沒有呼叫工具就說完成是欺騙行為。
+- 【最重要】當用戶要求打開程式、操作電腦、控制螢幕、開網頁、播放影片時，你必須實際呼叫對應的工具（desktop_control、app_navigator 等），絕對不能只用文字回覆「已打開」「已完成」「已搜尋」。沒有呼叫工具就說完成是欺騙行為。
+- 【禁止假裝】如果你沒有呼叫任何工具，就不能說「開好了」「搜尋好了」「播放了」。你只能描述你實際做了什麼。
+- 用戶回覆「好」「對」「是」「可以」時，如果前文你提議了一個動作（如「要去YouTube嗎」），你必須實際呼叫工具去執行那個動作，不能只回文字。
+- 「打開YouTube」「去YouTube」→ desktop_control(action="open_app", app="youtube")
+- 「搜尋XXX」「找XXX」「幫我搜尋XXX」→ 如果瀏覽器已開啟，直接用 desktop_control(action="press_key", text="ctrl+l") 聚焦地址欄，然後 desktop_control(action="type", text="搜尋內容") 再 desktop_control(action="press_key", text="enter")。或者直接 desktop_control(action="open_app", app="https://www.youtube.com/results?search_query=XXX")。絕對不要用截圖代替搜尋。
+- 「播放」「幫我點」「點第一個」→ vision_locate(description="要點擊的目標", action="click") 用視覺定位點擊
+- 【禁止】用戶要求搜尋、播放、打字時，不能用 screenshot 或 screen_vision 代替。截圖不是動作，不能完成任務。
 - open_app 執行後視窗已自動切換到最前方並獲得焦點，不需要再用 click 聚焦視窗。
 - 完成任務後不要自動執行 screenshot，除非用戶明確要求截圖。
 - 用最少的步驟完成任務：open_app → type，不要加多餘的 click 或 wait。
@@ -7043,6 +7055,31 @@ def fetch_ocr_click(target_text: str, monitor: int = 1, click_type: str = "click
 
 def fetch_vision_locate(description: str, monitor: int = 1, action: str = "click", region: list = None) -> str:
     try:
+        # 嘗試把瀏覽器切到前景並最大化（如果描述中提到影片、YouTube等）
+        _desc_lower = description.lower()
+        if any(k in _desc_lower for k in ["影片", "video", "youtube", "縮圖", "thumbnail", "搜尋結果", "第一"]):
+            try:
+                import win32gui, win32con
+                def _find_chrome(h, results):
+                    if win32gui.IsWindowVisible(h):
+                        t = win32gui.GetWindowText(h).lower()
+                        if "youtube" in t or "chrome" in t or "edge" in t or "firefox" in t:
+                            results.append((h, t))
+                    return True
+                _browser_wins = []
+                win32gui.EnumWindows(_find_chrome, _browser_wins)
+                # 優先找包含 youtube 的視窗
+                _yt_wins = [h for h, t in _browser_wins if "youtube" in t]
+                _target = _yt_wins[0] if _yt_wins else (_browser_wins[0][0] if _browser_wins else None)
+                if _target:
+                    # 還原（如果最小化）→ 最大化 → 前景
+                    win32gui.ShowWindow(_target, win32con.SW_RESTORE)
+                    win32gui.ShowWindow(_target, win32con.SW_MAXIMIZE)
+                    import ctypes
+                    ctypes.windll.user32.SetForegroundWindow(_target)
+                    import time; time.sleep(0.8)
+            except Exception:
+                pass
         # 截圖（mss 邏輯座標）
         img, mon_left, mon_top = _cap_monitor_logical(monitor)
 
@@ -8823,7 +8860,16 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
                 "youtube": "start https://www.youtube.com",
                 "google": "start https://www.google.com",
             }
-            _cmd = _app_alias.get(app.lower().strip(), f"start \"\" \"{app}\"")
+            _cmd = _app_alias.get(app.lower().strip(), None)
+            if _cmd is None:
+                # URL → 用 webbrowser 模組開（比 start 更可靠）
+                if app.strip().startswith("http://") or app.strip().startswith("https://"):
+                    import webbrowser
+                    webbrowser.open(app.strip())
+                    import time as _t_url
+                    _t_url.sleep(1.5)
+                    return {"ok": True, "message": f"已在瀏覽器開啟：{app.strip()}", "screenshot": None}
+                _cmd = f"start \"\" \"{app}\""
             # 記下開啟前已有的視窗 HWND
             _before = set()
             def _snap(h, _): _before.add(h); return True
@@ -15585,93 +15631,128 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         pass
                 last_edit_len = len(streamed_text)
 
+        # ── 預攔截：用戶明確要求點擊/播放 → 不等模型回覆，直接 vision_locate ──
+        import re as _re_click_pre
+        _ut_strip_pre = (user_text or "").strip()
+        _user_wants_click = bool(_re_click_pre.search(r'幫我點|點第一|播放|幫我播|點一下', _ut_strip_pre))
+        if _user_wants_click:
+            _typing_stop = True
+            _typing_task.cancel()
+            _vl_result = await loop.run_in_executor(
+                None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
+            )
+            if "找不到" in str(_vl_result):
+                _vl_result = await loop.run_in_executor(
+                    None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 1, "click"
+                )
+            if "找到" in str(_vl_result) and "找不到" not in str(_vl_result):
+                _sender = sender_name if not is_owner else "于晏哥"
+                _reply = f"點好了{_sender}！！影片開始播了！！🎵🐮🐴"
+            else:
+                _sender = sender_name if not is_owner else "于晏哥"
+                _reply = f"找不到影片耶{_sender}，螢幕上可能沒有YouTube搜尋結果頁面😅🐮🐴"
+            if sent_msg:
+                try: await sent_msg.edit_text(_reply)
+                except Exception: await update.message.reply_text(_reply)
+            else:
+                await update.message.reply_text(_reply)
+            save_message(chat_id, "assistant", _reply)
+            return
+
         _typing_stop = True
         _typing_task.cancel()
         response = await api_future
 
-        # ── 攔截：上下文感知 — Chrome/YouTube 已開啟時，輸入關鍵字就直接搜尋/播放 ──
-        if response.stop_reason != "tool_use":
-            import re as _re_ctx
-            # 檢查對話歷史：最近是否剛打開 Chrome/YouTube
-            _recent_msgs = [h.get("content","") for h in history[-6:] if isinstance(h.get("content"), str)]
-            _recent_text = " ".join(_recent_msgs).lower()
-            _chrome_open = any(k in _recent_text for k in ["chrome開好", "chrome 開好", "已開啟並切換到：chrome", "youtube開好", "youtube 開好"])
-            _ut = (user_text or "").strip()
-            # 如果 Chrome/YouTube 剛開好，且用戶輸入的不是指令（沒有「打開」「播放」等），就當作搜尋關鍵字
-            _is_command = bool(_re_ctx.search(r'(?:打開|開啟|播放|幫我|控制|螢幕|截圖)', _ut))
-            if _chrome_open and not _is_command and len(_ut) > 0 and len(_ut) < 50:
-                import asyncio as _aio_type
-                _loop_type = _aio_type.get_running_loop()
-                # 在 Chrome 地址欄或 YouTube 搜尋框輸入關鍵字
-                _yt_open = "youtube" in _recent_text
-                if _yt_open:
-                    # YouTube 已開啟：點搜尋框 → 輸入 → Enter
-                    async def _yt_search():
-                        import pyautogui, pyperclip, time
-                        pyautogui.hotkey("ctrl", "l")  # 聚焦地址欄
-                        time.sleep(0.3)
-                        pyperclip.copy(f"https://www.youtube.com/results?search_query={_ut}")
-                        pyautogui.hotkey("ctrl", "v")
-                        time.sleep(0.2)
-                        pyautogui.press("enter")
-                        return f"已在 YouTube 搜尋：{_ut}"
-                    _search_result = await _loop_type.run_in_executor(None, lambda: __import__('asyncio').get_event_loop().run_until_complete(_yt_search()) if False else None)
-                    # 同步版本
-                    def _do_yt_search():
-                        import pyautogui, pyperclip, time
-                        pyautogui.hotkey("ctrl", "l")
-                        time.sleep(0.3)
-                        pyperclip.copy(f"https://www.youtube.com/results?search_query={_ut}")
-                        pyautogui.hotkey("ctrl", "v")
-                        time.sleep(0.2)
-                        pyautogui.press("enter")
-                        return f"已在 YouTube 搜尋：{_ut}"
-                    _search_result = await _loop_type.run_in_executor(None, _do_yt_search)
-                else:
-                    # Chrome 已開啟：地址欄輸入網址或搜尋
-                    def _do_chrome_nav():
-                        import pyautogui, pyperclip, time
-                        pyautogui.hotkey("ctrl", "l")
-                        time.sleep(0.3)
-                        pyperclip.copy(_ut)
-                        pyautogui.hotkey("ctrl", "v")
-                        time.sleep(0.2)
-                        pyautogui.press("enter")
-                        return f"已在 Chrome 輸入：{_ut}"
-                    _search_result = await _loop_type.run_in_executor(None, _do_chrome_nav)
-                if sent_msg:
-                    try:
-                        await sent_msg.edit_text(f"✅ {_search_result}")
-                    except Exception:
-                        await update.message.reply_text(f"✅ {_search_result}")
-                else:
-                    await update.message.reply_text(f"✅ {_search_result}")
-                save_message(chat_id, "assistant", _search_result)
-                return
-
-        # ── 攔截：播放/點擊相關指令 → 用 vision_locate 點擊螢幕上的目標 ──
-        if response.stop_reason != "tool_use":
-            import re as _re_play
-            _play_match = _re_play.search(r'(?:幫我播|播放|幫我點|點擊|幫我按|按下|幫我選|選擇)', user_text or "")
-            if _play_match:
-                import asyncio as _aio_play
-                _loop_play = _aio_play.get_running_loop()
-                # 從用戶文字或對話歷史推斷要點什麼
-                _play_desc = user_text.replace("幫我", "").replace("你", "").strip()
-                if len(_play_desc) < 5:
-                    _play_desc = "YouTube 搜尋結果頁面上的第一個影片縮圖"
-                _play_result = await _loop_play.run_in_executor(
-                    None, fetch_vision_locate, _play_desc, 1, "click"
+        # ── 攔截：不管模型做了什麼，只要文字中說「幫你點」就強制 vision_locate ──
+        _all_resp_text = ""
+        for _b in response.content:
+            if hasattr(_b, "text"):
+                _all_resp_text += _b.text
+        import re as _re_force
+        if _re_force.search(r'幫你點第一|幫你點|現在.*點第一|點第一首', _all_resp_text):
+            _vl_r = await loop.run_in_executor(
+                None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
+            )
+            if "找不到" in str(_vl_r):
+                _vl_r = await loop.run_in_executor(
+                    None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 1, "click"
                 )
-                if sent_msg:
-                    try:
-                        await sent_msg.edit_text(f"✅ {_play_result}")
-                    except Exception:
-                        await update.message.reply_text(f"✅ {_play_result}")
-                else:
-                    await update.message.reply_text(f"✅ {_play_result}")
-                save_message(chat_id, "assistant", str(_play_result))
-                return
+            # 用人設口吻回覆
+            if "找到" in str(_vl_r) and "找不到" not in str(_vl_r):
+                _sender = sender_name if not is_owner else "于晏哥"
+                _reply = f"點好了{_sender}！！影片開始播了！！🎵🐮🐴"
+            else:
+                _sender = sender_name if not is_owner else "于晏哥"
+                _reply = f"找不到影片耶{_sender}，螢幕上可能沒有YouTube搜尋結果頁面😅🐮🐴"
+            if sent_msg:
+                try: await sent_msg.edit_text(_reply)
+                except Exception: await update.message.reply_text(_reply)
+            else:
+                await update.message.reply_text(_reply)
+            save_message(chat_id, "assistant", _reply)
+            return
+
+        # ── 攔截：模型沒呼叫工具但回覆中假裝完成了桌面操作 → 強制重試 ──
+        if response.stop_reason != "tool_use":
+            _resp_text = ""
+            for _b in response.content:
+                if hasattr(_b, "text"):
+                    _resp_text += _b.text
+            _fake_done = any(k in _resp_text for k in ["開好了", "搜尋好了", "播放了", "點好了", "已開啟", "已搜尋", "已播放", "幫你點", "幫你點第一"])
+            _ut_strip = (user_text or "").strip()
+            _user_agreed = _ut_strip in ("好", "對", "是", "可以", "OK", "ok", "好的", "嗯", "恩", "行")
+            if _fake_done or _user_agreed:
+                # 找出上一條 bot 回覆中的提議，組成明確指令重試
+                _last_bot_msg = ""
+                for _h in reversed(history[:-1]):
+                    if _h.get("role") == "assistant" and isinstance(_h.get("content"), str):
+                        _last_bot_msg = _h["content"]
+                        break
+                # 也檢查模型這次的回覆文字
+                if not _last_bot_msg:
+                    _last_bot_msg = _resp_text
+                import re as _re_retry
+                _action_hint = ""
+                _combined = _last_bot_msg + " " + _resp_text
+                # 從 bot 提議或回覆中提取動作
+                _yt_match = _re_retry.search(r'要去(YouTube|youtube|YT)', _combined)
+                _search_match = _re_retry.search(r'要.*搜[尋索](.+?)嗎|搜[尋索](.+?)嗎|要搜(.+?)嗎|搜(.+?)嗎', _combined)
+                _play_match = _re_retry.search(r'幫你點第一|幫你點|要.*點.*嗎|點第一', _combined)
+                if _play_match:
+                    _vl_result = await loop.run_in_executor(
+                        None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
+                    )
+                    if "找不到" in str(_vl_result):
+                        _vl_result = await loop.run_in_executor(
+                            None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 1, "click"
+                        )
+                    if "找到" in str(_vl_result) and "找不到" not in str(_vl_result):
+                        _s = sender_name if not is_owner else "于晏哥"
+                        _reply = f"點好了{_s}！！影片開始播了！！🎵🐮🐴"
+                    else:
+                        _s = sender_name if not is_owner else "于晏哥"
+                        _reply = f"找不到影片耶{_s}，螢幕上可能沒有YouTube搜尋結果頁面😅🐮🐴"
+                    if sent_msg:
+                        try: await sent_msg.edit_text(_reply)
+                        except Exception: await update.message.reply_text(_reply)
+                    else:
+                        await update.message.reply_text(_reply)
+                    save_message(chat_id, "assistant", _reply)
+                    return
+                elif _search_match:
+                    _kw = (_search_match.group(1) or _search_match.group(2) or _search_match.group(3) or _search_match.group(4) or "").strip()
+                    _action_hint = f"用desktop_control open_app打開 https://www.youtube.com/results?search_query={_kw}"
+                elif _yt_match:
+                    _action_hint = "打開YouTube"
+                if _action_hint:
+                    # 用明確指令重新呼叫模型
+                    _retry_msgs = list(history)
+                    _retry_msgs[-1] = {"role": "user", "content": _action_hint}
+                    _retry_system = system + "\n\n【強制規則】這次你必須呼叫工具來執行操作，禁止只回文字。"
+                    response = await loop.run_in_executor(None, lambda: client.messages.create(
+                        model="claude-sonnet-4-6", max_tokens=1024, system=_retry_system, tools=TOOLS,
+                        messages=_retry_msgs
+                    ))
 
         # ── 攔截：模型沒呼叫工具但用戶要求打開程式/網站 → 強制呼叫 desktop_control open_app ──
         if response.stop_reason != "tool_use":
