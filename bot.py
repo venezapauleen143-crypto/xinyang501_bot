@@ -18251,6 +18251,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("哎，我卡住了，請再說一次。")
             return
         reply = text_blocks[0]
+
+        # ── 最終攔截：回覆裡說「幫你點」但沒真的點 → 強制 vision_locate ──
+        import re as _re_final
+        if _re_final.search(r'幫你點第一|幫你點|現在.*點第一|點第一首', reply):
+            _vl_final = await loop.run_in_executor(
+                None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
+            )
+            if "找不到" in str(_vl_final):
+                _vl_final = await loop.run_in_executor(
+                    None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 1, "click"
+                )
+            _s = sender_name if not is_owner else "于晏哥"
+            if "找到" in str(_vl_final) and "找不到" not in str(_vl_final):
+                reply = f"點好了{_s}！！影片開始播了！！🎵🐮🐴"
+            else:
+                reply = f"找不到影片耶{_s}，螢幕上可能沒有YouTube搜尋結果頁面😅🐮🐴"
+
         save_message(chat_id, "assistant", reply)
         log_message("<<", "小牛馬", chat_id, reply)
         # 若 streaming 已送出部分訊息，直接 edit 最終完整內容
