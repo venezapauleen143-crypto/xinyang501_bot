@@ -7123,21 +7123,53 @@ def _cap_monitor_logical(monitor: int):
 
 
 def _vision_find(img, description: str):
-    """截圖 → Claude Vision → 回傳 (rx, ry) resized圖像像素，找不到回傳 (None, None)"""
+    """截圖 → OCR輔助 + Claude Vision → 回傳 (rx, ry) resized圖像像素，找不到回傳 (None, None)"""
     import anthropic, base64, io, json, re
     from PIL import Image as _PI
     ow, oh = img.width, img.height
-    if img.width > 1280:
-        r = 1280 / img.width
-        img = img.resize((1280, int(img.height * r)), _PI.LANCZOS)
+    # 2048px / quality 92（于晏哥指定的辨識品質標準）
+    if img.width > 2048:
+        r = 2048 / img.width
+        img = img.resize((2048, int(img.height * r)), _PI.LANCZOS)
     scale = ow / img.width
-    buf = io.BytesIO(); img.save(buf, format="JPEG", quality=85)
+    buf = io.BytesIO(); img.save(buf, format="JPEG", quality=92)
+    # 超過 4MB 則降品質重試
+    if buf.tell() > 4 * 1024 * 1024:
+        buf = io.BytesIO(); img.save(buf, format="JPEG", quality=80)
     b64 = base64.standard_b64encode(buf.getvalue()).decode()
+
+    # OCR 輔助：提取螢幕上的文字供 Claude 參考
+    ocr_hint = ""
+    try:
+        import pytesseract
+        ocr_data = pytesseract.image_to_data(img, lang="chi_tra+eng", output_type=pytesseract.Output.DICT)
+        ocr_items = []
+        for i, txt in enumerate(ocr_data["text"]):
+            if txt.strip() and ocr_data["conf"][i] > 40:
+                cx = ocr_data["left"][i] + ocr_data["width"][i] // 2
+                cy = ocr_data["top"][i] + ocr_data["height"][i] // 2
+                ocr_items.append(f"「{txt.strip()}」at({cx},{cy})")
+        if ocr_items:
+            ocr_hint = "\n\nOCR偵測到的文字及位置：" + "; ".join(ocr_items[:30])
+    except Exception:
+        pass
+
+    prompt = (
+        f"你是專業的螢幕分析師。這是一張電腦螢幕截圖（{img.width}x{img.height}px）。\n"
+        f"請找到「{description}」的中心座標。\n"
+        f"注意：\n"
+        f"- 座標是相對於圖片左上角(0,0)的像素位置\n"
+        f"- 仔細區分廣告和真正的內容（廣告通常有「贊助商廣告」「Ad」「探索」字樣）\n"
+        f"- 如果有多個匹配，選最相關的那個\n"
+        f"- 僅回傳JSON: {{\"x\":整數, \"y\":整數, \"ok\":true/false}}"
+        f"{ocr_hint}"
+    )
+
     resp = anthropic.Anthropic().messages.create(
-        model="claude-haiku-4-5-20251001", max_tokens=100,
+        model="claude-sonnet-4-6", max_tokens=300,
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
-            {"type": "text", "text": f"截圖({img.width}x{img.height}px)。找「{description}」中心。僅回傳JSON:{{\"x\":整數,\"y\":整數,\"ok\":true/false}}"}
+            {"type": "text", "text": prompt}
         ]}]
     )
     m = re.search(r'\{.*?\}', resp.content[0].text, re.DOTALL)
@@ -7706,21 +7738,32 @@ def fetch_drag_drop(from_x: int = None, from_y: int = None, to_x: int = None, to
 
 
 def fetch_read_screen(question: str = "描述螢幕上有什麼", monitor: int = 1) -> str:
-    """截圖 → Vision → 回傳螢幕內容描述"""
+    """截圖 → OCR + Vision → 回傳螢幕內容描述"""
     try:
         import anthropic, base64, io
         from PIL import Image as _PI
         img, _, _ = _cap_monitor_logical(monitor)
-        if img.width > 1280:
-            r = 1280 / img.width
-            img = img.resize((1280, int(img.height*r)), _PI.LANCZOS)
-        buf = io.BytesIO(); img.save(buf, format="JPEG", quality=85)
+        if img.width > 2048:
+            r = 2048 / img.width
+            img = img.resize((2048, int(img.height*r)), _PI.LANCZOS)
+        buf = io.BytesIO(); img.save(buf, format="JPEG", quality=92)
+        if buf.tell() > 4 * 1024 * 1024:
+            buf = io.BytesIO(); img.save(buf, format="JPEG", quality=80)
         b64 = base64.standard_b64encode(buf.getvalue()).decode()
+        # OCR 輔助
+        ocr_hint = ""
+        try:
+            import pytesseract
+            ocr_text = pytesseract.image_to_string(img, lang="chi_tra+eng").strip()
+            if ocr_text:
+                ocr_hint = f"\n\nOCR偵測到的文字：{ocr_text[:500]}"
+        except Exception:
+            pass
         resp = anthropic.Anthropic().messages.create(
-            model="claude-haiku-4-5-20251001", max_tokens=512,
+            model="claude-sonnet-4-6", max_tokens=1024,
             messages=[{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
-                {"type": "text", "text": f"這是螢幕{monitor}的截圖。{question}。請用繁體中文詳細描述。"}
+                {"type": "text", "text": f"這是螢幕{monitor}的截圖（{img.width}x{img.height}px）。{question}。請用繁體中文詳細描述畫面內容。{ocr_hint}"}
             ]}]
         )
         return f"📺 螢幕{monitor}內容：\n{resp.content[0].text}"
