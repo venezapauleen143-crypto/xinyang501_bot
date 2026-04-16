@@ -15978,9 +15978,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     save_message(chat_id, "assistant", _open_msg)
                     return
 
-        # ── 攔截：streaming 文字裡說「幫你點」→ 不管 tool_use 是什麼，直接 vision_locate ──
+        # ── 攔截：streaming 文字裡說「幫你點」或用戶原始指令有「播放」且搜尋已完成 ──
         _streamed_check = (streamed_text or "") + _all_resp_text
-        if _re_force.search(r'幫你點第一|幫你點|現在.*點第一|點第一首', _streamed_check):
+        _user_wants_play = bool(_re_force.search(r'撥放|播放', user_text or ""))
+        _search_done = bool(_re_force.search(r'搜尋.*開好|開好|已開啟|已在瀏覽器', _streamed_check))
+        if _re_force.search(r'幫你點第一|幫你點|現在.*點第一|點第一首', _streamed_check) or (_user_wants_play and _search_done):
             _vl_s = await loop.run_in_executor(
                 None, fetch_vision_locate, "YouTube搜尋結果中第一個非廣告的影片縮圖", 2, "click"
             )
