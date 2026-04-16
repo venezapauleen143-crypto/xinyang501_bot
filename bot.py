@@ -269,6 +269,161 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 - 發送多則訊息時，每則內容要自然，禁止在結尾加「(1/10)」「(2/10)」「[1/10]」等編號標記，就像正常人傳訊息一樣。
 - 發送N則訊息時，必須確實呼叫 app_navigator N次，每次只發一則。在還沒發完之前不要生成任何文字回覆，全部發完再回報。數量要精確，不能少發。"""
 
+# ── 意圖分類器 ──────────────────────────────────────────────────────────────
+def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
+    """用規則快速分類用戶意圖，不需呼叫 API"""
+    import re
+    t = (user_text or "").strip()
+    tl = t.lower()
+
+    # 同意/確認上一個提議
+    if t in ("好", "對", "是", "可以", "OK", "ok", "好的", "嗯", "恩", "行", "好啊", "好吧", "對啊", "可以啊"):
+        return "agree"
+
+    # 點擊/播放
+    if re.search(r'幫我點|點第一|播放|幫我播|點一下|點擊|幫我按', t):
+        return "click"
+
+    # 打開程式/網站
+    if re.search(r'打開|開啟|執行|啟動|open', tl):
+        return "open_app"
+
+    # 搜尋
+    if re.search(r'搜尋|搜索|找.*給我|查.*一下|search', tl):
+        return "search"
+
+    # 桌面控制
+    if re.search(r'螢幕|截圖|滑鼠|鍵盤|視窗|最大化|最小化|切換|前景|輸入|打字|scroll|滾', t):
+        return "desktop"
+
+    # 螢幕操作（Telegram/LINE 等 app 操作）
+    if re.search(r'從.*找.*跟.*說|傳訊息|發訊息|在.*找.*說', t):
+        return "app_control"
+
+    # 金融
+    if re.search(r'股票|股價|台股|美股|加密貨幣|比特幣|匯率|ETF|基金|K線|技術分析|本益比|殖利率|期貨|選擇權', t):
+        return "finance"
+
+    # 研究/分析
+    if re.search(r'研究|分析|比較|優缺點|趨勢|預測|評論|評價|摘要|辯論|事實查核', t):
+        return "research"
+
+    # 檔案/文件
+    if re.search(r'PDF|Excel|Word|PPT|檔案|文件|圖片處理|QR|條碼', t):
+        return "document"
+
+    # 系統
+    if re.search(r'系統|CPU|記憶體|硬碟|網路|WiFi|藍牙|音量|亮度|電池|更新|防火牆|程序', t):
+        return "system"
+
+    # 一般對話
+    return "chat"
+
+
+# ── 工具分組 ──────────────────────────────────────────────────────────────
+TOOL_GROUPS = {
+    "always": [
+        "desktop_control", "tts", "send_voice", "long_term_memory",
+        "get_weather", "generate_image", "todo_list", "reminder",
+        "ddg_search", "translate",
+    ],
+    "desktop": [
+        "ocr_click", "vision_locate", "screen_workflow", "app_navigator",
+        "wait_and_click", "drag_drop", "read_screen", "scroll_at",
+        "window_manager", "screen_vision", "find_image_on_screen",
+        "browser_control", "window_control", "hotkey", "clipboard",
+        "drag", "screen_stream", "ui_auto", "macro", "color_pick",
+        "multi_monitor", "mouse_record", "vision_loop", "wait_for_text",
+        "pixel_watch", "object_detect", "screenshot_compare", "screen_live",
+        "wait_seconds", "right_menu", "global_hotkey", "dialog_auto",
+        "clipboard_history", "clipboard_image", "ime_switch",
+    ],
+    "app_control": [
+        "app_navigator", "read_screen", "scroll_at", "window_manager",
+        "ocr_click", "vision_locate", "desktop_control",
+    ],
+    "finance": [
+        "get_stock", "get_crypto", "get_forex", "get_finance_news",
+        "get_fundamentals", "get_market_sentiment", "get_etf", "get_earnings",
+        "china_search", "get_ashare", "get_cn_news", "get_institutional",
+        "get_sector", "get_commodity", "get_bond_yield", "get_dividend_calendar",
+        "stock_screener", "get_margin_trading", "get_options", "get_futures",
+        "get_ipo", "backtest", "get_global_market", "get_economic_calendar",
+        "get_earnings_calendar", "get_analyst_ratings", "get_short_interest",
+        "get_correlation", "get_risk_metrics", "get_money_flow",
+        "get_concept_stocks", "get_crypto_depth", "drip_calculator",
+        "get_forex_chart", "get_warrant", "get_portfolio_risk",
+        "retirement_calculator", "loan_calculator", "compound_calculator",
+        "asset_allocation", "tw_tax_calculator", "currency_converter",
+        "get_fund", "get_reits", "inflation_adjusted", "defi_calculator",
+        "gold_calculator", "forex_deposit", "financial_health",
+        "get_candlestick_chart", "compare_stocks", "get_stock_advanced",
+        "get_macro", "portfolio", "auto_trade",
+    ],
+    "research": [
+        "deep_research", "fact_check", "timeline_events", "sentiment_scan",
+        "compare_analysis", "pros_cons_analysis", "research_report",
+        "opinion_writer", "trend_forecast", "debate_simulator",
+        "academic_search", "health_research", "law_research",
+        "person_research", "company_research", "product_review",
+        "travel_research", "job_market", "impact_analysis",
+        "scenario_planning", "decision_helper", "devil_advocate",
+        "summary_writer", "key_insights", "bias_detector", "second_opinion",
+        "brainstorm", "benchmark_analysis", "steel_man",
+        "socratic_questioning", "analogy_maker", "narrative_builder",
+        "critique_writer", "position_statement", "multi_perspective",
+        "google_trends", "ptt_search", "news_search", "wikipedia_search",
+        "read_webpage", "youtube_summary", "analyze_pdf",
+    ],
+    "search": [
+        "ddg_search", "read_webpage", "wikipedia_search", "news_search",
+        "ptt_search", "google_trends", "deep_research", "web_scrape",
+    ],
+    "document": [
+        "file_system", "file_tools", "image_tools", "analyze_pdf",
+        "pdf_edit", "pdf_image", "pptx_control", "excel_chart",
+        "document_control", "barcode", "qr_code", "ocr",
+        "file_diff", "encrypt_file",
+    ],
+    "system": [
+        "system_monitor", "process_mgr", "power_control", "power_plan",
+        "volume", "display", "media", "software", "startup", "env_var",
+        "user_account", "windows_update", "device_manager", "network_config",
+        "firewall", "event_log", "datetime_config", "defender",
+        "disk_clean", "disk_analyze", "disk_backup", "usb_list",
+        "wifi", "wifi_hotspot", "bluetooth", "proxy", "lock_screen",
+        "printer", "font_list", "hardware", "restore_point",
+        "registry", "win_service", "webcam", "speedtest",
+        "system_tools", "sysres_chart", "network_diag", "wake_on_lan",
+        "monitor_config", "virtual_desktop", "rdp_connect",
+    ],
+    "open_app": [
+        "desktop_control", "browser_control", "browser_advanced",
+    ],
+    "click": [
+        "vision_locate", "ocr_click", "desktop_control", "read_screen",
+    ],
+}
+
+def get_tools_for_intent(intent: str, all_tools: list) -> list:
+    """根據意圖回傳相關的工具子集"""
+    # 「同意」和「對話」不需要篩選，用全部工具讓模型自己判斷
+    if intent in ("agree", "chat"):
+        return all_tools
+
+    # 收集該意圖需要的工具名稱
+    needed = set(TOOL_GROUPS.get("always", []))
+    needed.update(TOOL_GROUPS.get(intent, []))
+
+    # 如果意圖明確，只回傳相關工具
+    filtered = [t for t in all_tools if t.get("name") in needed]
+
+    # 保底：如果篩選後太少（<5），回傳全部
+    if len(filtered) < 5:
+        return all_tools
+    return filtered
+
+
 TOOLS = [
     {
         "name": "get_weather",
@@ -15563,6 +15718,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             system = base_system
 
+        # ── 意圖分類 + 工具篩選 ──────────────────────────────────────────
+        _last_bot_reply = ""
+        for _h in reversed(history[:-1]):
+            if _h.get("role") == "assistant" and isinstance(_h.get("content"), str):
+                _last_bot_reply = _h["content"]
+                break
+        _intent = classify_intent(user_text, _last_bot_reply)
+        _filtered_tools = get_tools_for_intent(_intent, TOOLS)
+        logging.info(f"Intent: {_intent} | Tools: {len(_filtered_tools)}/{len(TOOLS)} | User: {user_text[:30]}")
+
+        # 意圖=agree → 從上一條 bot 回覆提取動作，改寫 user_text 讓模型理解
+        if _intent == "agree" and _last_bot_reply:
+            import re as _re_agree
+            _yt_m = _re_agree.search(r'要去(YouTube|youtube)', _last_bot_reply)
+            _search_m = _re_agree.search(r'要.*搜[尋索](.+?)嗎|搜(.+?)嗎', _last_bot_reply)
+            _click_m = _re_agree.search(r'幫你點|要.*點.*嗎|點第一', _last_bot_reply)
+            if _click_m:
+                _intent = "click"  # 轉成點擊意圖
+                _filtered_tools = get_tools_for_intent("click", TOOLS)
+            elif _search_m:
+                _kw = (_search_m.group(1) or _search_m.group(2) or "").strip()
+                # 直接改寫歷史中最後一條 user message
+                history[-1] = {"role": "user", "content": f"用desktop_control open_app打開 https://www.youtube.com/results?search_query={_kw}"}
+                _filtered_tools = get_tools_for_intent("open_app", TOOLS)
+            elif _yt_m:
+                history[-1] = {"role": "user", "content": "打開YouTube"}
+                _filtered_tools = get_tools_for_intent("open_app", TOOLS)
+
         # ── Prompt Caching：靜態 system + TOOLS 快取，動態記憶不快取 ──
         system_blocks = [{"type": "text", "text": base_system, "cache_control": {"type": "ephemeral"}}]
         if memories:
@@ -15577,7 +15760,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 model="claude-sonnet-4-6",
                 max_tokens=1024,
                 system=system_blocks,
-                tools=TOOLS,
+                tools=_filtered_tools,
                 messages=history
             ) as stream:
                 for text in stream.text_stream:
