@@ -207,6 +207,124 @@ tools:
   window_arrange <side_by_side|quad|stack|maximize_all>  多視窗排列
   region_ocr <x> <y> <w> <h> [語言]  指定區域 OCR
   window_screenshot <視窗標題關鍵字> [輸出路徑]  指定視窗截圖
+
+  ── 新增工具（同步 bot.py）──
+  analyze_pdf <路徑> [最大字數]    分析 PDF 文件
+  audio_process <action> <輸入> [輸出] [起始ms] [結束ms]  音訊處理
+  auto_skill <action> [目標] [名稱] [code]  自動技能管理
+  auto_trade <action> [代號] [數量] [價格] [類型]  自動交易
+  automation <action> [參數...]    自動化操作
+  barcode [圖片路徑]               掃描條碼
+  bluetooth <action> [MAC]         藍牙操作
+  browser_advanced <action> [參數]  進階瀏覽器控制
+  browser_control <action> [url] [selector] [text]  瀏覽器控制
+  calendar <action> [天數] [標題] [開始] [結束]  Google 日曆
+  clipboard <action> [文字]        剪貼簿操作
+  clipboard_image <action> [路徑]  剪貼簿圖片
+  cloud_storage <action> <路徑> [drive_id]  雲端儲存
+  compare_stocks <代號,...> [指標]  比較股票
+  database <type> <db> <SQL>       資料庫操作
+  ddg_search <關鍵字> [地區] [數量]  DuckDuckGo 搜尋
+  desktop_control <action> [x] [y] [text] [app]  桌面控制
+  device_manager <action> [名稱]   裝置管理員
+  disk_backup <action> [來源] [目標]  磁碟備份
+  display <action> [亮度]          顯示設定
+  docker <action> [容器名]         Docker 操作
+  document_control <action> <路徑> [內容]  文件控制
+  download_file <URL> [路徑]       下載檔案
+  dropbox <action> <本地> <遠端> [token]  Dropbox
+  email_control <host> <user> <pass>  Email 控制
+  emotion_detect <action> [文字] [圖片]  情緒偵測
+  encrypt_file <action> <路徑> <密碼>  加解密檔案
+  env_var <action> [名稱] [值]     環境變數
+  file_system <action> [路徑] [目標]  檔案系統操作
+  file_tools <action> <路徑>       檔案工具
+  file_transfer <action> <來源> [目標]  檔案傳輸
+  find_image_on_screen <圖片> [信心值]  螢幕找圖
+  generate_image <prompt> [寬] [高] [疊加文字]  生成圖片（含尺寸）
+  get_candlestick_chart <代號> [期間]  K線圖分析
+  get_crypto <幣種> [vs貨幣]       查詢加密貨幣
+  get_earnings <代號>              查詢財報
+  get_etf <代號>                   查詢 ETF
+  get_finance_news [來源] [數量]   財經新聞
+  get_forex <貨幣對>               查詢匯率
+  get_fundamentals <代號>          查詢基本面
+  get_macro <指標>                 總經指標
+  get_market_sentiment             市場情緒
+  get_stock <代號> [期間]          查詢股票（進階版）
+  get_stock_advanced <代號> [指標]  進階技術分析
+  get_weather <城市>               查詢天氣（進階版）
+  git <action> [repo] [message]    Git 操作
+  goal_manager <action> [目標]     目標管理
+  google_trends <關鍵字,...> [時間] [地區]  Google Trends
+  hardware                         硬體監控
+  image_edit <action> <路徑> [參數]  圖片編輯
+  image_tools <action> [路徑] [quality]  圖片工具
+  knowledge_base <action> [content] [query]  知識庫
+  long_term_memory <action> [chat_id] [內容]  長期記憶
+  lookup <ip|currency> [參數]      查詢工具
+  manage_schedule <action> [名稱] [時間]  排程管理
+  media <action> [裝置名]          媒體控制
+  monitor_config                   螢幕設定資訊
+  multi_deploy <action> [host] [user]  多機部署
+  multi_perspective <主題>         多角度分析
+  network_config <action> [名稱]   網路設定
+  network_diag <action> <host>     網路診斷
+  news_monitor <action> [關鍵字]   新聞監控
+  news_search <關鍵字> [語言] [數量]  新聞搜尋
+  nlp <action> <文字>              NLP 工具
+  osint_search <action> [query]    OSINT 搜尋
+  password_mgr <action> <站> <主密碼>  密碼管理
+  pdf_edit <action> [路徑] [輸出]  PDF 編輯
+  pdf_image <路徑> [輸出] [dpi]    PDF 轉圖片
+  pentest <action> [target]        滲透測試
+  portfolio <action> [chat_id] [symbol]  投資組合
+  power_control <action>           電源控制
+  pptx_control <action> <路徑>     PowerPoint 控制
+  proactive_alert <action> [名稱]  主動警報
+  ptt_search <關鍵字> [看板] [數量]  PTT 搜尋
+  push_notify <platform> <訊息> <webhook>  推播通知
+  qr_code <action> [content] [path]  QR Code 操作
+  read_screen [問題] [螢幕號]      讀取螢幕內容
+  read_webpage <URL> [最大字數]    讀取網頁內容
+  registry <action> <key> [value_name]  登錄檔操作
+  reminder <時間> <訊息>           設定提醒
+  report <標題> <資料JSON> [輸出]  報告生成
+  restore_point <action> [說明]    系統還原點
+  run_code <type> <code>           執行程式碼
+  screen_vision [問題]             螢幕視覺分析
+  scroll_at [方向] [格數] [x] [y] [螢幕]  指定位置滾動
+  self_benchmark <action>          自我評測
+  send_email <收件人> <主旨> <內容>  發送 Email（進階版）
+  send_voice <文字> [語音]         生成語音檔
+  smart_home <action> [device]     智慧家居
+  software <action> [名稱]         軟體管理
+  ssh_sftp <action> <host> <user> <pass>  SSH/SFTP
+  startup <action> [名稱] [指令]   開機自啟
+  system_monitor <action> [target]  系統監控
+  system_tools <action>            系統工具集
+  think_as <人物> <問題>           角色思考
+  threat_intel <action> [target]   威脅情報
+  todo_list <action> [task] [id]   任務清單
+  tts_advanced <action> [文字] [語音]  進階 TTS
+  user_account <action> [帳號]     使用者帳戶
+  video_gif <路徑> [起始秒] [持續秒]  影片轉 GIF
+  video_process <action> <路徑>    影片處理
+  virtual_desktop <action>         虛擬桌面
+  voice_cmd <action> [持續秒]      語音命令
+  voice_id <action> [名稱] [音檔]  聲紋辨識
+  volume <action> [音量]           音量控制
+  vpn <action> [名稱]              VPN 控制
+  wait_seconds <秒數>              等待指定秒數
+  web_scrape <action> [url] [selector]  網頁爬取
+  webpage_shot <action> <url>      網頁截圖
+  wikipedia_search <關鍵字> [語言]  Wikipedia 搜尋
+  win_notify_relay <action>        Windows 通知轉發
+  window_control <action> [關鍵字]  視窗控制
+  window_manager <action> [視窗名]  視窗管理員
+  windows_update <action>          Windows 更新管理
+  workflow <action> [名稱] [steps]  工作流程
+  youtube_summary <URL>            YouTube 字幕摘要
 """
 
 import sys
@@ -5495,6 +5613,791 @@ def drag_drop(from_x=None, from_y=None, to_x=None, to_y=None, from_text="", to_t
         str(from_text), str(to_text), int(monitor), float(duration)))
 
 
+# ── 新增 116 個缺失工具（同步 bot.py）──────────────────
+
+def analyze_pdf_tool(path, max_chars=4000):
+    """分析 PDF。用法：analyze_pdf <路徑> [最大字數]"""
+    try:
+        import pdfplumber
+        with pdfplumber.open(path) as pdf:
+            total_pages = len(pdf.pages)
+            texts = []
+            for page in pdf.pages[:20]:
+                t = page.extract_text()
+                if t:
+                    texts.append(t)
+        full_text = "\n".join(texts)
+        if not full_text.strip():
+            print("PDF 無法提取文字（可能是掃描圖片 PDF）"); return
+        result = f"📄 PDF 分析（共 {total_pages} 頁）\n\n{full_text[:int(max_chars)]}"
+        if len(full_text) > int(max_chars):
+            result += f"\n\n（內容已截斷，共 {len(full_text)} 字）"
+        print(result)
+    except Exception as e:
+        print(f"PDF 讀取失敗：{e}")
+
+
+def audio_process_tool(action, input_path, output="", start_ms=0, end_ms=0):
+    """音訊處理。用法：audio_process <convert|trim|info> <輸入> [輸出] [起始ms] [結束ms]"""
+    from bot import execute_audio_process
+    print(execute_audio_process(action, input_path, output, int(start_ms), int(end_ms)))
+
+
+def auto_skill_tool(action, goal="", skill_name="", code=""):
+    """自動技能。用法：auto_skill <create|list|run|delete> [目標] [名稱] [程式碼]"""
+    from bot import execute_auto_skill
+    print(execute_auto_skill(action, goal, skill_name, code))
+
+
+def auto_trade_tool(action, symbol="", amount=0.0, price=0.0, order_type="market"):
+    """自動交易。用法：auto_trade <add|remove|list|simulate> [代號] [數量] [價格] [類型]"""
+    from bot import execute_auto_trade
+    print(execute_auto_trade(action, symbol, float(amount), float(price), order_type))
+
+
+def automation_tool(action, condition_type="", condition_value="", command="", duration=60.0, layout="side_by_side", x=0, y=0, w=0, h=0, keyword="", output=""):
+    """自動化。用法：automation <if_then|window_arrange|region_ocr|...> [參數...]"""
+    from bot import execute_automation
+    print(execute_automation(action, condition_type, condition_value, command, float(duration), layout, int(x), int(y), int(w), int(h), keyword, output))
+
+
+def barcode_tool(image_path=""):
+    """掃描條碼/QR Code。用法：barcode [圖片路徑]"""
+    from bot import execute_barcode
+    print(execute_barcode(image_path))
+
+
+def bluetooth_tool(action, mac=""):
+    """藍牙操作。用法：bluetooth <scan|connect|disconnect|list> [MAC]"""
+    from bot import execute_bluetooth
+    print(execute_bluetooth(action, mac))
+
+
+def browser_advanced_tool(action, selector="", value="", name="", tab_index=0, timeout=30.0, url_pattern=""):
+    """進階瀏覽器。用法：browser_advanced <action> [selector] [value] [name] [tab] [timeout] [url_pattern]"""
+    from bot import execute_browser_advanced
+    print(execute_browser_advanced(action, selector, value, name, int(tab_index), float(timeout), url_pattern))
+
+
+def browser_control_tool(action, url="", selector="", text=""):
+    """瀏覽器控制。用法：browser_control <open|goto|click|type|get_text|screenshot|close> [url] [selector] [text]"""
+    from bot import execute_browser_control
+    print(execute_browser_control(action, url, selector, text))
+
+
+def calendar_tool(action, days=7, title="", start="", end="", description=""):
+    """Google 日曆。用法：calendar <list|add> [天數] [標題] [開始] [結束] [說明]"""
+    from bot import execute_calendar
+    print(execute_calendar(action, int(days), title, start, end, description))
+
+
+def clipboard_tool(action, text=""):
+    """剪貼簿。用法：clipboard <get|set|history> [文字]"""
+    from bot import execute_clipboard
+    print(execute_clipboard(action, text))
+
+
+def clipboard_image_tool(action, path=""):
+    """剪貼簿圖片。用法：clipboard_image <get|set> [路徑]"""
+    from bot import execute_clipboard_image
+    print(execute_clipboard_image(action, path))
+
+
+def cloud_storage_tool(action, path, drive_id="root"):
+    """雲端儲存。用法：cloud_storage <upload|download|list> <路徑> [drive_id]"""
+    from bot import execute_cloud_storage
+    print(execute_cloud_storage(action, path, drive_id))
+
+
+def compare_stocks_tool(symbols_str, metrics_str="all"):
+    """比較股票。用法：compare_stocks <代號1,代號2,...> [指標]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import compare_stocks as _compare_stocks
+    symbols = symbols_str.split(",")
+    metrics = metrics_str.split(",") if metrics_str != "all" else None
+    print(_compare_stocks(symbols, metrics))
+
+
+def database_tool(type_, db, sql, name=""):
+    """資料庫。用法：database <sqlite|mysql> <路徑/host> <SQL> [名稱]"""
+    from bot import execute_database
+    print(execute_database(type_, db, sql, name))
+
+
+def ddg_search_tool(query, region="zh-tw", max_results=5):
+    """DuckDuckGo 搜尋。用法：ddg_search <關鍵字> [地區] [數量]"""
+    from bot import execute_ddg_search
+    print(execute_ddg_search(query, region, int(max_results)))
+
+
+def desktop_control_tool(action, x=None, y=None, text=None, app=None, direction="down", amount=3, monitor=None):
+    """桌面控制。用法：desktop_control <action> [x] [y] [text] [app] [direction] [amount] [monitor]"""
+    from bot import execute_desktop_control
+    result = execute_desktop_control(action, x=int(x) if x else None, y=int(y) if y else None,
+                                     text=text, app=app, direction=direction, amount=int(amount),
+                                     monitor=int(monitor) if monitor else None)
+    print(result.get("message", str(result)))
+
+
+def device_manager_tool(action, name="", keyword=""):
+    """裝置管理員。用法：device_manager <list|enable|disable> [名稱] [關鍵字]"""
+    from bot import execute_device_manager
+    print(execute_device_manager(action, name, keyword))
+
+
+def disk_backup_tool(action, src="", dest=""):
+    """磁碟備份。用法：disk_backup <backup|restore|list> [來源] [目標]"""
+    from bot import execute_disk_backup
+    print(execute_disk_backup(action, src, dest))
+
+
+def display_tool(action, level=None):
+    """顯示設定。用法：display <get_brightness|set_brightness|get_resolution|list_resolutions> [亮度]"""
+    from bot import execute_display
+    print(execute_display(action, int(level) if level else None))
+
+
+def docker_tool(action, name=""):
+    """Docker 操作。用法：docker <list|start|stop|logs|images> [容器名]"""
+    from bot import execute_docker
+    print(execute_docker(action, name))
+
+
+def document_control_tool(action, path, content="", sheet=None):
+    """文件控制。用法：document_control <read|write|list_sheets> <路徑> [內容] [工作表]"""
+    from bot import execute_document
+    print(execute_document(action, path, content, sheet))
+
+
+def download_file_tool(url, save_path=""):
+    """下載檔案。用法：download_file <URL> [儲存路徑]"""
+    from bot import execute_download_file
+    print(execute_download_file(url, save_path))
+
+
+def dropbox_tool(action, local, remote, token=""):
+    """Dropbox 操作。用法：dropbox <upload|download> <本地> <遠端> [token]"""
+    from bot import execute_dropbox
+    print(execute_dropbox(action, local, remote, token))
+
+
+def email_control_tool(host, user, password, folder="INBOX", count=5):
+    """Email 控制（讀取）。用法：email_control <host> <user> <password> [folder] [count]"""
+    from bot import execute_email_read
+    print(execute_email_read(host, user, password, folder, int(count)))
+
+
+def emotion_detect_tool(action, text="", image_path=""):
+    """情緒偵測。用法：emotion_detect <text|image|both> [文字] [圖片路徑]"""
+    from bot import execute_emotion_detect
+    print(execute_emotion_detect(action, text, image_path))
+
+
+def encrypt_file_tool(action, path, password):
+    """加解密檔案。用法：encrypt_file <encrypt|decrypt> <路徑> <密碼>"""
+    from bot import execute_encrypt_file
+    print(execute_encrypt_file(action, path, password))
+
+
+def env_var_tool(action, name="", value="", permanent="false"):
+    """環境變數。用法：env_var <get|set|list|delete> [名稱] [值] [permanent]"""
+    from bot import execute_env_var
+    print(execute_env_var(action, name, value, permanent.lower() == "true"))
+
+
+def file_system_tool(action, path="", dest="", content="", keyword=""):
+    """檔案系統。用法：file_system <list|read|write|delete|copy|move|search|info> [路徑] [目標] [內容] [關鍵字]"""
+    from bot import execute_file_system
+    print(execute_file_system(action, path, dest, content, keyword))
+
+
+def file_tools_tool(action, path, dest="", pattern="", replacement="", ext=""):
+    """檔案工具。用法：file_tools <batch_rename|sync> <路徑> [目標] [pattern] [replacement] [ext]"""
+    from bot import execute_file_tools
+    print(execute_file_tools(action, path, dest, pattern, replacement, ext))
+
+
+def file_transfer_tool(action, source, dest=""):
+    """檔案傳輸。用法：file_transfer <zip|unzip|download|upload> <來源> [目標]"""
+    from bot import execute_file_transfer
+    print(execute_file_transfer(action, source, dest))
+
+
+def find_image_on_screen_tool(image_path, confidence=0.8):
+    """在螢幕上找圖。用法：find_image_on_screen <圖片路徑> [信心值]"""
+    from bot import execute_find_image
+    print(execute_find_image(image_path, float(confidence)))
+
+
+def generate_image_tool(prompt, width=512, height=512, overlay_text=""):
+    """生成圖片。用法：generate_image <prompt> [寬] [高] [疊加文字]"""
+    from bot import fetch_image, add_text_overlay
+    image_bytes = fetch_image(prompt, int(width), int(height))
+    if image_bytes and overlay_text:
+        image_bytes = add_text_overlay(image_bytes, overlay_text)
+    if image_bytes:
+        out = str(Path.home() / "Desktop" / f"gen_{int(time.time())}.png")
+        with open(out, "wb") as f:
+            f.write(image_bytes)
+        print(f"✅ 圖片已生成：{out}")
+    else:
+        print("圖片生成失敗")
+
+
+def get_candlestick_chart_tool(symbol, period="3mo"):
+    """K線圖。用法：get_candlestick_chart <代號> [期間]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import generate_candlestick
+    img_bytes, pattern_str = generate_candlestick(symbol, period)
+    if img_bytes:
+        out = str(Path.home() / "Desktop" / f"candlestick_{symbol}_{int(time.time())}.png")
+        with open(out, "wb") as f:
+            f.write(img_bytes)
+        print(f"✅ K線圖已儲存：{out}\n\n{pattern_str}")
+    else:
+        print(pattern_str)
+
+
+def get_crypto_tool(coin, vs_currency="usd"):
+    """查詢加密貨幣。用法：get_crypto <幣種> [vs貨幣]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_crypto
+    print(fetch_crypto(coin, vs_currency))
+
+
+def get_earnings_tool(symbol):
+    """查詢財報。用法：get_earnings <代號>"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_earnings
+    print(fetch_earnings(symbol))
+
+
+def get_etf_tool(symbol):
+    """查詢 ETF。用法：get_etf <代號>"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_etf
+    print(fetch_etf(symbol))
+
+
+def get_finance_news_tool(source="all", count=5):
+    """財經新聞。用法：get_finance_news [來源] [數量]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_finance_news
+    print(fetch_finance_news(source, int(count)))
+
+
+def get_forex_tool(pair):
+    """查詢匯率。用法：get_forex <貨幣對>"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_forex
+    print(fetch_forex(pair))
+
+
+def get_fundamentals_tool(symbol):
+    """查詢基本面。用法：get_fundamentals <代號>"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_fundamentals
+    print(fetch_fundamentals(symbol))
+
+
+def get_macro_tool(indicator):
+    """查詢總經指標。用法：get_macro <cpi|gdp|unemployment|fed_rate|nonfarm>"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_macro
+    print(fetch_macro(indicator))
+
+
+def get_market_sentiment_tool():
+    """查詢市場情緒。用法：get_market_sentiment"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_market_sentiment
+    print(fetch_market_sentiment())
+
+
+def get_stock_tool(symbol, period="1mo"):
+    """查詢股票。用法：get_stock <代號> [期間]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_stock
+    print(fetch_stock(symbol, period))
+
+
+def get_stock_advanced_tool(symbol, indicators="macd,bb,kd"):
+    """進階技術分析。用法：get_stock_advanced <代號> [指標]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_stock_advanced
+    ind_list = indicators.split(",") if indicators else None
+    print(fetch_stock_advanced(symbol, ind_list))
+
+
+def get_weather_tool(city):
+    """查詢天氣。用法：get_weather <城市>"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_weather
+    print(fetch_weather(city))
+
+
+def git_tool(action, repo=".", message="", branch="master"):
+    """Git 操作。用法：git <status|log|pull|add|commit|push|diff> [repo] [message] [branch]"""
+    from bot import execute_git
+    print(execute_git(action, repo, message, branch))
+
+
+def goal_manager_tool(action, goal="", goal_id="", steps="", priority="normal"):
+    """目標管理。用法：goal_manager <add|list|update|delete|progress> [目標] [id] [步驟] [優先]"""
+    from bot import execute_goal_manager
+    print(execute_goal_manager(action, goal, goal_id, steps, priority))
+
+
+def google_trends_tool(keywords_str, timeframe="today 3-m", geo="TW"):
+    """Google Trends。用法：google_trends <關鍵字1,關鍵字2,...> [時間] [地區]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_google_trends
+    keywords = keywords_str.split(",")
+    print(fetch_google_trends(keywords, timeframe, geo))
+
+
+def hardware_tool():
+    """硬體監控。用法：hardware"""
+    from bot import execute_hardware
+    print(execute_hardware())
+
+
+def image_edit_tool(action, path, *params):
+    """圖片編輯。用法：image_edit <crop|resize|text|merge|rotate|flip> <路徑> [參數...]"""
+    from bot import execute_image_edit
+    print(execute_image_edit(action, path, *params))
+
+
+def image_tools_tool(action, path="", quality=75, width=0, height=0, target_lang="zh-TW"):
+    """圖片工具。用法：image_tools <compress|batch|ocr_translate> [路徑] [quality] [width] [height] [lang]"""
+    from bot import execute_image_tools
+    print(execute_image_tools(action, path, int(quality), int(width), int(height), target_lang))
+
+
+def knowledge_base_tool(action, content="", query="", tag="", kb_id=""):
+    """知識庫。用法：knowledge_base <add|search|list|delete|export> [content] [query] [tag] [id]"""
+    from bot import execute_knowledge_base
+    print(execute_knowledge_base(action, content, query, tag, kb_id))
+
+
+def long_term_memory_tool(action, chat_id="0", content="", memory_id=""):
+    """長期記憶。用法：long_term_memory <save|list|delete> [chat_id] [內容] [id]"""
+    if action == "save":
+        memory_save(int(chat_id), content)
+    elif action == "list":
+        memory_list(int(chat_id))
+    elif action == "delete":
+        memory_del(int(chat_id), int(memory_id))
+    else:
+        print(f"可用操作：save, list, delete")
+
+
+def lookup_tool(action, ip="", amount=1.0, from_cur="USD", to_cur="TWD"):
+    """查詢工具。用法：lookup <ip|currency> [ip] [amount] [from] [to]"""
+    from bot import execute_lookup
+    print(execute_lookup(action, ip, float(amount), from_cur, to_cur))
+
+
+def manage_schedule_tool(action, name="", time_str="", script=""):
+    """排程管理。用法：manage_schedule <list|add|remove|enable|disable> [名稱] [時間] [腳本]"""
+    from bot import execute_manage_schedule
+    print(execute_manage_schedule(action, name, time_str, script))
+
+
+def media_tool(action, device_name=""):
+    """媒體控制。用法：media <play_pause|next|prev|stop|volume_up|volume_down|mute|list_devices|switch> [裝置名]"""
+    from bot import execute_media
+    print(execute_media(action, device_name))
+
+
+def monitor_config_tool():
+    """螢幕設定。用法：monitor_config"""
+    from bot import execute_monitor_config
+    print(execute_monitor_config())
+
+
+def multi_deploy_tool(action, remote_host="", remote_user="", remote_pass="", remote_path="/tmp/niu_bot"):
+    """多機部署。用法：multi_deploy <deploy|status|rollback> [host] [user] [pass] [path]"""
+    from bot import execute_multi_deploy
+    print(execute_multi_deploy(action, remote_host, remote_user, remote_pass, remote_path))
+
+
+def multi_perspective_tool(topic, lang="zh-tw"):
+    """多角度分析。用法：multi_perspective <主題> [語言]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import multi_perspective
+    print(multi_perspective(topic, lang))
+
+
+def network_config_tool(action, name="", ip="", dns1="", dns2="", domain="", duration=10):
+    """網路設定。用法：network_config <list|set_ip|set_dns|get_dns|hosts_list|hosts_add|hosts_remove|traffic> [參數...]"""
+    from bot import execute_network_config
+    print(execute_network_config(action, name, ip, dns1, dns2, domain, int(duration)))
+
+
+def network_diag_tool(action, host, ports="22,80,443,3306,3389,8080"):
+    """網路診斷。用法：network_diag <ping|traceroute|portscan> <host> [ports]"""
+    from bot import execute_network_diag
+    print(execute_network_diag(action, host, ports))
+
+
+def news_monitor_tool(action, keywords="", interval=300, duration=3600):
+    """新聞監控。用法：news_monitor <start|stop|status> [關鍵字] [間隔秒] [持續秒]"""
+    from bot import execute_news_monitor
+    print(execute_news_monitor(action, keywords, int(interval), int(duration)))
+
+
+def news_search_tool(query, lang="zh-TW", count=6):
+    """新聞搜尋。用法：news_search <關鍵字> [語言] [數量]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import search_news
+    print(search_news(query, lang, int(count)))
+
+
+def nlp_tool(action, text):
+    """NLP 工具。用法：nlp <summarize|sentiment|keywords|ner> <文字>"""
+    from bot import execute_nlp
+    print(execute_nlp(action, text))
+
+
+def osint_search_tool(action, query="", target="", limit=10):
+    """OSINT 搜尋。用法：osint_search <web_search|news_search|ip_osint|domain_osint|top_news> [query] [target] [limit]"""
+    from bot import execute_osint_search
+    print(execute_osint_search(action, query, target, int(limit)))
+
+
+def password_mgr_tool(action, site, master, username="", password=""):
+    """密碼管理。用法：password_mgr <save|get|list|delete> <網站> <主密碼> [帳號] [密碼]"""
+    from bot import execute_password_mgr
+    print(execute_password_mgr(action, site, master, username, password))
+
+
+def pdf_edit_tool(action, path="", output="", paths="", text=""):
+    """PDF 編輯。用法：pdf_edit <merge|split|watermark|info> [路徑] [輸出] [paths] [text]"""
+    from bot import execute_pdf_edit
+    print(execute_pdf_edit(action, path, output, paths, text))
+
+
+def pdf_image_tool(path, output_dir="", dpi=150):
+    """PDF 轉圖片。用法：pdf_image <路徑> [輸出資料夾] [dpi]"""
+    from bot import execute_pdf_to_image
+    print(execute_pdf_to_image(path, output_dir, int(dpi)))
+
+
+def pentest_tool(action, target="", port_range="1-1000", timeout=2):
+    """滲透測試。用法：pentest <scan|vuln_check|banner_grab|ssl_check> [target] [port_range] [timeout]"""
+    from bot import execute_pentest
+    print(execute_pentest(action, target, port_range, int(timeout)))
+
+
+def portfolio_tool(action, chat_id=0, symbol="", shares=0, cost=0):
+    """投資組合。用法：portfolio <add|remove|view|clear> [chat_id] [symbol] [shares] [cost]"""
+    from bot import execute_portfolio
+    print(execute_portfolio(action, int(chat_id), symbol, float(shares), float(cost)))
+
+
+def power_control_tool(action):
+    """電源控制。用法：power_control <sleep|restart|shutdown|hibernate|lock>"""
+    from bot import execute_power
+    print(execute_power(action))
+
+
+def pptx_control_tool(action, path, slides=""):
+    """PowerPoint 控制。用法：pptx_control <read|create|add_slide> <路徑> [slides_json]"""
+    from bot import execute_pptx
+    print(execute_pptx(action, path, slides))
+
+
+def proactive_alert_tool(action, name="", condition="", threshold="", target="", interval=60):
+    """主動警報。用法：proactive_alert <add|remove|list|status> [名稱] [條件] [閾值] [目標] [間隔秒]"""
+    from bot import execute_proactive_alert
+    print(execute_proactive_alert(action, name, condition, threshold, target, int(interval)))
+
+
+def ptt_search_tool(keyword, board="Gossiping", count=5):
+    """PTT 搜尋。用法：ptt_search <關鍵字> [看板] [數量]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import ptt_search as _ptt_search
+    print(_ptt_search(keyword, board, int(count)))
+
+
+def push_notify_tool(platform, message, webhook_or_token):
+    """推播通知。用法：push_notify <discord|line|slack> <訊息> <webhook_or_token>"""
+    from bot import execute_push_notify
+    print(execute_push_notify(platform, message, webhook_or_token))
+
+
+def qr_code_tool(action, content="", path="", duration=30.0):
+    """QR Code。用法：qr_code <generate|scan|watch> [content] [path] [duration]"""
+    from bot import execute_qr_code
+    print(execute_qr_code(action, content, path, float(duration)))
+
+
+def read_screen_tool(question="描述螢幕上有什麼", monitor=1):
+    """讀取螢幕。用法：read_screen [問題] [螢幕號]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_read_screen
+    print(fetch_read_screen(question, int(monitor)))
+
+
+def read_webpage_tool(url, max_chars=3000):
+    """讀取網頁。用法：read_webpage <URL> [最大字數]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import read_webpage
+    print(read_webpage(url, int(max_chars)))
+
+
+def registry_tool(action, key, value_name="", value=""):
+    """登錄檔操作。用法：registry <read|write|delete|list> <key> [value_name] [value]"""
+    from bot import execute_registry
+    print(execute_registry(action, key, value_name, value))
+
+
+def reminder_tool(time_str, message):
+    """提醒。用法：reminder <HH:MM或秒數> <訊息>"""
+    from bot import execute_reminder
+    print(execute_reminder(time_str, message))
+
+
+def report_tool(title, data_json, output=""):
+    """報告生成。用法：report <標題> <資料JSON> [輸出路徑]"""
+    from bot import execute_report
+    print(execute_report(title, data_json, output))
+
+
+def restore_point_tool(action, description=""):
+    """系統還原點。用法：restore_point <create|list> [說明]"""
+    from bot import execute_restore_point
+    print(execute_restore_point(action, description))
+
+
+def run_code_tool(type_, code):
+    """執行程式碼。用法：run_code <python|powershell|cmd|javascript> <code>"""
+    from bot import execute_run_code
+    print(execute_run_code(type_, code))
+
+
+def screen_vision_tool(question="請描述這個畫面上有什麼，以及目前電腦在做什麼事。"):
+    """螢幕視覺分析。用法：screen_vision [問題]"""
+    from bot import execute_screen_vision
+    analysis, img_bytes = execute_screen_vision(question)
+    if img_bytes:
+        out = str(Path.home() / "Desktop" / f"vision_{int(time.time())}.png")
+        with open(out, "wb") as f:
+            f.write(img_bytes)
+        print(f"{analysis}\n\n截圖已儲存：{out}")
+    else:
+        print(analysis)
+
+
+def scroll_at_tool(direction="down", amount=3, x=None, y=None, monitor=1, description=""):
+    """指定位置滾動。用法：scroll_at [方向] [格數] [x] [y] [螢幕號] [描述]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_scroll_at
+    print(fetch_scroll_at(direction, int(amount),
+                          int(x) if x and x != "None" else None,
+                          int(y) if y and y != "None" else None,
+                          int(monitor), description))
+
+
+def self_benchmark_tool(action):
+    """自我評測。用法：self_benchmark <run|report|compare>"""
+    from bot import execute_self_benchmark
+    print(execute_self_benchmark(action))
+
+
+def send_email_tool(to, subject, body):
+    """發送 Email。用法：send_email <收件人> <主旨> <內容>"""
+    from bot import execute_send_email
+    print(execute_send_email(to, subject, body))
+
+
+def send_voice_tool(text, voice="zh-CN-YunxiNeural"):
+    """生成語音。用法：send_voice <文字> [語音]"""
+    try:
+        sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+        from bot import generate_voice_ogg
+        ogg_data = generate_voice_ogg(text, voice)
+        out = str(Path.home() / "Desktop" / f"voice_{int(time.time())}.ogg")
+        with open(out, "wb") as f:
+            f.write(ogg_data)
+        print(f"✅ 語音已生成：{out}")
+    except Exception as e:
+        print(f"語音生成失敗：{e}")
+
+
+def smart_home_tool(action, device="", value="", host="", token=""):
+    """智慧家居。用法：smart_home <list|control|status|scene> [device] [value] [host] [token]"""
+    from bot import execute_smart_home
+    print(execute_smart_home(action, device, value, host, token))
+
+
+def software_tool(action, name="", keyword=""):
+    """軟體管理。用法：software <list|install|uninstall> [名稱] [關鍵字]"""
+    from bot import execute_software
+    print(execute_software(action, name, keyword))
+
+
+def ssh_sftp_tool(action, host, user, password, command="", local="", remote="", port=22):
+    """SSH/SFTP。用法：ssh_sftp <run|upload|download> <host> <user> <pass> [command] [local] [remote] [port]"""
+    from bot import execute_ssh_sftp
+    print(execute_ssh_sftp(action, host, user, password, command, local, remote, int(port)))
+
+
+def startup_tool(action, name="", command=""):
+    """開機自啟。用法：startup <list|add|remove> [名稱] [指令]"""
+    from bot import execute_startup
+    print(execute_startup(action, name, command))
+
+
+def system_monitor_tool(action, target=""):
+    """系統監控。用法：system_monitor <sysinfo|process_list|process_kill|disk_usage|network|battery> [target]"""
+    from bot import execute_system_monitor
+    print(execute_system_monitor(action, target))
+
+
+def system_tools_tool(action, **kwargs):
+    """系統工具。用法：system_tools <event_log|usb_list|firewall_list|printer_list|...> [參數...]"""
+    from bot import execute_system_tools
+    print(execute_system_tools(action, **kwargs))
+
+
+def think_as_tool(person, question, list_available="false"):
+    """角色思考。用法：think_as <人物> <問題> [list]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import execute_think_as
+    print(execute_think_as(person, question, list_available.lower() == "true"))
+
+
+def threat_intel_tool(action, target="", api_key=""):
+    """威脅情報。用法：threat_intel <ip_check|domain_check|hash_check|cve_search> [target] [api_key]"""
+    from bot import execute_threat_intel
+    print(execute_threat_intel(action, target, api_key))
+
+
+def todo_list_tool(action, task="", todo_id=0):
+    """任務清單。用法：todo_list <add|list|done|delete|clear> [task] [id]"""
+    from bot import execute_todo
+    print(execute_todo(action, task, int(todo_id)))
+
+
+def tts_advanced_tool(action, text="", voice="zh-CN-YunxiNeural"):
+    """進階 TTS。用法：tts_advanced <speak|list_voices> [文字] [語音]"""
+    from bot import execute_tts_advanced
+    print(execute_tts_advanced(action, text, voice))
+
+
+def user_account_tool(action, username="", password=""):
+    """使用者帳戶。用法：user_account <list|create|delete> [帳號] [密碼]"""
+    from bot import execute_user_account
+    print(execute_user_account(action, username, password))
+
+
+def video_gif_tool(path, start=0, duration=5.0, output="", fps=10):
+    """影片轉 GIF。用法：video_gif <路徑> [起始秒] [持續秒] [輸出] [fps]"""
+    from bot import execute_video_gif
+    print(execute_video_gif(path, float(start), float(duration), output, int(fps)))
+
+
+def video_process_tool(action, path, second=0, start=0, end=0, output=""):
+    """影片處理。用法：video_process <screenshot|trim|info|to_gif> <路徑> [秒數] [起始] [結束] [輸出]"""
+    from bot import execute_video_process
+    print(execute_video_process(action, path, float(second), float(start), float(end), output))
+
+
+def virtual_desktop_tool(action):
+    """虛擬桌面。用法：virtual_desktop <left|right|new>"""
+    from bot import execute_vdesktop
+    print(execute_vdesktop(action))
+
+
+def voice_cmd_tool(action, duration=300.0, language="zh-TW"):
+    """語音命令。用法：voice_cmd <start|stop|status> [持續秒] [語言]"""
+    from bot import execute_voice_cmd
+    print(execute_voice_cmd(action, float(duration), language))
+
+
+def voice_id_tool(action, name="", audio_path="", duration=5):
+    """聲紋辨識。用法：voice_id <register|identify|list|delete> [名稱] [音檔] [秒數]"""
+    from bot import execute_voice_id
+    print(execute_voice_id(action, name, audio_path, int(duration)))
+
+
+def volume_tool(action, level=None):
+    """音量控制。用法：volume <get|set|mute|unmute> [音量]"""
+    from bot import execute_volume
+    print(execute_volume(action, int(level) if level else None))
+
+
+def vpn_tool(action, name="", user="", password=""):
+    """VPN 控制。用法：vpn <list|connect|disconnect> [名稱] [帳號] [密碼]"""
+    from bot import execute_vpn
+    print(execute_vpn(action, name, user, password))
+
+
+def wait_seconds_tool(seconds):
+    """等待。用法：wait_seconds <秒數>"""
+    from bot import execute_wait_seconds
+    print(execute_wait_seconds(float(seconds)))
+
+
+def web_scrape_tool(action, url="", selector="body", interval=2.0, region="full"):
+    """網頁爬取。用法：web_scrape <scrape|monitor|screenshot> [url] [selector] [interval] [region]"""
+    from bot import execute_web_scrape
+    print(execute_web_scrape(action, url, selector, float(interval), region))
+
+
+def webpage_shot_tool(action, url, selector="body", interval=60.0, duration=3600.0):
+    """網頁截圖。用法：webpage_shot <screenshot|monitor> <url> [selector] [interval] [duration]"""
+    from bot import execute_webpage_shot
+    print(execute_webpage_shot(action, url, selector, float(interval), float(duration)))
+
+
+def wikipedia_search_tool(query, lang="zh"):
+    """Wikipedia 搜尋。用法：wikipedia_search <關鍵字> [語言]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import wikipedia_search as _wikipedia_search
+    print(_wikipedia_search(query, lang))
+
+
+def win_notify_relay_tool(action, duration=3600.0, filter_app=""):
+    """Windows 通知轉發。用法：win_notify_relay <start|stop|status> [持續秒] [filter_app]"""
+    from bot import execute_win_notify_relay
+    print(execute_win_notify_relay(action, float(duration), filter_app))
+
+
+def window_control_tool(action, keyword=""):
+    """視窗控制。用法：window_control <list|focus|maximize|minimize|close|restore> [關鍵字]"""
+    from bot import execute_window_control
+    print(execute_window_control(action, keyword))
+
+
+def window_manager_tool(action="list", window_name=""):
+    """視窗管理員。用法：window_manager <list|focus|maximize|minimize|close> [視窗名]"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import fetch_window_manager
+    print(fetch_window_manager(action, window_name))
+
+
+def windows_update_tool(action):
+    """Windows 更新。用法：windows_update <list|install|check>"""
+    from bot import execute_win_update
+    print(execute_win_update(action))
+
+
+def workflow_tool(action, name="", steps=""):
+    """工作流程。用法：workflow <run|save|list|delete> [名稱] [steps_json]"""
+    from bot import execute_workflow
+    print(execute_workflow(action, name, steps))
+
+
+def youtube_summary_tool(url):
+    """YouTube 摘要。用法：youtube_summary <URL>"""
+    sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    from bot import youtube_summary as _youtube_summary
+    print(_youtube_summary(url))
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -5875,6 +6778,123 @@ if __name__ == "__main__":
         "app_navigator":         lambda: app_navigator(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else 1),
         "wait_and_click":        lambda: wait_and_click(args[0], args[1] if len(args)>1 else 15, args[2] if len(args)>2 else 1),
         "drag_drop":             lambda: drag_drop(args[0] if args else None, args[1] if len(args)>1 else None, args[2] if len(args)>2 else None, args[3] if len(args)>3 else None),
+        # ── 新增 116 個工具 ──────────────────────────────────
+        "analyze_pdf":           lambda: analyze_pdf_tool(args[0], args[1] if len(args)>1 else 4000),
+        "audio_process":         lambda: audio_process_tool(args[0], args[1], args[2] if len(args)>2 else "", args[3] if len(args)>3 else 0, args[4] if len(args)>4 else 0),
+        "auto_skill":            lambda: auto_skill_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
+        "auto_trade":            lambda: auto_trade_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else 0, args[3] if len(args)>3 else 0, args[4] if len(args)>4 else "market"),
+        "automation":            lambda: automation_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
+        "barcode":               lambda: barcode_tool(args[0] if args else ""),
+        "bluetooth":             lambda: bluetooth_tool(args[0], args[1] if len(args)>1 else ""),
+        "browser_advanced":      lambda: browser_advanced_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else 0, args[5] if len(args)>5 else 30.0, args[6] if len(args)>6 else ""),
+        "browser_control":       lambda: browser_control_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
+        "calendar":              lambda: calendar_tool(args[0], args[1] if len(args)>1 else 7, args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "", " ".join(args[5:]) if len(args)>5 else ""),
+        "clipboard":             lambda: clipboard_tool(args[0], " ".join(args[1:]) if len(args)>1 else ""),
+        "clipboard_image":       lambda: clipboard_image_tool(args[0], args[1] if len(args)>1 else ""),
+        "cloud_storage":         lambda: cloud_storage_tool(args[0], args[1], args[2] if len(args)>2 else "root"),
+        "compare_stocks":        lambda: compare_stocks_tool(args[0], args[1] if len(args)>1 else "all"),
+        "database":              lambda: database_tool(args[0], args[1], " ".join(args[2:]) if len(args)>2 else ""),
+        "ddg_search":            lambda: ddg_search_tool(" ".join(args[:1] if len(args)==1 else [args[0]]), args[1] if len(args)>1 else "zh-tw", args[2] if len(args)>2 else 5),
+        "desktop_control":       lambda: desktop_control_tool(args[0], args[1] if len(args)>1 else None, args[2] if len(args)>2 else None, args[3] if len(args)>3 else None, args[4] if len(args)>4 else None),
+        "device_manager":        lambda: device_manager_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "disk_backup":           lambda: disk_backup_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "display":               lambda: display_tool(args[0], args[1] if len(args)>1 else None),
+        "docker":                lambda: docker_tool(args[0], args[1] if len(args)>1 else ""),
+        "document_control":      lambda: document_control_tool(args[0], args[1], " ".join(args[2:]) if len(args)>2 else ""),
+        "download_file":         lambda: download_file_tool(args[0], args[1] if len(args)>1 else ""),
+        "dropbox":               lambda: dropbox_tool(args[0], args[1], args[2], args[3] if len(args)>3 else ""),
+        "email_control":         lambda: email_control_tool(args[0], args[1], args[2], args[3] if len(args)>3 else "INBOX", args[4] if len(args)>4 else 5),
+        "emotion_detect":        lambda: emotion_detect_tool(args[0], " ".join(args[1:]) if len(args)>1 else "", ""),
+        "encrypt_file":          lambda: encrypt_file_tool(args[0], args[1], args[2]),
+        "env_var":               lambda: env_var_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "false"),
+        "file_system":           lambda: file_system_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
+        "file_tools":            lambda: file_tools_tool(args[0], args[1], args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "", args[5] if len(args)>5 else ""),
+        "file_transfer":         lambda: file_transfer_tool(args[0], args[1], args[2] if len(args)>2 else ""),
+        "find_image_on_screen":  lambda: find_image_on_screen_tool(args[0], args[1] if len(args)>1 else 0.8),
+        "generate_image":        lambda: generate_image_tool(args[0], args[1] if len(args)>1 else 512, args[2] if len(args)>2 else 512, " ".join(args[3:]) if len(args)>3 else ""),
+        "get_candlestick_chart": lambda: get_candlestick_chart_tool(args[0], args[1] if len(args)>1 else "3mo"),
+        "get_crypto":            lambda: get_crypto_tool(args[0], args[1] if len(args)>1 else "usd"),
+        "get_earnings":          lambda: get_earnings_tool(args[0]),
+        "get_etf":               lambda: get_etf_tool(args[0]),
+        "get_finance_news":      lambda: get_finance_news_tool(args[0] if args else "all", args[1] if len(args)>1 else 5),
+        "get_forex":             lambda: get_forex_tool(args[0]),
+        "get_fundamentals":      lambda: get_fundamentals_tool(args[0]),
+        "get_macro":             lambda: get_macro_tool(args[0]),
+        "get_market_sentiment":  lambda: get_market_sentiment_tool(),
+        "get_stock":             lambda: get_stock_tool(args[0], args[1] if len(args)>1 else "1mo"),
+        "get_stock_advanced":    lambda: get_stock_advanced_tool(args[0], args[1] if len(args)>1 else "macd,bb,kd"),
+        "get_weather":           lambda: get_weather_tool(args[0]),
+        "git":                   lambda: git_tool(args[0], args[1] if len(args)>1 else ".", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "master"),
+        "goal_manager":          lambda: goal_manager_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "normal"),
+        "google_trends":         lambda: google_trends_tool(args[0], args[1] if len(args)>1 else "today 3-m", args[2] if len(args)>2 else "TW"),
+        "hardware":              lambda: hardware_tool(),
+        "image_edit":            lambda: image_edit_tool(args[0], args[1], *args[2:]),
+        "image_tools":           lambda: image_tools_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else 75, args[3] if len(args)>3 else 0, args[4] if len(args)>4 else 0),
+        "knowledge_base":        lambda: knowledge_base_tool(args[0], " ".join(args[1:]) if len(args)>1 else ""),
+        "long_term_memory":      lambda: long_term_memory_tool(args[0], args[1] if len(args)>1 else "0", " ".join(args[2:]) if len(args)>2 else "", args[3] if len(args)>3 else ""),
+        "lookup":                lambda: lookup_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else 1.0, args[3] if len(args)>3 else "USD", args[4] if len(args)>4 else "TWD"),
+        "manage_schedule":       lambda: manage_schedule_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else ""),
+        "media":                 lambda: media_tool(args[0], args[1] if len(args)>1 else ""),
+        "monitor_config":        lambda: monitor_config_tool(),
+        "multi_deploy":          lambda: multi_deploy_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "/tmp/niu_bot"),
+        "multi_perspective":     lambda: multi_perspective_tool(" ".join(args), "zh-tw"),
+        "network_config":        lambda: network_config_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else ""),
+        "network_diag":          lambda: network_diag_tool(args[0], args[1], args[2] if len(args)>2 else "22,80,443,3306,3389,8080"),
+        "news_monitor":          lambda: news_monitor_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else 300, args[3] if len(args)>3 else 3600),
+        "news_search":           lambda: news_search_tool(" ".join(args[:1] if len(args)==1 else [args[0]]), args[1] if len(args)>1 else "zh-TW", args[2] if len(args)>2 else 6),
+        "nlp":                   lambda: nlp_tool(args[0], " ".join(args[1:])),
+        "osint_search":          lambda: osint_search_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else 10),
+        "password_mgr":          lambda: password_mgr_tool(args[0], args[1], args[2], args[3] if len(args)>3 else "", args[4] if len(args)>4 else ""),
+        "pdf_edit":              lambda: pdf_edit_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", " ".join(args[4:]) if len(args)>4 else ""),
+        "pdf_image":             lambda: pdf_image_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else 150),
+        "pentest":               lambda: pentest_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "1-1000", args[3] if len(args)>3 else 2),
+        "portfolio":             lambda: portfolio_tool(args[0], args[1] if len(args)>1 else 0, args[2] if len(args)>2 else "", args[3] if len(args)>3 else 0, args[4] if len(args)>4 else 0),
+        "power_control":         lambda: power_control_tool(args[0]),
+        "pptx_control":          lambda: pptx_control_tool(args[0], args[1], " ".join(args[2:]) if len(args)>2 else ""),
+        "proactive_alert":       lambda: proactive_alert_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "", args[5] if len(args)>5 else 60),
+        "ptt_search":            lambda: ptt_search_tool(args[0], args[1] if len(args)>1 else "Gossiping", args[2] if len(args)>2 else 5),
+        "push_notify":           lambda: push_notify_tool(args[0], " ".join(args[1:-1]), args[-1]),
+        "qr_code":               lambda: qr_code_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else 30.0),
+        "read_screen":           lambda: read_screen_tool(" ".join(args) if args else "描述螢幕上有什麼", args[-1] if args and args[-1].isdigit() else 1),
+        "read_webpage":          lambda: read_webpage_tool(args[0], args[1] if len(args)>1 else 3000),
+        "registry":              lambda: registry_tool(args[0], args[1], args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
+        "reminder":              lambda: reminder_tool(args[0], " ".join(args[1:])),
+        "report":                lambda: report_tool(args[0], args[1], args[2] if len(args)>2 else ""),
+        "restore_point":         lambda: restore_point_tool(args[0], " ".join(args[1:]) if len(args)>1 else ""),
+        "run_code":              lambda: run_code_tool(args[0], " ".join(args[1:])),
+        "screen_vision":         lambda: screen_vision_tool(" ".join(args) if args else "請描述這個畫面上有什麼"),
+        "scroll_at":             lambda: scroll_at_tool(args[0] if args else "down", args[1] if len(args)>1 else 3, args[2] if len(args)>2 else None, args[3] if len(args)>3 else None, args[4] if len(args)>4 else 1, " ".join(args[5:]) if len(args)>5 else ""),
+        "self_benchmark":        lambda: self_benchmark_tool(args[0]),
+        "send_email":            lambda: send_email_tool(args[0], args[1], " ".join(args[2:])),
+        "send_voice":            lambda: send_voice_tool(" ".join(args[:-1]) if len(args)>1 else " ".join(args), args[-1] if len(args)>1 and "Neural" in args[-1] else "zh-CN-YunxiNeural"),
+        "smart_home":            lambda: smart_home_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else ""),
+        "software":              lambda: software_tool(args[0], " ".join(args[1:]) if len(args)>1 else ""),
+        "ssh_sftp":              lambda: ssh_sftp_tool(args[0], args[1], args[2], args[3], " ".join(args[4:]) if len(args)>4 else ""),
+        "startup":               lambda: startup_tool(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else ""),
+        "system_monitor":        lambda: system_monitor_tool(args[0], args[1] if len(args)>1 else ""),
+        "system_tools":          lambda: system_tools_tool(args[0]),
+        "think_as":              lambda: think_as_tool(args[0], " ".join(args[1:]) if len(args)>1 else ""),
+        "threat_intel":          lambda: threat_intel_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "todo_list":             lambda: todo_list_tool(args[0], " ".join(args[1:]) if len(args)>1 else "", 0),
+        "tts_advanced":          lambda: tts_advanced_tool(args[0], " ".join(args[1:]) if len(args)>1 else "", args[-1] if len(args)>1 and "Neural" in args[-1] else "zh-CN-YunxiNeural"),
+        "user_account":          lambda: user_account_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "video_gif":             lambda: video_gif_tool(args[0], args[1] if len(args)>1 else 0, args[2] if len(args)>2 else 5.0, args[3] if len(args)>3 else "", args[4] if len(args)>4 else 10),
+        "video_process":         lambda: video_process_tool(args[0], args[1], args[2] if len(args)>2 else 0, args[3] if len(args)>3 else 0, args[4] if len(args)>4 else 0, args[5] if len(args)>5 else ""),
+        "virtual_desktop":       lambda: virtual_desktop_tool(args[0]),
+        "voice_cmd":             lambda: voice_cmd_tool(args[0], args[1] if len(args)>1 else 300.0, args[2] if len(args)>2 else "zh-TW"),
+        "voice_id":              lambda: voice_id_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else 5),
+        "volume":                lambda: volume_tool(args[0], args[1] if len(args)>1 else None),
+        "vpn":                   lambda: vpn_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else ""),
+        "wait_seconds":          lambda: wait_seconds_tool(args[0]),
+        "web_scrape":            lambda: web_scrape_tool(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "body", args[3] if len(args)>3 else 2.0, args[4] if len(args)>4 else "full"),
+        "webpage_shot":          lambda: webpage_shot_tool(args[0], args[1], args[2] if len(args)>2 else "body", args[3] if len(args)>3 else 60.0, args[4] if len(args)>4 else 3600.0),
+        "wikipedia_search":      lambda: wikipedia_search_tool(args[0], args[1] if len(args)>1 else "zh"),
+        "win_notify_relay":      lambda: win_notify_relay_tool(args[0], args[1] if len(args)>1 else 3600.0, args[2] if len(args)>2 else ""),
+        "window_control":        lambda: window_control_tool(args[0], " ".join(args[1:]) if len(args)>1 else ""),
+        "window_manager":        lambda: window_manager_tool(args[0] if args else "list", " ".join(args[1:]) if len(args)>1 else ""),
+        "windows_update":        lambda: windows_update_tool(args[0]),
+        "workflow":              lambda: workflow_tool(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else ""),
+        "youtube_summary":       lambda: youtube_summary_tool(args[0]),
     }
 
     if tool not in tools:
