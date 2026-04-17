@@ -7139,18 +7139,18 @@ def _cap_monitor_logical(monitor: int):
 _yolo_model = None
 
 def _yolo_detect(img, conf=0.4):
-    """用 YOLO 偵測螢幕上的 UI 元素，回傳 [(label, x_center, y_center, w, h, confidence), ...]
-    只載入自訂模型 yolo_ui.pt，沒有就跳過（不自動下載通用模型避免 crash）
+    """用 YOLO 偵測螢幕上的物件，回傳 [(label, x_center, y_center, w, h, confidence), ...]
+    載入 yolo_ui.pt（通用模型或自訂 UI 模型）
     """
     global _yolo_model
     try:
         if _yolo_model is None:
             from pathlib import Path
-            custom_model = Path(__file__).parent / "yolo_ui.pt"
-            if not custom_model.exists():
-                return []  # 沒有自訂模型就不用 YOLO
+            model_path = Path(__file__).parent / "yolo_ui.pt"
+            if not model_path.exists():
+                return []
             from ultralytics import YOLO
-            _yolo_model = YOLO(str(custom_model))
+            _yolo_model = YOLO(str(model_path))
         import numpy as np
         from PIL import Image as _PI
         if isinstance(img, _PI.Image):
@@ -7524,6 +7524,29 @@ def _uia_find_element(description: str, window_title: str = None):
         return None, None
 
 
+# ── YOLO 訓練資料自動收集 ──────────────────────────────────────────
+def _save_training_sample(img, description: str, rx: int, ry: int):
+    """每次 vision_locate 成功時自動保存截圖+標記，累積 YOLO 訓練資料"""
+    try:
+        from pathlib import Path
+        import json, time
+        data_dir = Path(__file__).parent / "yolo_training_data"
+        data_dir.mkdir(exist_ok=True)
+        ts = int(time.time() * 1000)
+        img.save(data_dir / f"{ts}.jpg", quality=90)
+        # YOLO 格式：class x_center y_center width height（歸一化）
+        # 暫時用固定 50x50 框，之後可以調整
+        w, h = img.width, img.height
+        box_w, box_h = 50 / w, 50 / h
+        cx, cy = rx / w, ry / h
+        with open(data_dir / f"{ts}.txt", "w") as f:
+            f.write(f"0 {cx:.6f} {cy:.6f} {box_w:.6f} {box_h:.6f}\n")
+        with open(data_dir / f"{ts}.json", "w", encoding="utf-8") as f:
+            json.dump({"description": description, "x": rx, "y": ry, "img_w": w, "img_h": h}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
 def _vision_find(img, description: str):
     """截圖 → OCR輔助 + Claude Vision → 回傳 (rx, ry) resized圖像像素，找不到回傳 (None, None)"""
     import anthropic, base64, io, json, re
@@ -7578,7 +7601,10 @@ def _vision_find(img, description: str):
     if not m: return None, None
     d = json.loads(m.group())
     if not d.get("ok", True): return None, None
-    return int(d["x"] * scale), int(d["y"] * scale)
+    rx, ry = int(d["x"] * scale), int(d["y"] * scale)
+    # 自動收集訓練資料
+    _save_training_sample(img, description, d["x"], d["y"])
+    return rx, ry
 
 
 def fetch_ocr_click(target_text: str, monitor: int = 1, click_type: str = "click", region: list = None) -> str:
