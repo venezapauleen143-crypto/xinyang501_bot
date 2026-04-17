@@ -7710,7 +7710,37 @@ def fetch_vision_locate(description: str, monitor: int = 1, action: str = "click
                     return f"✅ UIA找到「{description}」，已在 ({uia_x}, {uia_y}) 執行 {action}（{v}）"
                 return f"✅ UIA找到「{description}」，位置 ({uia_x}, {uia_y})"
 
-        # ── 策略2：智慧等待 + 視覺辨識（截圖 + Sonnet） ──
+        # ── 策略2：YOLO 快速偵測（本地，0.05秒） ──
+        if not region:
+            try:
+                img_yolo, mon_left_y, mon_top_y = _cap_monitor_logical(monitor)
+                detections = _yolo_detect(img_yolo, conf=0.3)
+                if detections:
+                    # 用描述關鍵字匹配 YOLO 偵測到的物件
+                    _desc_words = [w.lower() for w in description.split() if len(w) > 1]
+                    best_det = None
+                    best_score = 0
+                    for label, cx, cy, w, h, conf in detections:
+                        score = sum(1 for kw in _desc_words if kw in label.lower()) * 50 + conf * 30
+                        if score > best_score:
+                            best_det = (label, cx, cy, conf)
+                            best_score = score
+                    if best_det and best_score > 30:
+                        _yl, _yx, _yy, _yc = best_det
+                        abs_x = mon_left_y + _yx
+                        abs_y = mon_top_y + _yy
+                        if action == "locate_only":
+                            return f"✅ YOLO找到「{_yl}」({_yc:.0%})，位置 ({abs_x}, {abs_y})"
+                        success = _action_with_verify(
+                            lambda: _si_universal(abs_x, abs_y, action),
+                            monitor=monitor
+                        )
+                        v = "已驗證" if success else "未驗證"
+                        return f"✅ YOLO找到「{_yl}」({_yc:.0%})，已在 ({abs_x}, {abs_y}) 執行 {action}（{v}）"
+            except Exception:
+                pass
+
+        # ── 策略3：智慧等待 + 視覺辨識（截圖 + Sonnet） ──
         # 等螢幕穩定再截圖
         _wait_screen_stable(monitor, threshold=0.5, timeout=3.0, interval=0.3)
 
