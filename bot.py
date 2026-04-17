@@ -219,7 +219,14 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 - 語音：edge_tts (YunxiNeural) + XTTS v2 備援
 - OCR：pytesseract(中英文) + easyocr(深度學習)
 - 瀏覽器：Playwright(headless) + webbrowser(快速開URL)
-- 還沒有的：即時影像串流分析、YOLO物件偵測、驗證碼破解、跨裝置控制。別吹牛說自己有這些。"""
+- 思維顧問團：think_as 工具可載入馬斯克/巴菲特/黃仁勳/張忠謀的蒸餾思維框架
+- 還沒有的：即時影像串流分析、專用YOLO UI偵測、驗證碼破解、跨裝置控制。別吹牛說自己有這些。
+
+你的模型資訊（必須誠實）：
+- 你跑的模型是 Claude Sonnet 4.6（不是 Opus，不是 4.7，不是其他版本）
+- 你的知識有截止日，不是最新的。遇到不確定的資訊、版本號、最新消息、新聞，必須先用 ddg_search 或 read_webpage 查詢，禁止直接用記憶回答。
+- 不確定的事不能說「我已經是XX」「我就是XX」，必須說「我不確定，讓我查一下」。
+- 查不到就說查不到，不要編造。寧可承認不知道，也不要瞎掰。"""
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
@@ -303,6 +310,12 @@ def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
 
     # 搜尋
     if re.search(r'搜尋|搜索|找.*給我|查.*一下|search', tl):
+        return "search"
+
+    # 資訊查詢（版本、最新消息、新聞、URL）
+    if re.search(r'最新|升級|更新|版本|新功能|什麼時候出|幾時|發布|release|changelog', tl):
+        return "search"
+    if re.search(r'https?://', t):
         return "search"
 
     # 桌面控制
@@ -8618,28 +8631,65 @@ def fetch_google_trends(keywords: list, timeframe: str = "today 3-m", geo: str =
 
 
 def read_webpage(url: str, max_chars: int = 3000) -> str:
-    try:
+    """讀取網頁內容，先用 requests，內容太少或失敗時自動 fallback 到 Playwright"""
+    def _parse_html(html, url):
         from bs4 import BeautifulSoup
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        resp = requests.get(url, headers=headers, timeout=12)
-        resp.encoding = resp.apparent_encoding
-        soup = BeautifulSoup(resp.text, "html.parser")
-        # 移除 script / style / nav / footer
+        soup = BeautifulSoup(html, "html.parser")
         for tag in soup(["script", "style", "nav", "footer", "header", "aside", "ads"]):
             tag.decompose()
-        # 優先取 article 或 main，其次 body
         content_el = soup.find("article") or soup.find("main") or soup.find("body")
         text = content_el.get_text(separator="\n", strip=True) if content_el else soup.get_text(separator="\n", strip=True)
-        # 清理多餘空行
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         clean = "\n".join(lines)
         title = soup.title.string.strip() if soup.title else url
-        result = f"【{title}】\n{url}\n\n{clean[:max_chars]}"
-        if len(clean) > max_chars:
-            result += f"\n\n（內容已截斷，共 {len(clean)} 字）"
-        return result
-    except Exception as e:
-        return f"網頁讀取失敗：{e}"
+        return title, clean
+
+    # 策略1：requests（快）
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        resp = requests.get(url, headers=headers, timeout=12)
+        resp.encoding = resp.apparent_encoding
+        title, clean = _parse_html(resp.text, url)
+        # 如果內容太少（<100字），可能是動態渲染頁面，fallback 到 Playwright
+        if len(clean) >= 100:
+            result = f"【{title}】\n{url}\n\n{clean[:max_chars]}"
+            if len(clean) > max_chars:
+                result += f"\n\n（內容已截斷，共 {len(clean)} 字）"
+            return result
+    except Exception:
+        pass
+
+    # 策略2：Playwright headless（能渲染 JavaScript 動態頁面）
+    try:
+        import subprocess, sys, json as _json_rw, textwrap
+        _script = textwrap.dedent(f"""
+import sys, json
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b = p.chromium.launch(headless=True)
+    page = b.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    page.goto({_json_rw.dumps(url)}, wait_until="networkidle", timeout=20000)
+    page.wait_for_timeout(2000)
+    html = page.content()
+    b.close()
+    print(html)
+""")
+        proc = subprocess.run(
+            [sys.executable, "-c", _script],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30, env={**__import__("os").environ, "PYTHONIOENCODING": "utf-8"}
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            title, clean = _parse_html(proc.stdout, url)
+            if clean:
+                result = f"【{title}】（Playwright）\n{url}\n\n{clean[:max_chars]}"
+                if len(clean) > max_chars:
+                    result += f"\n\n（內容已截斷，共 {len(clean)} 字）"
+                return result
+    except Exception:
+        pass
+
+    return f"網頁讀取失敗：無法透過 requests 或 Playwright 取得 {url} 的內容"
 
 
 def wikipedia_search(query: str, lang: str = "zh") -> str:
@@ -16351,6 +16401,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         system_blocks = [{"type": "text", "text": base_system, "cache_control": {"type": "ephemeral"}}]
         if memories:
             system_blocks.append({"type": "text", "text": f"\n\n【長期記憶】以下是你記住的重要資訊，回覆時請參考：\n{mem_text}"})
+
+        # ── 對話歷史修復：確保每個 tool_use 都有對應的 tool_result ──
+        def _fix_history(hist):
+            """掃描 history，補上缺失的 tool_result，移除壞的紀錄"""
+            fixed = []
+            for i, msg in enumerate(hist):
+                content = msg.get("content", "")
+                # 檢查 assistant 訊息中的 tool_use blocks
+                if msg.get("role") == "assistant" and isinstance(content, list):
+                    tool_use_ids = [b.id for b in content if hasattr(b, "type") and b.type == "tool_use"]
+                    if tool_use_ids:
+                        # 檢查下一條是否有對應的 tool_result
+                        next_msg = hist[i + 1] if i + 1 < len(hist) else None
+                        if next_msg and next_msg.get("role") == "user":
+                            next_content = next_msg.get("content", "")
+                            if isinstance(next_content, list):
+                                existing_ids = {b.get("tool_use_id") for b in next_content if isinstance(b, dict) and b.get("type") == "tool_result"}
+                                missing = [tid for tid in tool_use_ids if tid not in existing_ids]
+                                if missing:
+                                    # 補上缺失的 tool_result
+                                    for tid in missing:
+                                        next_content.append({"type": "tool_result", "tool_use_id": tid, "content": '{"ok": true}'})
+                            elif isinstance(next_content, str):
+                                # 下一條是純文字但前一條有 tool_use → 跳過這組壞紀錄
+                                continue
+                        elif not next_msg:
+                            # 最後一條是 tool_use 但沒有 result → 跳過
+                            continue
+                fixed.append(msg)
+            return fixed
+
+        history = _fix_history(history)
 
         import asyncio as _aio, queue as _queue
 
