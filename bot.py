@@ -7140,19 +7140,17 @@ _yolo_model = None
 
 def _yolo_detect(img, conf=0.4):
     """用 YOLO 偵測螢幕上的 UI 元素，回傳 [(label, x_center, y_center, w, h, confidence), ...]
-    第一次呼叫會自動載入模型（~2秒），之後每次 ~0.05秒
+    只載入自訂模型 yolo_ui.pt，沒有就跳過（不自動下載通用模型避免 crash）
     """
     global _yolo_model
     try:
         if _yolo_model is None:
-            from ultralytics import YOLO
             from pathlib import Path
             custom_model = Path(__file__).parent / "yolo_ui.pt"
-            if custom_model.exists():
-                _yolo_model = YOLO(str(custom_model))
-            else:
-                # 用預訓練的通用模型（能偵測 person, monitor, keyboard, mouse, cell phone 等）
-                _yolo_model = YOLO("yolov8n.pt")
+            if not custom_model.exists():
+                return []  # 沒有自訂模型就不用 YOLO
+            from ultralytics import YOLO
+            _yolo_model = YOLO(str(custom_model))
         import numpy as np
         from PIL import Image as _PI
         if isinstance(img, _PI.Image):
