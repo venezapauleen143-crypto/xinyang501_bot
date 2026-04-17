@@ -8087,37 +8087,51 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
                 _tw_h = round(_log_h * 1.25) if _is_phys_gm else _log_h
                 results.append(f"⚠️ 找不到視窗邊界，用螢幕偏移估算({_tw_x},{_tw_y})")
 
-            # ① 截圖 → 找 Telegram 搜尋框 → 點擊（Vision 用視窗邊界幫助定位）
-            sx, sy = _see(
-                "Telegram左側欄頂部的搜尋輸入框（有放大鏡圖示的橫條，在聊天列表最上方，不是聊天輸入框）",
-                monitor
-            )
-            if sx is None:
-                # 備用：搜尋框在視窗左側欄約 1/4 寬、頂部約 5% 高的位置
-                sx = _tw_x + int(_tw_w * 0.13); sy = _tw_y + int(_tw_h * 0.05)
-                results.append(f"⚠️ Vision找不到搜尋框，視窗相對備用({sx},{sy})")
-            else:
-                results.append(f"🖱️ 搜尋框({sx},{sy})")
-            _si_click(sx, sy)
+            # ── Step 0.5：確保 Telegram 在正常聊天列表狀態 ──
+            import pyautogui as _pg
+            _pg.press("escape"); time.sleep(0.3)
+            _pg.press("escape"); time.sleep(0.3)
+            # 檢查是否在異常狀態（設定面板、空白畫面等）
+            try:
+                import pytesseract as _tess_st
+                _state_img, _, _ = _cap(monitor)
+                _state_text = _tess_st.image_to_string(_state_img, lang="chi_tra+eng")
+                if "請選擇聊天對象" in _state_text or "我的資料" in _state_text or "設定" in _state_text or "建立群組" in _state_text:
+                    _pg.press("escape"); time.sleep(0.3)
+                    _pg.press("escape"); time.sleep(0.3)
+                    results.append("🔄 從異常狀態恢復")
+            except Exception:
+                pass
+
+            # ① 用鍵盤快捷鍵開搜尋（不用 Vision 找搜尋框，避免點到漢堡選單）
+            _si_click(_tw_x + int(_tw_w * 0.13), _tw_y + int(_tw_h * 0.05))
             time.sleep(0.3)
+            results.append("🔍 點擊搜尋區域")
 
             # ② 清空 + 貼上聯絡人名稱
-            import pyautogui as _pg
             _pg.hotkey("ctrl","a"); time.sleep(0.1); _pg.press("delete"); time.sleep(0.1)
             _pc.copy(name); _pg.hotkey("ctrl","v"); time.sleep(1.2)
             results.append(f"🔍 搜尋名稱：{name}")
 
-            # ③ 點擊搜尋結果第一個（搜尋框正下方，固定偏移，避免 Vision 選錯群組）
-            # Telegram 搜尋結果第一個項目在搜尋框下方約 50px（物理座標）
-            _first_result_y = sy + int(_tw_h * 0.06)  # 搜尋框下方約 6% 視窗高度
-            _si_click(sx, _first_result_y); time.sleep(0.7)
-            results.append(f"✅ 點第一個搜尋結果({sx},{_first_result_y})")
+            # ③ 用 Vision 在搜尋結果中找聯絡人
+            _rx, _ry = _see(
+                f"Telegram搜尋結果列表中名稱為「{name}」的聊天項目（個人對話優先），點名字或頭像位置",
+                monitor
+            )
+            if _rx is not None:
+                _si_click(_rx, _ry); time.sleep(0.7)
+                results.append(f"✅ Vision找到並點擊「{name}」({_rx},{_ry})")
+            else:
+                # 備用：搜尋框下方固定偏移點第一個結果
+                _first_y = _tw_y + int(_tw_h * 0.11)
+                _si_click(_tw_x + int(_tw_w * 0.13), _first_y); time.sleep(0.7)
+                results.append(f"⚠️ Vision找不到，點第一個搜尋結果")
 
             # ④ 有訊息就輸入送出
             if input_text:
                 time.sleep(0.5)
                 mx, my = _see(
-                    "Telegram聊天視窗底部的訊息輸入框（最下方打字區，顯示「輸入訊息」或有emoji圖示，不是頂部搜尋框）",
+                    "Telegram聊天視窗底部的訊息輸入框（最下方打字區，顯示「輸入訊息」或有emoji圖示和迴紋針圖示，不是頂部搜尋框）",
                     monitor
                 )
                 if mx is None:
@@ -8129,7 +8143,6 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
                 # 偵測編號清單（1. xxx\n2. xxx），拆成多則分開發送
                 _lines = re.split(r'\n(?=\d+[\.\、\)])', input_text.strip())
                 if len(_lines) > 1:
-                    # 是編號清單，每則單獨發送
                     for _li, _line in enumerate(_lines):
                         _msg = re.sub(r'^\d+[\.\、\)]\s*', '', _line).strip()
                         if not _msg:
@@ -8142,13 +8155,11 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
                     _pg.press("enter"); time.sleep(0.2); _pg.press("enter")
                     results.append(f"📤 已送：{input_text}")
 
-            # ── 清理：關閉搜尋框，回到正常聊天列表狀態 ──
-            time.sleep(0.5)
-            _pg.press("escape")  # 關閉搜尋結果面板
+            # ── 清理：點擊聊天列表第一個聊天回到正常狀態（不用 Esc 避免關掉聊天室）──
+            time.sleep(0.3)
+            _si_click(_tw_x + int(_tw_w * 0.13), _tw_y + int(_tw_h * 0.12))
             time.sleep(0.2)
-            _pg.press("escape")  # 再按一次確保搜尋框關閉
-            time.sleep(0.2)
-            results.append("🧹 搜尋框已清理")
+            results.append("🧹 已回到聊天列表")
 
             return "\n".join(results) if results else "Telegram導航完成"
 
