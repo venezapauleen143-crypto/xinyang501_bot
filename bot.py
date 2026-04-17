@@ -3868,7 +3868,7 @@ TOOLS = [
     },
     {
         "name": "think_as",
-        "description": "用指定人物的思維框架分析問題。載入蒸餾好的心智模型、決策啟發式、表達DNA，用那個人的角度思考。當用戶說「用XX的角度分析」「XX會怎麼看」「用XX的思維」時使用。目前可用人物：elon-musk(馬斯克)。新人物蒸餾完成後會自動加入。",
+        "description": "用指定人物的思維框架分析問題。載入蒸餾好的心智模型、決策啟發式、表達DNA，用那個人的角度思考。當用戶說「用XX的角度分析」「XX會怎麼看」「用XX的思維」時使用。可用人物：elon-musk(馬斯克)、warren-buffett(巴菲特)、jensen-huang(黃仁勳)、morris-chang(張忠謀)。",
         "input_schema": {
             "type": "object",
             "properties": {
