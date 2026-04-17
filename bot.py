@@ -8142,6 +8142,14 @@ def fetch_app_navigator(app: str, task: str, input_text: str = "", monitor: int 
                     _pg.press("enter"); time.sleep(0.2); _pg.press("enter")
                     results.append(f"📤 已送：{input_text}")
 
+            # ── 清理：關閉搜尋框，回到正常聊天列表狀態 ──
+            time.sleep(0.5)
+            _pg.press("escape")  # 關閉搜尋結果面板
+            time.sleep(0.2)
+            _pg.press("escape")  # 再按一次確保搜尋框關閉
+            time.sleep(0.2)
+            results.append("🧹 搜尋框已清理")
+
             return "\n".join(results) if results else "Telegram導航完成"
 
         # ── 非 Telegram：通用視窗管理 ──
@@ -18996,8 +19004,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _fr(reply)
 
     except Exception as e:
+        err_str = str(e)
         logging.error(f"handle_message error: {e}", exc_info=True)
-        await update.message.reply_text("發生錯誤，請稍後再試。")
+        # Timeout 錯誤：通知用戶但不 crash
+        if "timed out" in err_str.lower() or "timeout" in err_str.lower():
+            try:
+                await update.message.reply_text("⏱️ 操作太久逾時了，但動作可能已經執行完了，你看一下螢幕結果。")
+            except Exception:
+                pass
+        # tool_use 沒有 tool_result 的 400 錯誤：清歷史重試提示
+        elif "tool_use" in err_str and "tool_result" in err_str:
+            try:
+                await update.message.reply_text("🔄 對話紀錄出了點問題，用 /clear 清一下再試。")
+            except Exception:
+                pass
+        else:
+            try:
+                await update.message.reply_text("發生錯誤，請稍後再試。")
+            except Exception:
+                pass
 
 
 async def chatid(update: Update, context: ContextTypes.DEFAULT_TYPE):
