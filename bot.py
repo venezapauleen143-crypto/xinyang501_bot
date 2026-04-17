@@ -3865,8 +3865,59 @@ TOOLS = [
             "required": ["action"]
         },
         "cache_control": {"type": "ephemeral"}
+    },
+    {
+        "name": "think_as",
+        "description": "用指定人物的思維框架分析問題。載入蒸餾好的心智模型、決策啟發式、表達DNA，用那個人的角度思考。當用戶說「用XX的角度分析」「XX會怎麼看」「用XX的思維」時使用。目前可用人物：elon-musk(馬斯克)。新人物蒸餾完成後會自動加入。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "person": {"type": "string", "description": "人物名稱，如 elon-musk, warren-buffett, jensen-huang, morris-chang"},
+                "question": {"type": "string", "description": "要用這個人的角度分析的問題"},
+                "list_available": {"type": "boolean", "description": "設為true列出所有可用人物"}
+            },
+            "required": ["person", "question"]
+        }
     }
 ]
+
+
+def execute_think_as(person: str, question: str, list_available: bool = False) -> str:
+    """載入蒸餾好的人物思維框架，用該人物角度分析問題"""
+    from pathlib import Path
+    skills_dir = Path(__file__).parent / "skills"
+
+    if list_available:
+        available = [f.stem for f in skills_dir.glob("*.md") if f.stem != "colleague-niuma"]
+        return "🧠 可用的思維框架：\n" + "\n".join(f"- {name}" for name in available) if available else "目前沒有可用的思維框架"
+
+    # 找對應的 skill 檔案
+    slug = person.lower().strip().replace(" ", "-").replace("_", "-")
+    # 別名對照
+    aliases = {
+        "馬斯克": "elon-musk", "musk": "elon-musk", "elon": "elon-musk",
+        "巴菲特": "warren-buffett", "buffett": "warren-buffett", "warren": "warren-buffett",
+        "黃仁勳": "jensen-huang", "jensen": "jensen-huang", "huang": "jensen-huang",
+        "張忠謀": "morris-chang", "morris": "morris-chang", "chang": "morris-chang",
+    }
+    slug = aliases.get(slug, slug)
+    skill_path = skills_dir / f"{slug}.md"
+
+    if not skill_path.exists():
+        available = [f.stem for f in skills_dir.glob("*.md") if f.stem != "colleague-niuma"]
+        return f"找不到「{person}」的思維框架。可用的有：{', '.join(available)}"
+
+    # 讀取 skill 內容
+    skill_content = skill_path.read_text(encoding="utf-8")
+
+    # 用 Claude 載入框架分析問題
+    resp = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1500,
+        system=f"你現在要完全用以下人物的思維框架來分析問題。不是模仿說話方式，是用他的心智模型和決策規則來推導。\n\n{skill_content}",
+        messages=[{"role": "user", "content": question}]
+    )
+    return f"🧠 {person} 的視角：\n\n{resp.content[0].text}"
 
 
 def calc_rsi(closes, period=14):
@@ -17195,6 +17246,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tool_use.input.get("remote_path","/tmp/niu_bot")),
                 "self_benchmark": lambda: execute_self_benchmark(
                     tool_use.input["action"]),
+                "think_as": lambda: execute_think_as(
+                    tool_use.input["person"],
+                    tool_use.input["question"],
+                    tool_use.input.get("list_available", False)),
             }
 
             if tool_use.name == "send_voice":
