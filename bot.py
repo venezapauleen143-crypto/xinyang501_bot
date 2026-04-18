@@ -318,6 +318,10 @@ def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
     if re.search(r'https?://', t):
         return "search"
 
+    # 自動回覆/監控聊天
+    if re.search(r'自動回覆|自動回復|監控聊天|監控訊息|監控對話|幫我回訊息|自動回應', t):
+        return "desktop"
+
     # 桌面控制
     if re.search(r'螢幕|截圖|滑鼠|鍵盤|視窗|最大化|最小化|切換|前景|輸入|打字|scroll|滾', t):
         return "desktop"
@@ -363,6 +367,7 @@ TOOL_GROUPS = {
         "pixel_watch", "object_detect", "screenshot_compare", "screen_live",
         "wait_seconds", "right_menu", "global_hotkey", "dialog_auto",
         "clipboard_history", "clipboard_image", "ime_switch",
+        "tg_auto_reply",
     ],
     "app_control": [
         "app_navigator", "read_screen", "scroll_at", "window_manager",
