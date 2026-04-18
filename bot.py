@@ -136,7 +136,18 @@ def load_history(chat_id: int, limit: int = CONTEXT_HISTORY) -> list:
             "SELECT role, content FROM chat_history WHERE chat_id=? ORDER BY id DESC LIMIT ?",
             (chat_id, limit)
         ).fetchall()
-    return [{"role": r, "content": c} for r, c in reversed(rows)]
+    history = [{"role": r, "content": c} for r, c in reversed(rows)]
+    # 對歷史中的桌面控制指令加標記，防止 Claude 重複執行
+    import re as _re_hist
+    _action_patterns = _re_hist.compile(
+        r'控制螢幕|螢幕\d|desktop_control|app_navigator|跟\s*\S+\s*說|傳\S*句|發送|打開|開啟|播放',
+        _re_hist.IGNORECASE
+    )
+    # 只標記歷史（不含最後一條，最後一條是當前用戶輸入）
+    for i, msg in enumerate(history[:-1]):
+        if msg["role"] == "user" and _action_patterns.search(msg["content"]):
+            msg["content"] = f"【歷史指令，已完成，不要再次執行】{msg['content']}"
+    return history
 
 def save_message(chat_id: int, role: str, content: str):
     with _db_lock:
@@ -200,6 +211,7 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
 
 桌面自動化規則：
+- 【禁止重複執行歷史指令】對話紀錄中看到的桌面控制、螢幕操作、傳訊息等指令（如「控制螢幕X跟XXX說...」「打開XXX」），如果後面已經有「✅」「已完成」「傳完了」「開好了」等回覆，代表那些是過去已經完成的任務，絕對不能再次執行。只有用戶在【當前這條訊息】明確要求的操作才執行。如果不確定是新指令還是舊紀錄，直接問用戶「你是要我再做一次嗎？」，不要自己判斷。
 - 【最重要】當用戶要求打開程式、操作電腦、控制螢幕、開網頁、播放影片時，你必須實際呼叫對應的工具（desktop_control、app_navigator 等），絕對不能只用文字回覆「已打開」「已完成」「已搜尋」。沒有呼叫工具就說完成是欺騙行為。
 - 【禁止假裝】如果你沒有呼叫任何工具，就不能說「開好了」「搜尋好了」「播放了」。你只能描述你實際做了什麼。
 - 用戶回覆「好」「對」「是」「可以」時，如果前文你提議了一個動作（如「要去YouTube嗎」），你必須實際呼叫工具去執行那個動作，不能只回文字。
@@ -285,6 +297,7 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 群組對話：群組訊息會以「[名字]: 內容」格式呈現，代表不同人說話。只有名字是「于晏」或確認是主人的才稱呼于晏哥，其他人用對方的名字稱呼。
 
 桌面自動化規則：
+- 【禁止重複執行歷史指令】對話紀錄中看到的桌面控制、螢幕操作、傳訊息等指令（如「控制螢幕X跟XXX說...」「打開XXX」），如果後面已經有「✅」「已完成」「傳完了」「開好了」等回覆，代表那些是過去已經完成的任務，絕對不能再次執行。只有用戶在【當前這條訊息】明確要求的操作才執行。如果不確定是新指令還是舊紀錄，直接問用戶「你是要我再做一次嗎？」，不要自己判斷。
 - 【最重要】當用戶要求打開程式、操作電腦、控制螢幕、開網頁、播放影片時，你必須實際呼叫對應的工具（desktop_control、app_navigator 等），絕對不能只用文字回覆「已打開」「已完成」「已搜尋」。沒有呼叫工具就說完成是欺騙行為。
 - 【禁止假裝】如果你沒有呼叫任何工具，就不能說「開好了」「搜尋好了」「播放了」。你只能描述你實際做了什麼。
 - 用戶回覆「好」「對」「是」「可以」時，如果前文你提議了一個動作（如「要去YouTube嗎」），你必須實際呼叫工具去執行那個動作，不能只回文字。
