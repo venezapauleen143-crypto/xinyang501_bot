@@ -1580,12 +1580,12 @@ TOOLS = [
     },
     {
         "name": "tg_auto_reply",
-        "description": "開啟 Telegram 自動回覆監控。監控螢幕2的 Telegram 對話，偵測到對方新訊息時自動用小牛馬風格回覆。用戶說「開啟自動回覆」「監控聊天」「幫我回訊息」時使用。",
+        "description": "開啟/停止 Telegram 自動回覆監控。監控螢幕2的 Telegram 對話，偵測到對方新訊息時自動用小牛馬風格回覆。用戶說「開啟自動回覆」「監控聊天」「幫我回訊息」時使用。當用戶說「到幾點」「時間到XX:XX」時，必須用 stop_time 參數帶入結束時間。",
         "input_schema": {
             "type": "object",
             "properties": {
-                "duration_minutes": {"type": "number", "description": "監控持續時間（分鐘），預設 30"},
-                "stop_time": {"type": "string", "description": "監控結束時間（如 '14:30'），優先於 duration_minutes"},
+                "duration_minutes": {"type": "number", "description": "監控持續時間（分鐘），預設 30。如果用戶指定了結束時間則不需要此參數"},
+                "stop_time": {"type": "string", "description": "監控結束時間，格式 HH:MM（如 '15:15'）。用戶說「到15:15」「時間到15:15」時必須填入此參數，優先於 duration_minutes"},
                 "action": {"type": "string", "description": "start 開啟 / stop 停止，預設 start"}
             },
             "required": []
@@ -17755,7 +17755,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif tool_use.name == "tg_auto_reply":
                 action = tool_use.input.get("action", "start")
                 duration = tool_use.input.get("duration_minutes", 30)
-                result_text = execute_tg_auto_reply(action, duration)
+                st = tool_use.input.get("stop_time", "")
+                result_text = execute_tg_auto_reply(action, duration, st)
                 save_message(chat_id, "assistant", result_text)
                 await _fr(result_text)
                 return
