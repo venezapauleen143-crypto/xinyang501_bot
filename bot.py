@@ -1568,6 +1568,18 @@ TOOLS = [
         }
     },
     {
+        "name": "tg_auto_reply",
+        "description": "開啟 Telegram 自動回覆監控。監控螢幕2的 Telegram 對話，偵測到對方新訊息時自動用小牛馬風格回覆。用戶說「開啟自動回覆」「監控聊天」「幫我回訊息」時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "duration_minutes": {"type": "number", "description": "監控持續時間（分鐘），預設 30"},
+                "action": {"type": "string", "description": "start 開啟 / stop 停止，預設 start"}
+            },
+            "required": []
+        }
+    },
+    {
         "name": "find_image_on_screen",
         "description": "在螢幕上找到指定圖片檔案的位置，回傳座標。用於視覺定位按鈕或元素。",
         "input_schema": {
@@ -10039,6 +10051,170 @@ def execute_send_email(to, subject, body):
         s.send_message(msg)
     return f"Email 已寄出到 {to}"
 
+_tg_auto_reply_running = False
+_tg_auto_reply_thread = None
+
+def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30) -> str:
+    """開啟/停止 Telegram 自動回覆監控"""
+    global _tg_auto_reply_running, _tg_auto_reply_thread
+    import threading, ctypes, hashlib
+
+    if action == "stop":
+        _tg_auto_reply_running = False
+        return "自動回覆已停止"
+
+    if _tg_auto_reply_running:
+        return "自動回覆已在運行中"
+
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(0)
+    except Exception:
+        pass
+
+    def find_tg():
+        results = []
+        def cb(hwnd, _):
+            if win32gui.IsWindowVisible(hwnd):
+                cls = win32gui.GetClassName(hwnd)
+                if "Qt" in cls and "QWindow" in cls:
+                    results.append((hwnd, win32gui.GetWindowText(hwnd), win32gui.GetWindowRect(hwnd)))
+        win32gui.EnumWindows(cb, results)
+        return results
+
+    def run_monitor():
+        global _tg_auto_reply_running
+        _tg_auto_reply_running = True
+        import numpy as np
+        from datetime import datetime, timedelta
+
+        end_time = datetime.now() + timedelta(minutes=duration_minutes)
+        TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
+
+        PERSONA = """你是小牛馬，一個嘴賤幽默的男生，說話像真人一樣自然。絕對不能暴露自己是AI、機器人、程式。
+風格：
+- 台灣口語：然後、就是、對啊、沒有啦、還好啦
+- 嘴賤互嗆但不惡意，兄弟之間的感覺
+- 會吐槽、自嘲、幽默
+- 最多5句不超過120字
+- 不用emoji
+- 說話像真人朋友聊天，有情緒、有個性、會生氣會開玩笑
+- 絕對禁止說出「我是AI」「我是機器人」「我是程式」「作為AI」等任何暴露身份的話"""
+
+        # 找 Telegram 窗口
+        tg_list = find_tg()
+        if not tg_list:
+            _tg_auto_reply_running = False
+            return
+        main_tg = max(tg_list, key=lambda x: (x[2][2]-x[2][0]) * (x[2][3]-x[2][1]))
+        hwnd, title, (wl, wt, wr, wb) = main_tg
+
+        with mss.mss() as sct:
+            mon = sct.monitors[2]
+            img = sct.grab(mon)
+            pil = Image.frombytes("RGB", img.size, img.rgb)
+            iw, ih = pil.size
+
+        sx = iw / mon["width"]
+        sy = ih / mon["height"]
+        il = int((wl - mon["left"]) * sx)
+        it = int((wt - mon["top"]) * sy)
+        ir = int((wr - mon["left"]) * sx)
+        ib = int((wb - mon["top"]) * sy)
+
+        arr = np.array(pil.crop((il, it, ir, ib)))
+        h, w, _ = arr.shape
+
+        candidates = []
+        for check_y in range(int(h*0.3), int(h*0.8), int(h*0.05)):
+            row = arr[check_y, :, :]
+            for x in range(w // 5, w * 3 // 4):
+                r, g, b = int(row[x, 0]), int(row[x, 1]), int(row[x, 2])
+                if g > r + 5 and g > 150 and r < 220 and b < g:
+                    candidates.append(x)
+                    break
+        split_x = sorted(candidates)[len(candidates)//2] if candidates else w // 2
+
+        chat_region = (il + split_x, it, ir, ib)
+        input_x = (wl + wr) // 2 + int((wr - wl) * 0.15)
+        input_y = wb - 25
+
+        # 初始 hash
+        with mss.mss() as sct:
+            img = sct.grab(sct.monitors[2])
+            pil = Image.frombytes("RGB", img.size, img.rgb)
+        conv = pil.crop(chat_region)
+        last_hash = hashlib.md5(conv.resize((80, 40)).tobytes()).hexdigest()
+
+        logging.info(f"tg_auto_reply 啟動，監控 {duration_minutes} 分鐘")
+
+        while _tg_auto_reply_running and datetime.now() < end_time:
+            time.sleep(6)
+            try:
+                with mss.mss() as sct:
+                    img = sct.grab(sct.monitors[2])
+                    pil = Image.frombytes("RGB", img.size, img.rgb)
+                conv = pil.crop(chat_region)
+                h = hashlib.md5(conv.resize((80, 40)).tobytes()).hexdigest()
+
+                if h != last_hash:
+                    p = os.path.join(TMPDIR, "tg_auto.png")
+                    conv.save(p)
+                    with open(p, "rb") as f:
+                        d = base64.b64encode(f.read()).decode()
+
+                    r = client.messages.create(model="claude-sonnet-4-6", max_tokens=200, system=PERSONA,
+                        messages=[{"role":"user","content":[
+                        {"type":"image","source":{"type":"base64","media_type":"image/png","data":d}},
+                        {"type":"text","text":"""這是 Telegram 對話截圖，請依照以下步驟分析：
+
+1. 辨識對話結構：
+   - 綠色氣泡（靠右）= 我（小牛馬）發的
+   - 白色氣泡（靠左）= 對方發的
+
+2. 分析上下文：從上到下讀完整段對話，理解主題和情緒
+
+3. 判斷是否回覆：
+   - 最底部是白色氣泡 → 需要回覆
+   - 最底部是綠色氣泡 → 只回一個字「等」
+
+4. 如果需要回覆：根據整段上下文回應，不是只看最後一條。對方問問題就回答，嗆人就幽默化解，聊天就接話。如果對方連發多條，整體理解後一次回覆。
+
+只回覆要發送的文字，不要加任何格式或解釋。"""}
+                    ]}])
+                    reply = r.content[0].text.strip()
+
+                    if reply and reply != "等" and len(reply) > 2:
+                        pyautogui.click(input_x, input_y)
+                        time.sleep(0.3)
+                        pyperclip.copy(reply)
+                        pyautogui.hotkey("ctrl", "v")
+                        time.sleep(0.3)
+                        pyautogui.press("enter")
+                        time.sleep(1)
+                        logging.info(f"tg_auto_reply 回覆: {reply}")
+                        # 10 秒冷卻
+                        time.sleep(10)
+                        with mss.mss() as sct:
+                            img = sct.grab(sct.monitors[2])
+                            pil = Image.frombytes("RGB", img.size, img.rgb)
+                        conv = pil.crop(chat_region)
+                        last_hash = hashlib.md5(conv.resize((80, 40)).tobytes()).hexdigest()
+                    else:
+                        last_hash = h
+                else:
+                    last_hash = h
+            except Exception as e:
+                logging.error(f"tg_auto_reply 錯誤: {e}")
+                time.sleep(5)
+
+        _tg_auto_reply_running = False
+        logging.info("tg_auto_reply 結束")
+
+    _tg_auto_reply_thread = threading.Thread(target=run_monitor, daemon=True)
+    _tg_auto_reply_thread.start()
+    return f"自動回覆已開啟，監控 {duration_minutes} 分鐘"
+
+
 def execute_screen_vision(question: str = "請描述這個畫面上有什麼，以及目前電腦在做什麼事。") -> tuple:
     """截圖並用 Claude vision 分析，回傳 (文字分析, 截圖bytes)"""
     import base64
@@ -17538,6 +17714,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await _fr(reply)
                 return
 
+            elif tool_use.name == "tg_auto_reply":
+                action = tool_use.input.get("action", "start")
+                duration = tool_use.input.get("duration_minutes", 30)
+                result_text = execute_tg_auto_reply(action, duration)
+                save_message(chat_id, "assistant", result_text)
+                await _fr(result_text)
+                return
+
             elif tool_use.name == "screen_vision":
                 question = tool_use.input.get("question", "請描述這個畫面上有什麼，以及目前電腦在做什麼事。")
                 import asyncio
@@ -19058,6 +19242,9 @@ async def memories(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
+    logging.info("【排程觸發】goodmorning 開始執行")
+    with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] goodmorning 觸發\n")
     group_id = int(os.getenv("GROUP_CHAT_ID"))
     import asyncio
     loop = asyncio.get_running_loop()
@@ -19112,6 +19299,9 @@ async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"goodmorning 發送失敗：{e}", exc_info=True)
 
 async def goodnight(context: ContextTypes.DEFAULT_TYPE):
+    logging.info("【排程觸發】goodnight 開始執行")
+    with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] goodnight 觸發\n")
     group_id = int(os.getenv("GROUP_CHAT_ID"))
     import asyncio
     loop = asyncio.get_running_loop()
@@ -19133,6 +19323,9 @@ _report_today: str = ""  # 防止同一天重複執行
 
 async def daily_skill_report(context: ContextTypes.DEFAULT_TYPE):
     """每天晚上 9 點：回報今天總共安裝了多少技能"""
+    logging.info("【排程觸發】daily_skill_report 開始執行")
+    with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] daily_skill_report 觸發\n")
     global _report_today
     import asyncio
     loop = asyncio.get_running_loop()
@@ -19314,6 +19507,9 @@ def collect_daily_report() -> str:
 
 async def daily_pc_report(context: ContextTypes.DEFAULT_TYPE):
     """每天晚上 10:00 台灣時間：匯報今天電腦做了什麼"""
+    logging.info("【排程觸發】daily_pc_report 開始執行")
+    with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] daily_pc_report 觸發\n")
     import asyncio
     loop = asyncio.get_running_loop()
 
