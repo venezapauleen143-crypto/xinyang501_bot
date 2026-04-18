@@ -1,5 +1,5 @@
-' 小牛馬 Bot 開機自啟腳本
-' 功能：等網路就緒 → 檢查是否已在跑 → 啟動 bot.py
+' NiuMa Bot startup script
+' Wait for network -> check duplicate -> start bot.py
 Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
@@ -14,11 +14,11 @@ Sub WriteLog(msg)
     f.Close
 End Sub
 
-' 等待 30 秒讓系統穩定
+' Wait 30s for system stability
 WScript.Sleep 30000
-WriteLog "開機自啟腳本啟動"
+WriteLog "Startup script started"
 
-' 等待網路就緒（最多等 120 秒）
+' Wait for network (max 120s)
 networkReady = False
 For i = 1 To 12
     On Error Resume Next
@@ -36,24 +36,24 @@ For i = 1 To 12
 Next
 
 If Not networkReady Then
-    WriteLog "警告：網路未就緒，仍嘗試啟動 Bot"
+    WriteLog "WARNING: Network not ready, still trying to start Bot"
 Else
-    WriteLog "網路已就緒"
+    WriteLog "Network ready"
 End If
 
-' 檢查是否已有 bot.py 在跑（防重複啟動）
+' Check if bot.py already running (prevent duplicate)
 Set objWMI = GetObject("winmgmts:\\.\root\cimv2")
 Set processes = objWMI.ExecQuery("SELECT * FROM Win32_Process WHERE Name='pythonw.exe' OR Name='pythonw3.12.exe'")
 For Each proc In processes
     cmdLine = proc.CommandLine
     If InStr(LCase(cmdLine), "bot.py") > 0 Then
-        WriteLog "Bot 已在運行 (PID=" & proc.ProcessId & ")，跳過啟動"
+        WriteLog "Bot already running (PID=" & proc.ProcessId & "), skip"
         WScript.Quit
     End If
 Next
 
-' 啟動 Bot
-WriteLog "啟動 Bot..."
+' Start Bot
+WriteLog "Starting Bot..."
 WshShell.CurrentDirectory = botDir
 WshShell.Run """" & pythonw & """ """ & botScript & """", 0, False
-WriteLog "Bot 啟動指令已發送"
+WriteLog "Bot start command sent"
