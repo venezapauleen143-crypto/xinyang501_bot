@@ -1056,23 +1056,33 @@ SCHTASKS = "C:\\Windows\\System32\\schtasks.exe"
 BOT_SCRIPT = r"C:\Users\blue_\claude-telegram-bot\bot.py"
 
 def bot_status():
-    result = subprocess.run(
-        ["powershell.exe", "-Command",
-         "Get-Process pythonw -ErrorAction SilentlyContinue | Measure-Object | Select-Object -ExpandProperty Count"],
-        capture_output=True, text=True
-    )
-    count = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
-    if count > 0:
-        print(f"✅ Bot 執行中（{count} 個 pythonw 程序）")
+    import psutil
+    bot_pids = []
+    for p in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            cmd = ' '.join(p.info.get('cmdline') or [])
+            if 'bot.py' in cmd and 'psutil' not in cmd:
+                bot_pids.append(p.pid)
+        except Exception:
+            pass
+    if bot_pids:
+        print(f"✅ Bot 執行中（PID: {', '.join(map(str, bot_pids))}）")
     else:
         print("❌ Bot 未執行")
 
 def bot_restart():
-    # 停掉所有 pythonw
-    subprocess.run(["powershell.exe", "-Command", "Stop-Process -Name pythonw -Force -ErrorAction SilentlyContinue"])
-    import time
+    import psutil, time
+    # 停掉所有 bot.py 進程
+    for p in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            cmd = ' '.join(p.info.get('cmdline') or [])
+            if 'bot.py' in cmd and 'psutil' not in cmd:
+                p.kill()
+        except Exception:
+            pass
     time.sleep(1)
-    subprocess.Popen(["pythonw", BOT_SCRIPT], cwd=str(Path(BOT_SCRIPT).parent))
+    pythonw = r"C:\Users\blue_\AppData\Local\Microsoft\WindowsApps\pythonw3.12.exe"
+    subprocess.Popen([pythonw, BOT_SCRIPT], cwd=str(Path(BOT_SCRIPT).parent))
     print("✅ Bot 已重啟")
 
 def schedule_list():
