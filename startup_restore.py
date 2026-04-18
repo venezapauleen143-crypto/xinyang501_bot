@@ -20,14 +20,14 @@ PYTHON     = r"C:\Users\blue_\AppData\Local\Microsoft\WindowsApps\python3.12.exe
 BOT_SCRIPT = r"C:\Users\blue_\claude-telegram-bot\bot.py"
 BOT_DIR    = r"C:\Users\blue_\claude-telegram-bot"
 REPO_PATH  = r"C:\Users\blue_\xinyang501_bot"
-ENSURE_BOT = r"C:\Users\blue_\ensure_bot_running.py"
+ENSURE_BOT = r"C:\Users\blue_\claude-telegram-bot\ensure_bot_running.py"
 
 # ── 所有排程任務 ──────────────────────────────────────────────────────────────
 # 格式：名稱 → (觸發類型, 時間/事件, 腳本路徑, 說明)
 # 觸發類型：Daily=每天固定時間  Logon=登入時  Hourly=每小時
 REQUIRED_TASKS = {
     # 每天固定時間（WakeToRun = 可喚醒電腦）
-    "ClaudeDailyLearn":   ("Daily",  "21:00", r"C:\Users\blue_\claude_daily_learn.py",  "每日自學"),
+    "ClaudeDailyLearn":   ("Daily",  "21:00", r"C:\Users\blue_\claude-telegram-bot\claude_daily_learn.py",  "每日自學"),
     "WakeForGoodMorning": ("Daily",  "10:55", ENSURE_BOT,                               "早安前確認 Bot"),
     "WakeForDailyLearn":  ("Daily",  "20:55", ENSURE_BOT,                               "自學前確認 Bot"),
     "WakeForGoodNight":   ("Daily",  "22:25", ENSURE_BOT,                               "晚安前確認 Bot"),
