@@ -346,7 +346,7 @@ if sys.stdout.encoding != 'utf-8':
 load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
 
 pyautogui.FAILSAFE = True
-SCREENSHOT_DIR = Path.home() / "Desktop"
+SCREENSHOT_DIR = Path.home() / "Desktop" / "測試檔案"
 
 # ── 天氣 ────────────────────────────────────────────
 
