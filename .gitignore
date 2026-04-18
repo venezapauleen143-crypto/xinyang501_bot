@@ -13,3 +13,6 @@ bot.lock
 *.partial
 rvc_models/
 xtts_reference.wav
+memory.db-shm
+memory.db-wal
+bot_started.flag
