@@ -310,6 +310,10 @@ def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
     if re.search(r'幫我點|點第一|播放|幫我播|點一下|點擊|幫我按', t):
         return "click"
 
+    # 自動回覆/監控聊天（必須在 open_app 之前）
+    if re.search(r'自動回覆|自動回復|監控聊天|監控訊息|監控對話|幫我回訊息|自動回應', t):
+        return "desktop"
+
     # 打開程式/網站
     if re.search(r'打開|開啟|執行|啟動|open', tl):
         return "open_app"
@@ -323,10 +327,6 @@ def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
         return "search"
     if re.search(r'https?://', t):
         return "search"
-
-    # 自動回覆/監控聊天
-    if re.search(r'自動回覆|自動回復|監控聊天|監控訊息|監控對話|幫我回訊息|自動回應', t):
-        return "desktop"
 
     # 桌面控制
     if re.search(r'螢幕|截圖|滑鼠|鍵盤|視窗|最大化|最小化|切換|前景|輸入|打字|scroll|滾', t):
