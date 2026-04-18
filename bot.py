@@ -19166,7 +19166,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "get_weather":        lambda: fetch_weather(i.get("city","台北")),
                 "get_crypto":         lambda: fetch_crypto(i.get("coin","btc"), i.get("vs_currency","usd")),
                 "get_ashare":         lambda: fetch_ashare(i.get("code",""), i.get("period","1mo")),
-                "compare_stocks":     lambda: fetch_compare_stocks(i.get("symbols",[]), i.get("metrics",["all"])),
+                "compare_stocks":     lambda: compare_stocks(i.get("symbols",[]), i.get("metrics",["all"])),
                 "stock_screener":     lambda: fetch_stock_screener(i.get("criteria",""), i.get("market","tw")),
                 "get_analyst_ratings": lambda: fetch_analyst_ratings(i.get("symbol","")),
                 "get_risk_metrics":   lambda: fetch_risk_metrics(i.get("symbol",""), i.get("period","1y")),
