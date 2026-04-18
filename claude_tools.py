@@ -6398,6 +6398,30 @@ def youtube_summary_tool(url):
     print(_youtube_summary(url))
 
 
+def tg_auto_reply_tool(action="start", stop_time="", duration="30"):
+    """Telegram 自動回覆。用法：tg_auto_reply [start|stop] [stop_time] [duration_minutes]"""
+    import subprocess
+    if action == "stop":
+        subprocess.run(["powershell.exe", "-Command", "Get-Process python3.12 -ErrorAction SilentlyContinue | Stop-Process -Force"], capture_output=True)
+        print("自動回覆已停止")
+        return
+    # 修改 tg_auto_reply.py 的 STOP_TIME 並執行
+    script = "C:/Users/blue_/Desktop/測試檔案/tg_auto_reply.py"
+    import re
+    with open(script, "r", encoding="utf-8") as f:
+        content = f.read()
+    if stop_time:
+        content = re.sub(r'STOP_TIME = ".*?"', f'STOP_TIME = "{stop_time}"', content)
+    else:
+        from datetime import datetime, timedelta
+        end = (datetime.now() + timedelta(minutes=int(duration))).strftime("%H:%M")
+        content = re.sub(r'STOP_TIME = ".*?"', f'STOP_TIME = "{end}"', content)
+    with open(script, "w", encoding="utf-8") as f:
+        f.write(content)
+    subprocess.Popen(["C:/Users/blue_/AppData/Local/Microsoft/WindowsApps/python3.12.exe", "-u", script])
+    print(f"自動回覆已開啟，監控到 {stop_time or end}")
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -6895,6 +6919,7 @@ if __name__ == "__main__":
         "windows_update":        lambda: windows_update_tool(args[0]),
         "workflow":              lambda: workflow_tool(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else ""),
         "youtube_summary":       lambda: youtube_summary_tool(args[0]),
+        "tg_auto_reply":         lambda: tg_auto_reply_tool(args[0] if args else "start", args[1] if len(args)>1 else "", args[2] if len(args)>2 else "30"),
     }
 
     if tool not in tools:

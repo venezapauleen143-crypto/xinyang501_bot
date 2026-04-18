@@ -11,8 +11,14 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
 
-# ── 單一實例鎖（Windows Named Mutex，系統全域）───────────
+# ── DPI 設定（整個進程只設一次）───────────
 import ctypes, sys
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(0)
+except Exception:
+    pass
+
+# ── 單一實例鎖（Windows Named Mutex，系統全域）───────────
 
 _mutex = ctypes.windll.kernel32.CreateMutexW(None, True, "NiuMaBotSingleInstance_v1")
 if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
@@ -304,6 +310,10 @@ def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
     if re.search(r'幫我點|點第一|播放|幫我播|點一下|點擊|幫我按', t):
         return "click"
 
+    # 自動回覆/監控聊天（必須在 open_app 之前）
+    if re.search(r'自動回覆|自動回復|監控聊天|監控訊息|監控對話|幫我回訊息|自動回應', t):
+        return "desktop"
+
     # 打開程式/網站
     if re.search(r'打開|開啟|執行|啟動|open', tl):
         return "open_app"
@@ -317,10 +327,6 @@ def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
         return "search"
     if re.search(r'https?://', t):
         return "search"
-
-    # 自動回覆/監控聊天
-    if re.search(r'自動回覆|自動回復|監控聊天|監控訊息|監控對話|幫我回訊息|自動回應', t):
-        return "desktop"
 
     # 桌面控制
     if re.search(r'螢幕|截圖|滑鼠|鍵盤|視窗|最大化|最小化|切換|前景|輸入|打字|scroll|滾', t):
@@ -1574,11 +1580,12 @@ TOOLS = [
     },
     {
         "name": "tg_auto_reply",
-        "description": "開啟 Telegram 自動回覆監控。監控螢幕2的 Telegram 對話，偵測到對方新訊息時自動用小牛馬風格回覆。用戶說「開啟自動回覆」「監控聊天」「幫我回訊息」時使用。",
+        "description": "開啟/停止 Telegram 自動回覆監控。監控螢幕2的 Telegram 對話，偵測到對方新訊息時自動用小牛馬風格回覆。用戶說「開啟自動回覆」「監控聊天」「幫我回訊息」時使用。當用戶說「到幾點」「時間到XX:XX」時，必須用 stop_time 參數帶入結束時間。",
         "input_schema": {
             "type": "object",
             "properties": {
-                "duration_minutes": {"type": "number", "description": "監控持續時間（分鐘），預設 30"},
+                "duration_minutes": {"type": "number", "description": "監控持續時間（分鐘），預設 30。如果用戶指定了結束時間則不需要此參數"},
+                "stop_time": {"type": "string", "description": "監控結束時間，格式 HH:MM（如 '15:15'）。用戶說「到15:15」「時間到15:15」時必須填入此參數，優先於 duration_minutes"},
                 "action": {"type": "string", "description": "start 開啟 / stop 停止，預設 start"}
             },
             "required": []
@@ -10058,42 +10065,49 @@ def execute_send_email(to, subject, body):
 
 _tg_auto_reply_running = False
 _tg_auto_reply_thread = None
+_TG_AUTO_LOG = "C:/Users/blue_/claude-telegram-bot/tg_auto_reply.log"
 
-def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30) -> str:
+def _tg_log(msg):
+    """寫 log 到檔案"""
+    try:
+        with open(_TG_AUTO_LOG, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+    except:
+        pass
+
+def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, stop_time: str = "") -> str:
     """開啟/停止 Telegram 自動回覆監控"""
     global _tg_auto_reply_running, _tg_auto_reply_thread
-    import threading, ctypes, hashlib
+    import threading, base64
+    import win32gui
+    import mss as mss_module
+    import pyperclip
+    import numpy as np
 
     if action == "stop":
         _tg_auto_reply_running = False
+        _tg_log("手動停止")
         return "自動回覆已停止"
 
     if _tg_auto_reply_running:
         return "自動回覆已在運行中"
 
-    try:
-        ctypes.windll.shcore.SetProcessDpiAwareness(0)
-    except Exception:
-        pass
+    # 計算結束時間
+    if stop_time:
+        _end_str = stop_time
+    else:
+        _end_dt = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
+        _end_str = _end_dt.strftime("%H:%M")
 
-    def find_tg():
-        results = []
-        def cb(hwnd, _):
-            if win32gui.IsWindowVisible(hwnd):
-                cls = win32gui.GetClassName(hwnd)
-                if "Qt" in cls and "QWindow" in cls:
-                    results.append((hwnd, win32gui.GetWindowText(hwnd), win32gui.GetWindowRect(hwnd)))
-        win32gui.EnumWindows(cb, results)
-        return results
+    _client = client
 
     def run_monitor():
         global _tg_auto_reply_running
         _tg_auto_reply_running = True
-        import numpy as np
-        from datetime import datetime, timedelta
 
-        end_time = datetime.now() + timedelta(minutes=duration_minutes)
+        end_str = _end_str
         TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
+        last_reply = ""
 
         PERSONA = """你是小牛馬，一個嘴賤幽默的男生，說話像真人一樣自然。絕對不能暴露自己是AI、機器人、程式。
 風格：
@@ -10105,69 +10119,71 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30) -
 - 說話像真人朋友聊天，有情緒、有個性、會生氣會開玩笑
 - 絕對禁止說出「我是AI」「我是機器人」「我是程式」「作為AI」等任何暴露身份的話"""
 
-        # 找 Telegram 窗口
-        tg_list = find_tg()
-        if not tg_list:
-            _tg_auto_reply_running = False
-            return
-        main_tg = max(tg_list, key=lambda x: (x[2][2]-x[2][0]) * (x[2][3]-x[2][1]))
-        hwnd, title, (wl, wt, wr, wb) = main_tg
+        try:
+            # 找 Telegram 窗口
+            tg_results = []
+            def cb(hwnd, _):
+                if win32gui.IsWindowVisible(hwnd):
+                    cls = win32gui.GetClassName(hwnd)
+                    if "Qt" in cls and "QWindow" in cls:
+                        tg_results.append((hwnd, win32gui.GetWindowText(hwnd), win32gui.GetWindowRect(hwnd)))
+            win32gui.EnumWindows(cb, tg_results)
 
-        with mss.mss() as sct:
-            mon = sct.monitors[2]
-            img = sct.grab(mon)
-            pil = Image.frombytes("RGB", img.size, img.rgb)
-            iw, ih = pil.size
+            if not tg_results:
+                _tg_log("ERROR: 找不到 Telegram 窗口")
+                _tg_auto_reply_running = False
+                return
+            main_tg = max(tg_results, key=lambda x: (x[2][2]-x[2][0]) * (x[2][3]-x[2][1]))
+            hwnd, title, (wl, wt, wr, wb) = main_tg
+            _tg_log(f"Telegram: {title} at ({wl},{wt})-({wr},{wb})")
 
-        sx = iw / mon["width"]
-        sy = ih / mon["height"]
-        il = int((wl - mon["left"]) * sx)
-        it = int((wt - mon["top"]) * sy)
-        ir = int((wr - mon["left"]) * sx)
-        ib = int((wb - mon["top"]) * sy)
+            with mss_module.mss() as sct:
+                mon = sct.monitors[2]
+                img = sct.grab(mon)
+                pil = Image.frombytes("RGB", img.size, img.rgb)
+                iw, ih = pil.size
+            _tg_log(f"mss: {iw}x{ih}")
 
-        arr = np.array(pil.crop((il, it, ir, ib)))
-        h, w, _ = arr.shape
+            sx = iw / mon["width"]
+            sy = ih / mon["height"]
+            il = int((wl - mon["left"]) * sx)
+            it = int((wt - mon["top"]) * sy)
+            ir = int((wr - mon["left"]) * sx)
+            ib = int((wb - mon["top"]) * sy)
 
-        candidates = []
-        for check_y in range(int(h*0.3), int(h*0.8), int(h*0.05)):
-            row = arr[check_y, :, :]
-            for x in range(w // 5, w * 3 // 4):
-                r, g, b = int(row[x, 0]), int(row[x, 1]), int(row[x, 2])
-                if g > r + 5 and g > 150 and r < 220 and b < g:
-                    candidates.append(x)
-                    break
-        split_x = sorted(candidates)[len(candidates)//2] if candidates else w // 2
+            arr = np.array(pil.crop((il, it, ir, ib)))
+            th, tw, _ = arr.shape
 
-        chat_region = (il + split_x, it, ir, ib)
-        input_x = (wl + wr) // 2 + int((wr - wl) * 0.15)
-        input_y = wb - 25
+            candidates = []
+            for check_y in range(int(th*0.3), int(th*0.8), int(th*0.05)):
+                row = arr[check_y, :, :]
+                for x in range(tw // 5, tw * 3 // 4):
+                    r, g, b = int(row[x, 0]), int(row[x, 1]), int(row[x, 2])
+                    if g > r + 5 and g > 150 and r < 220 and b < g:
+                        candidates.append(x)
+                        break
+            split_x = sorted(candidates)[len(candidates)//2] if candidates else tw // 2
 
-        # 初始 hash
-        with mss.mss() as sct:
-            img = sct.grab(sct.monitors[2])
-            pil = Image.frombytes("RGB", img.size, img.rgb)
-        conv = pil.crop(chat_region)
-        last_hash = hashlib.md5(conv.resize((80, 40)).tobytes()).hexdigest()
+            chat_region = (il + split_x, it, ir, ib)
+            input_x = (wl + wr) // 2 + int((wr - wl) * 0.15)
+            input_y = wb - 25
+            _tg_log(f"分隔線: {split_x}/{tw}, 對話區: {chat_region}, 輸入框: ({input_x},{input_y})")
+            _tg_log(f"監控啟動 → {end_str}")
 
-        logging.info(f"tg_auto_reply 啟動，監控 {duration_minutes} 分鐘")
+            while _tg_auto_reply_running and datetime.datetime.now().strftime("%H:%M") < end_str:
+                time.sleep(8)
+                try:
+                    with mss_module.mss() as sct:
+                        img = sct.grab(sct.monitors[2])
+                        pil = Image.frombytes("RGB", img.size, img.rgb)
+                    conv = pil.crop(chat_region)
 
-        while _tg_auto_reply_running and datetime.now() < end_time:
-            time.sleep(6)
-            try:
-                with mss.mss() as sct:
-                    img = sct.grab(sct.monitors[2])
-                    pil = Image.frombytes("RGB", img.size, img.rgb)
-                conv = pil.crop(chat_region)
-                h = hashlib.md5(conv.resize((80, 40)).tobytes()).hexdigest()
-
-                if h != last_hash:
                     p = os.path.join(TMPDIR, "tg_auto.png")
                     conv.save(p)
                     with open(p, "rb") as f:
                         d = base64.b64encode(f.read()).decode()
 
-                    r = client.messages.create(model="claude-sonnet-4-6", max_tokens=200, system=PERSONA,
+                    resp = _client.messages.create(model="claude-sonnet-4-6", max_tokens=200, system=PERSONA,
                         messages=[{"role":"user","content":[
                         {"type":"image","source":{"type":"base64","media_type":"image/png","data":d}},
                         {"type":"text","text":"""這是 Telegram 對話截圖，請依照以下步驟分析：
@@ -10186,9 +10202,10 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30) -
 
 只回覆要發送的文字，不要加任何格式或解釋。"""}
                     ]}])
-                    reply = r.content[0].text.strip()
+                    reply = resp.content[0].text.strip()
 
-                    if reply and reply != "等" and len(reply) > 2:
+                    if reply and reply != "等" and len(reply) > 2 and reply != last_reply:
+                        _tg_log(f"回覆: {reply}")
                         pyautogui.click(input_x, input_y)
                         time.sleep(0.3)
                         pyperclip.copy(reply)
@@ -10196,27 +10213,26 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30) -
                         time.sleep(0.3)
                         pyautogui.press("enter")
                         time.sleep(1)
-                        logging.info(f"tg_auto_reply 回覆: {reply}")
+                        last_reply = reply
                         # 10 秒冷卻
                         time.sleep(10)
-                        with mss.mss() as sct:
-                            img = sct.grab(sct.monitors[2])
-                            pil = Image.frombytes("RGB", img.size, img.rgb)
-                        conv = pil.crop(chat_region)
-                        last_hash = hashlib.md5(conv.resize((80, 40)).tobytes()).hexdigest()
                     else:
-                        last_hash = h
-                else:
-                    last_hash = h
-            except Exception as e:
-                logging.error(f"tg_auto_reply 錯誤: {e}")
-                time.sleep(5)
+                        _tg_log("跳過")
+
+                except Exception as e:
+                    _tg_log(f"ERROR: {e}")
+                    time.sleep(5)
+
+        except Exception as e:
+            _tg_log(f"FATAL: {e}")
 
         _tg_auto_reply_running = False
-        logging.info("tg_auto_reply 結束")
+        _tg_log("監控結束")
 
     _tg_auto_reply_thread = threading.Thread(target=run_monitor, daemon=True)
     _tg_auto_reply_thread.start()
+    if stop_time:
+        return f"自動回覆已開啟，監控到 {stop_time}"
     return f"自動回覆已開啟，監控 {duration_minutes} 分鐘"
 
 
@@ -17722,7 +17738,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif tool_use.name == "tg_auto_reply":
                 action = tool_use.input.get("action", "start")
                 duration = tool_use.input.get("duration_minutes", 30)
-                result_text = execute_tg_auto_reply(action, duration)
+                st = tool_use.input.get("stop_time", "")
+                result_text = execute_tg_auto_reply(action, duration, st)
                 save_message(chat_id, "assistant", result_text)
                 await _fr(result_text)
                 return
