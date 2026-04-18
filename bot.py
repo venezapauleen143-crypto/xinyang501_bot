@@ -19,22 +19,24 @@ except Exception:
     pass
 
 # ── 單一實例鎖（Windows Named Mutex，系統全域）───────────
+# 只在直接執行時啟用 mutex，被 import 時跳過（讓 claude_tools.py 能用）
 
-ctypes.windll.kernel32.SetLastError(0)  # 清除殘留錯誤碼
-_mutex = ctypes.windll.kernel32.CreateMutexW(None, True, "NiuMaBotSingleInstance_v1")
-if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-    # 確認是否真的有 Python 進程在跑
-    import psutil as _psutil_check
-    _bot_running = any(
-        'bot.py' in ' '.join(p.info.get('cmdline') or [])
-        for p in _psutil_check.process_iter(['cmdline'])
-        if p.pid != os.getpid()
-    )
-    if _bot_running:
-        print("另一個 bot 實例已在執行中，退出。")
-        sys.exit(0)
-    else:
-        print("偵測到殘留 Mutex，但無 bot 進程，繼續啟動。")
+if __name__ == "__main__" or os.environ.get("NIUMA_BOT_MAIN") == "1":
+    ctypes.windll.kernel32.SetLastError(0)  # 清除殘留錯誤碼
+    _mutex = ctypes.windll.kernel32.CreateMutexW(None, True, "NiuMaBotSingleInstance_v1")
+    if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        # 確認是否真的有 Python 進程在跑
+        import psutil as _psutil_check
+        _bot_running = any(
+            'bot.py' in ' '.join(p.info.get('cmdline') or [])
+            for p in _psutil_check.process_iter(['cmdline'])
+            if p.pid != os.getpid()
+        )
+        if _bot_running:
+            print("另一個 bot 實例已在執行中，退出。")
+            sys.exit(0)
+        else:
+            print("偵測到殘留 Mutex，但無 bot 進程，繼續啟動。")
 # ──────────────────────────────────────────────────────────
 
 import pyautogui
