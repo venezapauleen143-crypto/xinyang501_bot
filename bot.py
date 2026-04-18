@@ -10165,8 +10165,27 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, s
             split_x = sorted(candidates)[len(candidates)//2] if candidates else tw // 2
 
             chat_region = (il + split_x, it, ir, ib)
-            input_x = (wl + wr) // 2 + int((wr - wl) * 0.15)
-            input_y = wb - 25
+
+            # 輸入框：像素分析找底部白色區域（分隔線右邊）
+            _input_y1 = th - 1
+            for _y in range(th - 1, th - 60, -1):
+                _row = arr[it + _y, il + split_x:ir, :]
+                _white = np.sum((_row[:, 0] > 240) & (_row[:, 1] > 240) & (_row[:, 2] > 240))
+                if _white > (ir - il - split_x) * 0.5:
+                    _input_y1 = _y
+                elif _input_y1 < th - 1:
+                    break
+            _i_x1, _i_x2 = split_x, tw
+            _mid_iy = (_input_y1 + th - 1) // 2
+            _irow = arr[it + _mid_iy, il + split_x:ir, :]
+            for _x in range(0, ir - il - split_x):
+                if _irow[_x, 0] > 240 and _irow[_x, 1] > 240 and _irow[_x, 2] > 240:
+                    _i_x1 = split_x + _x; break
+            for _x in range(ir - il - split_x - 1, 0, -1):
+                if _irow[_x, 0] > 240 and _irow[_x, 1] > 240 and _irow[_x, 2] > 240:
+                    _i_x2 = split_x + _x; break
+            input_x = int(mon["left"] + (il + (_i_x1 + _i_x2) // 2) / sx)
+            input_y = int(mon["top"] + (it + (_input_y1 + th - 1) // 2) / sy)
             _tg_log(f"分隔線: {split_x}/{tw}, 對話區: {chat_region}, 輸入框: ({input_x},{input_y})")
             _tg_log(f"監控啟動 → {end_str}")
 

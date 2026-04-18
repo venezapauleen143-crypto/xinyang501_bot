@@ -82,8 +82,30 @@ def init_regions():
 
     # 對話區 = 分隔線右邊，包含標題列和輸入框
     chat_region = (il + best_x, it, ir, ib)
-    input_pos = ((wl + wr) // 2 + int((wr - wl) * 0.15), wb - 25)
-    print(f"分隔線: x={best_x}/{w}, 對話區: {chat_region}", flush=True)
+
+    # 輸入框：像素分析找底部白色區域（分隔線右邊）
+    input_y1 = h - 1
+    for y in range(h - 1, h - 60, -1):
+        row = tg_crop[y, best_x:w, :]
+        white = np.sum((row[:, 0] > 240) & (row[:, 1] > 240) & (row[:, 2] > 240))
+        if white > (w - best_x) * 0.5:
+            input_y1 = y
+        elif input_y1 < h - 1:
+            break
+    i_x1, i_x2 = best_x, w
+    mid_iy = (input_y1 + h - 1) // 2
+    row = tg_crop[mid_iy, best_x:w, :]
+    for x in range(0, w - best_x):
+        if row[x, 0] > 240 and row[x, 1] > 240 and row[x, 2] > 240:
+            i_x1 = best_x + x; break
+    for x in range(w - best_x - 1, 0, -1):
+        if row[x, 0] > 240 and row[x, 1] > 240 and row[x, 2] > 240:
+            i_x2 = best_x + x; break
+    input_x = int(mon["left"] + (il + (i_x1 + i_x2) // 2) / sx)
+    input_y = int(mon["top"] + (it + (input_y1 + h - 1) // 2) / sy)
+    input_pos = (input_x, input_y)
+
+    print(f"分隔線: x={best_x}/{w}, 對話區: {chat_region}, 輸入框: {input_pos}", flush=True)
     return chat_region, input_pos
 
 def grab_conv(region):

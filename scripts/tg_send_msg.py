@@ -67,14 +67,63 @@ def get_tg_regions(tg_info):
                 break
     split_x = sorted(candidates)[len(candidates)//2] if candidates else tw // 2
 
+    # 搜尋框：像素分析找頂部淺灰色(~241)區域
+    search_y1 = -1
+    search_y2 = -1
+    for y in range(0, 50):
+        row = arr[y, :split_x, :]
+        avg = np.mean(row)
+        if 238 <= avg <= 244:
+            if search_y1 == -1:
+                search_y1 = y
+            search_y2 = y
+        elif search_y1 > -1:
+            break
+    s_mid_y = (search_y1 + search_y2) // 2 if search_y1 > -1 else 15
+    # 找搜尋框 x 範圍
+    s_x1, s_x2 = 0, split_x
+    row = arr[s_mid_y, :split_x, :]
+    for x in range(0, split_x):
+        if row[x, 0] > 235 and row[x, 1] > 235 and row[x, 2] > 235:
+            s_x1 = x; break
+    for x in range(split_x - 1, 0, -1):
+        if row[x, 0] > 235 and row[x, 1] > 235 and row[x, 2] > 235:
+            s_x2 = x; break
+    search_x = int(mon["left"] + (il + (s_x1 + s_x2) // 2) / sx)
+    search_y = int(mon["top"] + (it + s_mid_y) / sy)
+
+    # 輸入框：像素分析找底部白色區域（分隔線右邊）
+    input_y1 = th - 1
+    for y in range(th - 1, th - 60, -1):
+        row = arr[y, split_x:tw, :]
+        white = np.sum((row[:, 0] > 240) & (row[:, 1] > 240) & (row[:, 2] > 240))
+        if white > (tw - split_x) * 0.5:
+            input_y1 = y
+        elif input_y1 < th - 1:
+            break
+    i_x1, i_x2 = split_x, tw
+    mid_iy = (input_y1 + th - 1) // 2
+    row = arr[mid_iy, split_x:tw, :]
+    for x in range(0, tw - split_x):
+        if row[x, 0] > 240 and row[x, 1] > 240 and row[x, 2] > 240:
+            i_x1 = split_x + x; break
+    for x in range(tw - split_x - 1, 0, -1):
+        if row[x, 0] > 240 and row[x, 1] > 240 and row[x, 2] > 240:
+            i_x2 = split_x + x; break
+    input_x = int(mon["left"] + (il + (i_x1 + i_x2) // 2) / sx)
+    input_y = int(mon["top"] + (it + (input_y1 + th - 1) // 2) / sy)
+
     return {
         "window": (wl, wt, wr, wb),
         "img_region": (il, it, ir, ib),
         "split_x": split_x,
-        "search_x": wl + int((wr - wl) * 0.15),
-        "search_y": wt + 40,
-        "input_x": (wl + wr) // 2 + int((wr - wl) * 0.15),
-        "input_y": wb - 25,
+        "search_x": search_x,
+        "search_y": search_y,
+        "input_x": input_x,
+        "input_y": input_y,
+        "mon": mon,
+        "scale_x": sx,
+        "scale_y": sy,
     }
 
 
@@ -138,15 +187,19 @@ def send_message(contact_name, message):
     match = re.search(r'\{.*?\}', resp.content[0].text, re.DOTALL)
     if match:
         pos = json.loads(match.group())
-        # 座標是相對於 search_area 的，要轉成螢幕絕對座標
-        abs_x = wl + int(pos["x"] * (wr - wl) / search_area.width * 0.4)
-        abs_y = wt + 50 + int(pos["y"] * (wb - wt) / search_area.height)
+        # Claude 回傳的座標是相對於 search_area 截圖的像素座標
+        # search_area 起點是 (il, it+50) 在截圖中的位置
+        # 轉回螢幕絕對座標：截圖像素 → mss座標 → pyautogui座標
+        img_x = il + int(pos["x"])
+        img_y = it + 50 + int(pos["y"])
+        abs_x = int(regions["mon"]["left"] + img_x / regions["scale_x"])
+        abs_y = int(regions["mon"]["top"] + img_y / regions["scale_y"])
         pyautogui.click(abs_x, abs_y)
         time.sleep(0.8)
         print(f"✅ 點擊聯絡人 ({abs_x}, {abs_y})")
     else:
-        # 備用：直接點搜尋結果第一個
-        pyautogui.click(regions["search_x"], regions["search_y"] + 60)
+        # 備用：點搜尋框下方第一個結果
+        pyautogui.click(regions["search_x"], regions["search_y"] + 50)
         time.sleep(0.8)
         print("⚠️ Vision 找不到，點第一個搜尋結果")
 
