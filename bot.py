@@ -41,6 +41,28 @@ if __name__ == "__main__" or os.environ.get("NIUMA_BOT_MAIN") == "1":
 
 import pyautogui
 
+# ── 外部工具路徑設定 ──────────────────────────────
+# Tesseract OCR
+_tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+if os.path.exists(_tesseract_path):
+    os.environ["TESSERACT_CMD"] = _tesseract_path
+    try:
+        import pytesseract as _pt_init
+        _pt_init.pytesseract.tesseract_cmd = _tesseract_path
+    except ImportError:
+        pass
+
+# pydub ffmpeg（用 imageio_ffmpeg 內建的）
+try:
+    import imageio_ffmpeg as _ioff
+    os.environ["IMAGEIO_FFMPEG_EXE"] = _ioff.get_ffmpeg_exe()
+    from pydub import AudioSegment as _as_init
+    _as_init.converter = _ioff.get_ffmpeg_exe()
+    _as_init.ffprobe = _ioff.get_ffmpeg_exe()
+except ImportError:
+    pass
+# ──────────────────────────────────────────────────
+
 load_dotenv(Path(__file__).parent / ".env")
 from anthropic import Anthropic
 from telegram import Update
@@ -19188,7 +19210,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "get_stock":          lambda: fetch_stock(i.get("symbol",""), i.get("period","1mo")),
                 "get_fundamentals":   lambda: fetch_fundamentals(i.get("symbol","")),
                 "get_market_sentiment": lambda: fetch_market_sentiment(),
-                "get_sector":         lambda: fetch_sector(i.get("market","tw")),
+                "get_sector":         lambda: fetch_sector(i.get("market","us")),
                 "get_global_market":  lambda: fetch_global_market(),
                 "get_weather":        lambda: fetch_weather(i.get("city","台北")),
                 "get_crypto":         lambda: fetch_crypto(i.get("coin","btc"), i.get("vs_currency","usd")),
@@ -19198,18 +19220,104 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "get_analyst_ratings": lambda: fetch_analyst_ratings(i.get("symbol","")),
                 "get_risk_metrics":   lambda: fetch_risk_metrics(i.get("symbol",""), i.get("period","1y")),
                 "get_earnings":       lambda: fetch_earnings(i.get("symbol","")),
-                "get_finance_news":   lambda: fetch_finance_news(i.get("category","general"), i.get("count",5)),
+                "get_finance_news":   lambda: fetch_finance_news(i.get("source","all"), i.get("count",5)),
                 "get_etf":            lambda: fetch_etf(i.get("symbol","")),
                 "get_earnings_calendar": lambda: fetch_earnings_calendar(i.get("days",7)),
                 "get_dividend_calendar": lambda: fetch_dividend_calendar(i.get("symbol","")),
                 "ptt_search":         lambda: ptt_search(i.get("keyword",""), i.get("board","Gossiping"), i.get("count",5)),
                 "china_search":       lambda: fetch_china_search(i.get("query",""), i.get("category","其他"), i.get("count",6)),
                 "read_screen":        lambda: fetch_read_screen(i.get("question","描述螢幕上有什麼"), i.get("monitor",1)),
-                "ocr_click":          lambda: fetch_ocr_click(i.get("target_text",""), i.get("monitor",1), i.get("click_type","click")),
-                "vision_locate":      lambda: fetch_vision_locate(i.get("description",""), i.get("monitor",1), i.get("action","click")),
+                "ocr_click":          lambda: fetch_ocr_click(i.get("target_text",""), i.get("monitor",1), i.get("click_type","click"), i.get("region")),
+                "vision_locate":      lambda: fetch_vision_locate(i.get("description",""), i.get("monitor",1), i.get("action","click"), i.get("region")),
                 "scroll_at":          lambda: fetch_scroll_at(i.get("direction","down"), i.get("amount",3), i.get("x"), i.get("y"), i.get("monitor",1), i.get("description","")),
                 "window_manager":     lambda: fetch_window_manager(i.get("action","list"), i.get("window_name","")),
                 "app_navigator":      lambda: fetch_app_navigator(i.get("app","Telegram"), i.get("task",""), i.get("input_text",""), i.get("monitor",1), i.get("contact_name","")),
+                # ── 金融工具 ──
+                "get_forex":              lambda: fetch_forex(i.get("pair", "")),
+                "get_cn_news":            lambda: fetch_cn_news(i.get("source", "all"), i.get("count", 5)),
+                "get_commodity":          lambda: fetch_commodity(i.get("items", ["all"])),
+                "get_bond_yield":         lambda: fetch_bond_yield(),
+                "get_margin_trading":     lambda: fetch_margin_trading(i.get("symbol", ""), i.get("date", "")),
+                "get_options":            lambda: fetch_options(i.get("symbol", ""), i.get("expiry", "")),
+                "get_futures":            lambda: fetch_futures(i.get("items", ["all"])),
+                "get_ipo":                lambda: fetch_ipo(i.get("count", 10)),
+                "backtest":               lambda: fetch_backtest(i.get("symbol", ""), i.get("strategy", "ma_cross"), i.get("period", "2y")),
+                "get_economic_calendar":  lambda: fetch_economic_calendar(i.get("count", 10)),
+                "get_short_interest":     lambda: fetch_short_interest(i.get("symbol", "")),
+                "get_correlation":        lambda: fetch_correlation(i.get("symbols", []), i.get("period", "1y")),
+                "get_money_flow":         lambda: fetch_money_flow(i.get("symbol", "")),
+                "get_concept_stocks":     lambda: fetch_concept_stocks(i.get("theme", "")),
+                "get_crypto_depth":       lambda: fetch_crypto_depth(i.get("coin", "bitcoin")),
+                "drip_calculator":        lambda: fetch_drip_calculator(i.get("symbol", ""), i.get("shares", 0), i.get("years", 10), i.get("monthly_invest", 0)),
+                "get_forex_chart":        lambda: fetch_forex_chart(i.get("pair", ""), i.get("period", "3mo")),
+                "get_warrant":            lambda: fetch_warrant(i.get("underlying", "")),
+                "get_portfolio_risk":     lambda: fetch_portfolio_risk(i.get("holdings", []), i.get("period", "1y")),
+                "get_institutional":      lambda: fetch_institutional(i.get("symbol", ""), i.get("days", 5)),
+                "retirement_calculator":  lambda: fetch_retirement_calculator(i.get("current_age", 30), i.get("current_savings", 0), i.get("monthly_save", 0), i.get("retire_age", 65), i.get("annual_return", 6.0), i.get("monthly_expense", 50000)),
+                "loan_calculator":        lambda: fetch_loan_calculator(i.get("principal", 0), i.get("annual_rate", 0), i.get("years", 0), i.get("loan_type", "等額本息")),
+                "compound_calculator":    lambda: fetch_compound_calculator(i.get("principal", 0), i.get("annual_rate", 0), i.get("years", 0), i.get("monthly_add", 0), i.get("compound_freq", 12)),
+                "asset_allocation":       lambda: fetch_asset_allocation(i.get("age", 30), i.get("risk_level", ""), i.get("goal", "退休"), i.get("investment_horizon")),
+                "tw_tax_calculator":      lambda: fetch_tw_tax_calculator(i.get("dividend_income", 0), i.get("other_income", 0), i.get("tax_bracket"), i.get("sell_amount", 0)),
+                "currency_converter":     lambda: fetch_currency_converter(i.get("amount", 0), i.get("from_currency", ""), i.get("to_currency", "")),
+                "get_fund":               lambda: fetch_fund(i.get("symbol", "")),
+                "get_reits":              lambda: fetch_reits(i.get("symbol", "")),
+                "inflation_adjusted":     lambda: fetch_inflation_adjusted(i.get("nominal_return", 0), i.get("years", 0), i.get("amount", 0), i.get("inflation_rate", 2.0)),
+                "defi_calculator":        lambda: fetch_defi_calculator(i.get("principal_usd", 0), i.get("apy", 0), i.get("days", 0), i.get("compound", True), i.get("protocol", "")),
+                "gold_calculator":        lambda: fetch_gold_calculator(i.get("weight", 0), i.get("unit", "公克"), i.get("currency", "TWD")),
+                "forex_deposit":          lambda: fetch_forex_deposit(i.get("amount_twd", 0), i.get("currency", ""), i.get("annual_rate", 0), i.get("months", 0), i.get("buy_rate"), i.get("sell_rate")),
+                "financial_health":       lambda: fetch_financial_health(i.get("monthly_income", 0), i.get("monthly_expense", 0), i.get("total_assets", 0), i.get("total_debt", 0), i.get("emergency_fund_months", 0), i.get("has_insurance", False), i.get("investment_ratio", 0)),
+                "get_candlestick_chart":  lambda: generate_candlestick(i.get("symbol", ""), i.get("period", "3mo"))[1],
+                "get_stock_advanced":     lambda: fetch_stock_advanced(i.get("symbol", ""), i.get("indicators")),
+                "get_macro":              lambda: fetch_macro(i.get("indicator", "")),
+                "portfolio":              lambda: execute_portfolio(i.get("action", ""), i.get("chat_id") or chat_id, i.get("symbol", ""), i.get("shares", 0), i.get("cost", 0)),
+                # ── 研究工具 ──
+                "deep_research":          lambda: fetch_deep_research(i.get("topic", ""), i.get("lang", "zh-tw"), i.get("depth", 5)),
+                "fact_check":             lambda: fetch_fact_check(i.get("claim", ""), i.get("lang", "zh-tw")),
+                "timeline_events":        lambda: fetch_timeline_events(i.get("topic", ""), i.get("lang", "zh-tw")),
+                "sentiment_scan":         lambda: fetch_sentiment_scan(i.get("topic", ""), i.get("lang", "zh-tw")),
+                "compare_analysis":       lambda: fetch_compare_analysis(i.get("items", []), i.get("dimensions"), i.get("context", "")),
+                "pros_cons_analysis":     lambda: fetch_pros_cons_analysis(i.get("subject", ""), i.get("context", ""), i.get("lang", "zh-tw")),
+                "research_report":        lambda: fetch_research_report(i.get("topic", ""), i.get("purpose", "一般研究"), i.get("lang", "zh-tw")),
+                "opinion_writer":         lambda: fetch_opinion_writer(i.get("topic", ""), i.get("stance", "中立"), i.get("style", "正式")),
+                "trend_forecast":         lambda: fetch_trend_forecast(i.get("topic", ""), i.get("timeframe", "全部"), i.get("lang", "zh-tw")),
+                "debate_simulator":       lambda: fetch_debate_simulator(i.get("motion", ""), i.get("lang", "zh-tw")),
+                "academic_search":        lambda: fetch_academic_search(i.get("query", ""), i.get("field", ""), i.get("lang", "en")),
+                "health_research":        lambda: fetch_health_research(i.get("topic", ""), i.get("lang", "zh-tw")),
+                "law_research":           lambda: fetch_law_research(i.get("topic", ""), i.get("jurisdiction", "台灣"), i.get("lang", "zh-tw")),
+                "person_research":        lambda: fetch_person_research(i.get("name", ""), i.get("context", ""), i.get("lang", "zh-tw")),
+                "company_research":       lambda: fetch_company_research(i.get("company", ""), i.get("lang", "zh-tw")),
+                "product_review":         lambda: fetch_product_review(i.get("product", ""), i.get("category", ""), i.get("lang", "zh-tw")),
+                "travel_research":        lambda: fetch_travel_research(i.get("destination", ""), i.get("days"), i.get("style", ""), i.get("lang", "zh-tw")),
+                "job_market":             lambda: fetch_job_market(i.get("job_title", ""), i.get("location", "台灣"), i.get("lang", "zh-tw")),
+                "impact_analysis":        lambda: fetch_impact_analysis(i.get("event", ""), i.get("scope"), i.get("lang", "zh-tw")),
+                "scenario_planning":      lambda: fetch_scenario_planning(i.get("topic", ""), i.get("horizon", ""), i.get("lang", "zh-tw")),
+                "decision_helper":        lambda: fetch_decision_helper(i.get("question", ""), i.get("options"), i.get("criteria")),
+                "devil_advocate":         lambda: fetch_devil_advocate(i.get("position", ""), i.get("lang", "zh-tw")),
+                "summary_writer":         lambda: fetch_summary_writer(i.get("topic", ""), i.get("max_points", 7), i.get("lang", "zh-tw")),
+                "key_insights":           lambda: fetch_key_insights(i.get("topic", ""), i.get("count", 5), i.get("lang", "zh-tw")),
+                "bias_detector":          lambda: fetch_bias_detector(i.get("topic", ""), i.get("lang", "zh-tw")),
+                "second_opinion":         lambda: fetch_second_opinion(i.get("question", ""), i.get("experts"), i.get("lang", "zh-tw")),
+                "brainstorm":             lambda: fetch_brainstorm(i.get("problem", ""), i.get("count", 8), i.get("style", "實用"), i.get("lang", "zh-tw")),
+                "benchmark_analysis":     lambda: fetch_benchmark_analysis(i.get("subject", ""), i.get("industry", ""), i.get("lang", "zh-tw")),
+                "steel_man":              lambda: fetch_steel_man(i.get("opposing_view", ""), i.get("own_position", ""), i.get("lang", "zh-tw")),
+                "socratic_questioning":   lambda: fetch_socratic_questioning(i.get("topic", ""), i.get("depth", 5), i.get("lang", "zh-tw")),
+                "analogy_maker":          lambda: fetch_analogy_maker(i.get("concept", ""), i.get("audience", "一般大眾"), i.get("count", 3), i.get("lang", "zh-tw")),
+                "narrative_builder":      lambda: fetch_narrative_builder(i.get("topic", ""), i.get("key_message", ""), i.get("audience", ""), i.get("lang", "zh-tw")),
+                "critique_writer":        lambda: fetch_critique_writer(i.get("subject", ""), i.get("type", "觀點"), i.get("lang", "zh-tw")),
+                "position_statement":     lambda: fetch_position_statement(i.get("issue", ""), i.get("stance", ""), i.get("lang", "zh-tw")),
+                # ── 搜尋/網頁工具 ──
+                "ddg_search":             lambda: execute_ddg_search(i.get("query", ""), i.get("region", "zh-tw"), i.get("max_results", 5)),
+                "multi_perspective":      lambda: multi_perspective(i.get("topic", ""), i.get("lang", "zh-tw")),
+                "google_trends":          lambda: fetch_google_trends(i.get("keywords", []), i.get("timeframe", "today 3-m"), i.get("geo", "TW")),
+                "read_webpage":           lambda: read_webpage(i.get("url", ""), i.get("max_chars", 3000)),
+                "wikipedia_search":       lambda: wikipedia_search(i.get("query", ""), i.get("lang", "zh")),
+                "news_search":            lambda: search_news(i.get("query", ""), i.get("lang", "zh-TW"), i.get("count", 6)),
+                "youtube_summary":        lambda: youtube_summary(i.get("url", "")),
+                "analyze_pdf":            lambda: analyze_pdf(i.get("path", ""), i.get("max_chars", 4000)),
+                # ── 螢幕/桌面工具 ──
+                "screen_workflow":        lambda: fetch_screen_workflow(i.get("steps", [])),
+                "wait_and_click":         lambda: fetch_wait_and_click(i.get("target_text", ""), i.get("timeout", 15), i.get("monitor", 1), i.get("action_after", "click")),
+                "drag_drop":              lambda: fetch_drag_drop(i.get("from_x"), i.get("from_y"), i.get("to_x"), i.get("to_y"), i.get("from_text", ""), i.get("to_text", ""), i.get("monitor", 1), i.get("duration", 0.5)),
             }
             fn = _map.get(n)
             return fn() if fn else f"工具 {n} 已執行（無對應 handler）"
