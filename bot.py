@@ -19585,6 +19585,30 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"goodnight 發送失敗：{e}", exc_info=True)
 
 
+async def auto_compile_knowledge(context: ContextTypes.DEFAULT_TYPE):
+    """每天 22:30 自動編譯知識庫，防止 SessionEnd hook 沒觸發時丟失知識"""
+    logging.info("【排程觸發】auto_compile_knowledge 開始執行")
+    with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] auto_compile_knowledge 觸發\n")
+    import asyncio
+    loop = asyncio.get_running_loop()
+
+    def _run_compile():
+        try:
+            result = subprocess.run(
+                [r"C:\Users\blue_\.local\bin\uv.exe", "run",
+                 "--directory", r"C:\Users\blue_\claude-memory-compiler",
+                 "python", "scripts/compile.py"],
+                capture_output=True, text=True, encoding="utf-8", timeout=120
+            )
+            return result.stdout.strip() or "(no output)"
+        except Exception as e:
+            return f"compile failed: {e}"
+
+    result = await loop.run_in_executor(None, _run_compile)
+    logging.info(f"auto_compile_knowledge result: {result[:200]}")
+
+
 def collect_daily_report() -> str:
     """收集今天電腦的活動記錄，回傳給 Claude 整理成報告"""
     import subprocess, datetime
@@ -19755,6 +19779,11 @@ if __name__ == "__main__":
     app.job_queue.run_daily(
         goodnight,
         time=datetime.time(hour=14, minute=30, tzinfo=datetime.timezone.utc)
+    )
+    # 每天晚上 10:35 台灣時間（UTC+8）= 14:35 UTC — 自動編譯知識庫
+    app.job_queue.run_daily(
+        auto_compile_knowledge,
+        time=datetime.time(hour=14, minute=35, tzinfo=datetime.timezone.utc)
     )
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("chatid", chatid))
