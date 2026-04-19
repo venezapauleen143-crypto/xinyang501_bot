@@ -16741,10 +16741,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 history[-1] = {"role": "user", "content": "打開YouTube"}
                 _filtered_tools = get_tools_for_intent("open_app", TOOLS)
 
+        # ── 自動預查：詢問性問題先搜尋，結果注入 context ──────────────
+        _auto_search_result = ""
+        if _intent in ("chat", "research", "finance", "search"):
+            import re as _re_q
+            _is_question = bool(_re_q.search(
+                r'嗎|？|\?|什麼|誰|哪|幾|多少|怎[麼樣]|為[什何]|如何|是不是|有沒有|'
+                r'最新|現在|目前|今年|去年|最近|冠軍|誰贏|第幾|排名|新聞|'
+                r'多少錢|漲|跌|比分|結果|發生|出了|'
+                r'你[覺認]得|你[看想]|推薦|建議|比較|差別|差異|'
+                r'what|who|when|where|why|how|which|is |are |do |does |did |can |will ',
+                user_text or "", _re_q.IGNORECASE
+            ))
+            if _is_question and len((user_text or "").strip()) >= 4:
+                try:
+                    _q = (user_text or "").strip()[:80]
+                    _loop_pre = __import__("asyncio").get_running_loop()
+                    _auto_search_result = await _loop_pre.run_in_executor(
+                        None, execute_ddg_search, _q, "zh-tw", 3
+                    )
+                    if _auto_search_result and "搜尋失敗" not in _auto_search_result:
+                        logging.info(f"AutoSearch: query={_q[:30]} results={len(_auto_search_result)} chars")
+                    else:
+                        _auto_search_result = ""
+                except Exception as _e_as:
+                    logging.warning(f"AutoSearch failed: {_e_as}")
+                    _auto_search_result = ""
+
         # ── Prompt Caching：靜態 system + TOOLS 快取，動態記憶不快取 ──
         system_blocks = [{"type": "text", "text": base_system, "cache_control": {"type": "ephemeral"}}]
         if memories:
             system_blocks.append({"type": "text", "text": f"\n\n【長期記憶】以下是你記住的重要資訊，回覆時請參考：\n{mem_text}"})
+        if _auto_search_result:
+            system_blocks.append({"type": "text", "text": f"\n\n【自動搜尋結果】以下是剛剛自動搜尋到的最新資料，回答時請優先參考這些資料，不要用你的舊記憶：\n{_auto_search_result}"})
 
         # ── 對話歷史修復：確保每個 tool_use 都有對應的 tool_result ──
         def _fix_history(hist):
