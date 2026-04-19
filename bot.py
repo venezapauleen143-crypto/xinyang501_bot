@@ -19529,66 +19529,6 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.error(f"goodnight 發送失敗：{e}", exc_info=True)
 
-_report_today: str = ""  # 防止同一天重複執行
-
-async def daily_skill_report(context: ContextTypes.DEFAULT_TYPE):
-    """每天晚上 9 點：回報今天總共安裝了多少技能"""
-    logging.info("【排程觸發】daily_skill_report 開始執行")
-    with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
-        f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] daily_skill_report 觸發\n")
-    global _report_today
-    import asyncio
-    loop = asyncio.get_running_loop()
-
-    today = datetime.date.today()
-    today_str = str(today)
-
-    if _report_today == today_str:
-        return
-    _report_today = today_str
-
-    def count_tools():
-        # 計算 TOOLS 列表中的工具數量
-        return len(TOOLS)
-
-    def count_today_commits():
-        try:
-            repo = str(Path(__file__).parent)
-            result = subprocess.run(
-                ["git", "-C", repo, "log", "--oneline", f"--since={today_str}", "--until={0}".format(
-                    str(datetime.date.today() + datetime.timedelta(days=1))
-                )],
-                capture_output=True, text=True, encoding="utf-8"
-            )
-            commits = [l for l in result.stdout.strip().split("\n") if l.strip()]
-            # 過濾出含 feat/fix/skill 的 commit（代表新增或修改技能）
-            skill_commits = [c for c in commits if any(k in c.lower() for k in ["feat", "fix", "skill", "技能", "新增", "add"])]
-            return len(skill_commits), commits
-        except Exception:
-            return 0, []
-
-    total_tools = await loop.run_in_executor(None, count_tools)
-    skill_count, all_commits = await loop.run_in_executor(None, count_today_commits)
-
-    def generate_report():
-        commit_list = "\n".join(all_commits[:10]) if all_commits else "今天沒有任何 commit"
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=200,
-            system="你是小牛馬，說話嘴賤幽默。用繁體中文簡短回報今日技能安裝狀況，像跟老闆報告一樣，簡潔有力。",
-            messages=[{"role": "user", "content": (
-                f"今日技能報告：\n"
-                f"- 目前總技能數：{total_tools} 個\n"
-                f"- 今日技能相關更新：{skill_count} 筆\n"
-                f"- 今日所有 commit：\n{commit_list}\n\n"
-                f"用嘴賤風格簡短回報。"
-            )}]
-        )
-        return response.content[0].text
-
-    msg = await loop.run_in_executor(None, generate_report)
-    await context.bot.send_message(chat_id=OWNER_ID, text=f"🔧 今日技能報告\n\n{msg}")
-
 
 def collect_daily_report() -> str:
     """收集今天電腦的活動記錄，回傳給 Claude 整理成報告"""
@@ -19761,12 +19701,6 @@ if __name__ == "__main__":
         goodnight,
         time=datetime.time(hour=14, minute=30, tzinfo=datetime.timezone.utc)
     )
-    # 每天晚上 9:00 台灣時間（UTC+8）= 13:00 UTC
-    app.job_queue.run_daily(
-        daily_skill_report,
-        time=datetime.time(hour=13, minute=0, tzinfo=datetime.timezone.utc)
-    )
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("chatid", chatid))
     app.add_handler(CommandHandler("myid", myid))
