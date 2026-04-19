@@ -5414,11 +5414,17 @@ def fetch_portfolio_risk(holdings: list, period: str = "1y") -> str:
         import numpy as np
         import pandas as pd
 
-        weights = [h["weight"] for h in holdings]
-        symbols = [h["symbol"] for h in holdings]
+        if not holdings or not isinstance(holdings, list):
+            return "⚠️ 請提供持股清單，格式：[{\"symbol\": \"AAPL\", \"weight\": 50}, ...]"
+        if isinstance(holdings[0], str):
+            holdings = [{"symbol": s, "weight": 1} for s in holdings]
+        weights = [h.get("weight", 1) if isinstance(h, dict) else 1 for h in holdings]
+        symbols = [h.get("symbol", h) if isinstance(h, dict) else str(h) for h in holdings]
 
         # 標準化權重
         total_w = sum(weights)
+        if total_w == 0:
+            return "⚠️ 所有持股權重為 0，請設定有效權重"
         weights = [w / total_w for w in weights]
 
         data = {}
@@ -5524,6 +5530,8 @@ def fetch_loan_calculator(principal: float, annual_rate: float, years: int,
         p = principal * 10000
         r = annual_rate / 100 / 12
         n = years * 12
+        if n <= 0:
+            return "⚠️ 貸款年數必須大於 0"
         total_interest = 0
         lines = [f"🏦 貸款試算（{loan_type}）\n",
                  f"貸款金額：{principal:.0f} 萬元",
@@ -5562,6 +5570,9 @@ def fetch_loan_calculator(principal: float, annual_rate: float, years: int,
 def fetch_compound_calculator(principal: float, annual_rate: float, years: int,
                                monthly_add: float = 0, compound_freq: int = 12) -> str:
     try:
+        compound_freq = int(compound_freq) if not isinstance(compound_freq, int) else compound_freq
+        if compound_freq <= 0:
+            compound_freq = 12
         r = annual_rate / 100 / compound_freq
         n = compound_freq * years
         # 本金複利
@@ -5954,7 +5965,7 @@ def fetch_forex_deposit(amount_twd: float, currency: str, annual_rate: float, mo
         # 換回台幣
         twd_final = foreign_final * sell_rate_actual
         twd_profit = twd_final - amount_twd
-        effective_rate = twd_profit / amount_twd / (months / 12) * 100
+        effective_rate = (twd_profit / amount_twd / (months / 12) * 100) if amount_twd > 0 and months > 0 else 0
         lines = [
             f"🌐 外幣定存試算（{cur}）\n",
             f"台幣本金：{amount_twd:,.0f} 元",
@@ -6051,6 +6062,7 @@ def fetch_financial_health(monthly_income: float, monthly_expense: float,
 def fetch_deep_research(topic: str, lang: str = "zh-tw", depth: int = 5) -> str:
     try:
         from ddgs import DDGS
+        depth = int(depth) if not isinstance(depth, int) else depth
         depth = min(max(depth, 3), 8)
         # 自動生成子問題
         sub_questions = [
@@ -7212,8 +7224,8 @@ def _get_virtual_desktop():
         vw_log = max(m["left"]+m["width"] for m in ms) - vl_log
         vh_log = max(m["top"]+m["height"] for m in ms) - vt_log
     is_phys = vw > 4000
-    sx = vw / vw_log if is_phys else 1.0
-    sy = vh / vh_log if is_phys else 1.0
+    sx = vw / vw_log if is_phys and vw_log > 0 else 1.0
+    sy = vh / vh_log if is_phys and vh_log > 0 else 1.0
     return vl, vt, vw, vh, is_phys, sx, sy
 
 def _si_universal(ax_log: float, ay_log: float, click_type: str = "click"):
@@ -8950,7 +8962,7 @@ def fetch_stock_advanced(symbol: str, indicators: list = None) -> str:
             upper = bb.bollinger_hband().iloc[-1]
             mid = bb.bollinger_mavg().iloc[-1]
             lower = bb.bollinger_lband().iloc[-1]
-            width = (upper - lower) / mid * 100
+            width = (upper - lower) / mid * 100 if mid != 0 else 0
             if current >= upper:
                 bb_pos = "觸上軌（超買警示）⚠️"
             elif current <= lower:
@@ -10131,7 +10143,7 @@ def _tg_log(msg):
     try:
         with open(_TG_AUTO_LOG, "a", encoding="utf-8") as f:
             f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
-    except:
+    except Exception:
         pass
 
 def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, stop_time: str = "") -> str:
@@ -10470,7 +10482,7 @@ def execute_reminder(time_str, message):
             t.sleep(int(time_str))
         else:
             import datetime as dt
-            now = dt.datetime.datetime.now()
+            now = dt.datetime.now()
             target = dt.datetime.strptime(time_str, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
             if target < now: target = target.replace(day=now.day+1)
             t.sleep((target-now).total_seconds())
@@ -10489,7 +10501,7 @@ def execute_webpage_shot(action, url, selector="body", interval=60.0, duration=3
     try:
         if action == "screenshot":
             from playwright.sync_api import sync_playwright
-            out = str(Path.home() / "Desktop" / f"webpage_{datetime.datetime.now().strftime('%H%M%S')}.png")
+            out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webpage_{datetime.datetime.now().strftime('%H%M%S')}.png")
             with sync_playwright() as p:
                 browser = p.chromium.launch()
                 page = browser.new_page(viewport={"width": 1280, "height": 800})
@@ -10874,7 +10886,7 @@ def execute_tts_advanced(action, text="", voice="zh-CN-YunxiNeural"):
     try:
         import edge_tts, asyncio
         if action == "speak":
-            out = str(Path.home() / "Desktop" / f"tts_{datetime.datetime.now().strftime('%H%M%S')}.mp3")
+            out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"tts_{datetime.datetime.now().strftime('%H%M%S')}.mp3")
             _clean = clean_for_tts(text)
             async def _gen():
                 comm = edge_tts.Communicate(_clean, voice, rate="-5%", pitch="-5Hz")
@@ -10909,6 +10921,9 @@ def execute_todo(action, task="", todo_id=0):
             conn.execute("DELETE FROM todos WHERE id=?", (todo_id,)); conn.commit(); conn.close(); return f"✅ 任務 #{todo_id} 已刪除"
         elif action == "clear":
             conn.execute("DELETE FROM todos WHERE done=1"); conn.commit(); conn.close(); return "✅ 已清除所有已完成任務"
+        else:
+            conn.close()
+            return f"⚠️ 不支援的操作：{action}"
     except Exception as e:
         return f"❌ 任務清單失敗：{e}"
 
@@ -10922,7 +10937,7 @@ def execute_sysres_chart(duration=10):
         for _ in range(duration):
             cpu_vals.append(psutil.cpu_percent(interval=1))
             mem_vals.append(psutil.virtual_memory().percent)
-        out = str(Path.home() / "Desktop" / f"sysres_{datetime.datetime.now().strftime('%H%M%S')}.png")
+        out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"sysres_{datetime.datetime.now().strftime('%H%M%S')}.png")
         fig, ax = plt.subplots()
         ax.plot(range(1,duration+1), cpu_vals, label="CPU %", color="blue")
         ax.plot(range(1,duration+1), mem_vals, label="RAM %", color="orange")
@@ -10956,9 +10971,15 @@ def execute_password_mgr(action, site, master, username="", password=""):
             if not rows: return f"（找不到 {site} 的密碼）"
             results = []
             for s, u, enc_p in rows:
-                try: results.append(f"🔑 {s}\n帳號：{u}\n密碼：{f.decrypt(enc_p.encode()).decode()}")
+                try:
+                    decrypted = f.decrypt(enc_p.encode()).decode()
+                    masked = decrypted[:2] + "*" * max(0, len(decrypted) - 4) + decrypted[-2:] if len(decrypted) > 4 else "****"
+                    results.append(f"🔑 {s}\n帳號：{u}\n密碼：{masked}")
                 except Exception: results.append(f"❌ {s} 解密失敗（主密碼錯誤？）")
             return "\n".join(results)
+        else:
+            conn.close()
+            return f"⚠️ 不支援的操作：{action}（支援 save/get）"
     except Exception as e:
         return f"❌ 密碼管理失敗：{e}"
 
@@ -10972,7 +10993,7 @@ def execute_clipboard_image(action, path=""):
             win32clipboard.OpenClipboard()
             try: data = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
             finally: win32clipboard.CloseClipboard()
-            out = path or str(Path.home() / "Desktop" / f"clipboard_{datetime.datetime.now().strftime('%H%M%S')}.png")
+            out = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"clipboard_{datetime.datetime.now().strftime('%H%M%S')}.png")
             Image.open(_io.BytesIO(data)).save(out)
             return f"✅ 剪貼簿圖片已存：{out}"
         elif action == "set":
@@ -11266,7 +11287,6 @@ def execute_automation(action, condition_type="", condition_value="", command=""
                 elif condition_type == "process_running":
                     triggered = any(condition_value.lower() in p.name().lower() for p in psutil.process_iter())
                 elif condition_type == "time_is":
-                    from datetime import datetime
                     triggered = datetime.datetime.now().strftime("%H:%M") == condition_value
                 if triggered:
                     subprocess.Popen(command, shell=True)
@@ -11305,7 +11325,7 @@ def execute_automation(action, condition_type="", condition_value="", command=""
             import pyautogui, easyocr
             region = (int(x), int(y), int(w), int(h)) if w and h else None
             screenshot = pyautogui.screenshot(region=region)
-            out = output or str(Path.home() / "Desktop" / "region_ocr.png")
+            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / "region_ocr.png")
             screenshot.save(out)
             reader = easyocr.Reader(["ch_tra","en"], gpu=False)
             results = reader.readtext(out, detail=0)
@@ -11327,7 +11347,7 @@ def execute_automation(action, condition_type="", condition_value="", command=""
             w_, h_ = x2-x_, y2-y_
             import pyautogui
             screenshot = pyautogui.screenshot(region=(x_, y_, w_, h_))
-            out = output or str(Path.home() / "Desktop" / f"window_{keyword}_{datetime.datetime.now().strftime('%H%M%S')}.png")
+            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"window_{keyword}_{datetime.datetime.now().strftime('%H%M%S')}.png")
             screenshot.save(out)
             return f"✅ 視窗截圖：{out}"
     except Exception as e:
@@ -11653,7 +11673,7 @@ def execute_win_notify_relay(action, duration=3600.0, filter_app="", _bot_send=N
                             src = e.SourceName
                             if filter_app and filter_app.lower() not in src.lower(): continue
                             try: msg = win32evtlogutil.SafeFormatMessage(e, "Application")[:200]
-                            except: msg = "(無法讀取)"
+                            except Exception: msg = "(無法讀取)"
                             if _bot_send and _chat_id and e.EventType in (1, 2):
                                 import asyncio
                                 level = "❌" if e.EventType == 1 else "⚠️"
@@ -11703,7 +11723,7 @@ def execute_data_process(action, path="", output="", query="", data="", paths=""
             for row in rows:
                 try:
                     if eval(query, {"__builtins__": {}}, row): filtered.append(row)
-                except: pass
+                except Exception: pass
             return f"📊 過濾結果（{len(filtered)}/{len(rows)} 筆）：\n" + json.dumps(filtered[:10], ensure_ascii=False, indent=2)
         elif action == "stats":
             with open(path, encoding="utf-8-sig", errors="replace") as f:
@@ -11716,7 +11736,7 @@ def execute_data_process(action, path="", output="", query="", data="", paths=""
                 try:
                     nums = [float(v) for v in vals]
                     stats[col] = {"count": len(nums), "min": min(nums), "max": max(nums), "avg": round(sum(nums)/len(nums),2)}
-                except:
+                except Exception:
                     stats[col] = {"count": len(vals), "unique": len(set(vals))}
             return "📊 統計：\n" + json.dumps(stats, ensure_ascii=False, indent=2)
         elif action == "convert":
@@ -11792,7 +11812,7 @@ def execute_clipboard_history(action, index=0):
                             if len(_clipboard_hist) > 50:
                                 _clipboard_hist.pop()
                             last = cur
-                    except: pass
+                    except Exception: pass
                     time.sleep(1)
             threading.Thread(target=_watch, daemon=True).start()
             return "✅ 剪貼簿歷史監控已啟動"
@@ -11903,7 +11923,7 @@ def execute_pixel_watch(action, name="", x=0, y=0, command="", interval=1.0, tol
                                 import asyncio
                                 asyncio.run_coroutine_threadsafe(_bot_send(_chat_id, msg), asyncio.get_event_loop())
                             cfg["r"], cfg["g"], cfg["b"] = r, g, b
-                    except: pass
+                    except Exception: pass
                     t.sleep(float(interval))
             threading.Thread(target=_watch, daemon=True).start()
             return f"✅ 像素監控已啟動：{name} ({x},{y}) 容差={tolerance}"
@@ -12006,7 +12026,7 @@ def execute_adb(action, x=0, y=0, x2=0, y2=0, text="", path="", remote="", packa
             r = subprocess.run(["adb", "devices", "-l"], capture_output=True, text=True)
             return f"📱 ADB 裝置：\n{r.stdout.strip()}"
         elif action == "screenshot":
-            out = path or str(Path.home() / "Desktop" / f"adb_{datetime.datetime.now().strftime('%H%M%S')}.png")
+            out = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"adb_{datetime.datetime.now().strftime('%H%M%S')}.png")
             subprocess.run(prefix + ["shell", "screencap", "-p", "/sdcard/screen.png"], capture_output=True)
             subprocess.run(prefix + ["pull", "/sdcard/screen.png", out], capture_output=True)
             return f"✅ 手機截圖已存：{out}"
@@ -12030,7 +12050,7 @@ def execute_adb(action, x=0, y=0, x2=0, y2=0, text="", path="", remote="", packa
             r = subprocess.run(prefix + ["push", path, remote or "/sdcard/"], capture_output=True, text=True)
             return f"✅ 已上傳：{path} → {remote}" if r.returncode == 0 else f"❌ 失敗：{r.stderr}"
         elif action == "pull":
-            out = path or str(Path.home() / "Desktop" / Path(remote).name)
+            out = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / Path(remote).name)
             r = subprocess.run(prefix + ["pull", remote, out], capture_output=True, text=True)
             return f"✅ 已下載：{remote} → {out}" if r.returncode == 0 else f"❌ 失敗：{r.stderr}"
         elif action == "shell":
@@ -12098,7 +12118,7 @@ def execute_onedrive(action, path="", remote=""):
             import shutil
             src = Path(onedrive_path) / remote
             if not src.exists(): return f"⚠️ 找不到：{src}"
-            dest = path or str(Path.home() / "Desktop" / src.name)
+            dest = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / src.name)
             shutil.copy2(src, dest)
             return f"✅ 已從 OneDrive 下載：{dest}"
         elif action == "sync":
@@ -12128,7 +12148,7 @@ def execute_ftp(action, host="", user="", password="", local="", remote="", port
             ftp.quit()
             return f"✅ 已上傳：{local} → {host}/{remote}"
         elif action == "download":
-            out = local or str(Path.home() / "Desktop" / Path(remote).name)
+            out = local or str(Path("C:/Users/blue_/Desktop/測試檔案") / Path(remote).name)
             with open(out, "wb") as f:
                 ftp.retrbinary(f"RETR {remote}", f.write)
             ftp.quit()
@@ -12284,7 +12304,7 @@ def execute_download_file(url, save_path=""):
         import requests
         if not save_path:
             fname = url.split("/")[-1].split("?")[0] or "download"
-            save_path = str(Path.home() / "Desktop" / fname)
+            save_path = str(Path("C:/Users/blue_/Desktop/測試檔案") / fname)
         r = requests.get(url, stream=True, timeout=60)
         r.raise_for_status()
         with open(save_path, "wb") as f:
@@ -12350,7 +12370,7 @@ def execute_disk_clean(action="list"):
                 try:
                     if f.is_file(): f.unlink(); count += 1
                     elif f.is_dir(): shutil.rmtree(f, ignore_errors=True); count += 1
-                except: pass
+                except Exception: pass
             return f"✅ 已清理 {count} 個暫存項目"
     except Exception as e:
         return f"❌ 磁碟清理失敗：{e}"
@@ -12565,7 +12585,7 @@ def execute_event_log(log="System", level="Error", count=10):
                 if level == "All" or e.EventType == event_type:
                     try:
                         msg = win32evtlogutil.SafeFormatMessage(e, log)[:100]
-                    except:
+                    except Exception:
                         msg = "(無法讀取訊息)"
                     events.append(f"[{e.TimeGenerated.Format()}] {e.SourceName}: {msg}")
                 if len(events) >= int(count):
@@ -12735,14 +12755,14 @@ def execute_webcam(action, duration=5.0, output="", device=0):
             cap.release()
             if not ret:
                 return "❌ 無法拍攝"
-            out = output or str(Path.home() / "Desktop" / f"webcam_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
             cv2.imwrite(out, frame)
             return f"✅ 已拍照：{out}"
         elif action == "video":
             cap = cv2.VideoCapture(int(device))
             if not cap.isOpened():
                 return f"❌ 無法開啟攝影機 {device}"
-            out = output or str(Path.home() / "Desktop" / f"webcam_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
+            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             writer = cv2.VideoWriter(out, cv2.VideoWriter_fourcc(*"XVID"), 20, (w,h))
@@ -12872,7 +12892,7 @@ def execute_proxy(action, host=""):
                     enabled = winreg.QueryValueEx(k, "ProxyEnable")[0]
                     server = winreg.QueryValueEx(k, "ProxyServer")[0]
                     return f"🌐 代理設定：{'啟用' if enabled else '停用'}\n伺服器：{server}"
-                except:
+                except Exception:
                     return "🌐 代理：未設定"
             elif action == "set":
                 winreg.SetValueEx(k, "ProxyEnable", 0, winreg.REG_DWORD, 1)
@@ -12987,10 +13007,10 @@ def execute_calendar(action, days=7, title="", start="", end="", description="")
         creds = Credentials.from_authorized_user_file(str(creds_path))
         service = build("calendar", "v3", credentials=creds)
         if action == "list":
-            now = datetime.now(timezone.utc)
+            now = datetime.datetime.now(datetime.timezone.utc)
             events = service.events().list(
                 calendarId="primary", timeMin=now.isoformat(),
-                timeMax=(now + timedelta(days=days)).isoformat(),
+                timeMax=(now + datetime.timedelta(days=days)).isoformat(),
                 maxResults=20, singleEvents=True, orderBy="startTime"
             ).execute().get("items", [])
             if not events:
@@ -13071,7 +13091,7 @@ def execute_report(title, data_json, output=""):
     try:
         import jinja2, json
         data = json.loads(data_json)
-        out_path = output or str(Path.home() / "Desktop" / f"report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
+        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
         tmpl = jinja2.Template("""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>body{font-family:sans-serif;margin:40px}table{border-collapse:collapse;width:100%}
 th,td{border:1px solid #ccc;padding:8px}th{background:#4472C4;color:white}
@@ -13212,7 +13232,7 @@ def execute_face_detect(image_path="", output=""):
         faces = cascade.detectMultiScale(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 1.1, 4)
         for (x, y, w, h) in faces:
             cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
-        out_path = output or str(Path.home() / "Desktop" / f"faces_{datetime.datetime.now().strftime('%H%M%S')}.jpg")
+        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"faces_{datetime.datetime.now().strftime('%H%M%S')}.jpg")
         cv2.imwrite(out_path, img)
         return f"✅ 偵測到 {len(faces)} 張人臉：{out_path}"
     except Exception as e:
@@ -13270,7 +13290,7 @@ def execute_screenshot_compare(img1_path="", img2_path="", output=""):
         _, thresh = cv2.threshold(cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY), 30, 255, cv2.THRESH_BINARY)
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         result = img2[:h,:w].copy(); cv2.drawContours(result, contours, -1, (0, 0, 255), 2)
-        out = output or str(Path.home() / "Desktop" / f"diff_{datetime.datetime.now().strftime('%H%M%S')}.png")
+        out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"diff_{datetime.datetime.now().strftime('%H%M%S')}.png")
         cv2.imwrite(out, result)
         pct = cv2.countNonZero(thresh) / (h * w) * 100
         return f"差異：{pct:.2f}%，標記圖：{out}"
@@ -13282,7 +13302,7 @@ def execute_screen_record(action, duration=10.0, output=""):
     try:
         if action == "record":
             import mss, cv2, numpy as np, time as t
-            out_path = output or str(Path.home() / "Desktop" / f"record_{datetime.datetime.now().strftime('%H%M%S')}.mp4")
+            out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"record_{datetime.datetime.now().strftime('%H%M%S')}.mp4")
             with mss.mss() as sct:
                 mon = sct.monitors[1]
                 w, h = mon["width"], mon["height"]
@@ -13296,7 +13316,7 @@ def execute_screen_record(action, duration=10.0, output=""):
             return f"✅ 錄影完成：{out_path}"
         elif action == "webcam":
             import cv2
-            out_path = output or str(Path.home() / "Desktop" / f"webcam_{datetime.datetime.now().strftime('%H%M%S')}.jpg")
+            out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{datetime.datetime.now().strftime('%H%M%S')}.jpg")
             cap = cv2.VideoCapture(0)
             ret, frame = cap.read()
             cap.release()
@@ -13322,7 +13342,7 @@ def execute_chart(chart_type, data_json, title="", output=""):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt, json
         data = json.loads(data_json)
-        out_path = output or str(Path.home() / "Desktop" / f"chart_{datetime.datetime.now().strftime('%H%M%S')}.png")
+        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"chart_{datetime.datetime.now().strftime('%H%M%S')}.png")
         fig, ax = plt.subplots()
         if chart_type == "line":
             for label, values in data.items():
@@ -13607,7 +13627,7 @@ def execute_ai_video(prompt: str, provider: str = "replicate",
     import requests, time, traceback
     from pathlib import Path
 
-    out = output or str(Path.home() / "Desktop" / f"ai_video_{int(time.time())}.mp4")
+    out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"ai_video_{int(time.time())}.mp4")
 
     def _download(url: str, dest: str) -> str:
         r = requests.get(url, timeout=120, stream=True)
@@ -13802,7 +13822,7 @@ def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> st
     ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
     w, h = kwargs.get("size", (1280, 720))
     fps  = kwargs.get("fps", 24)
-    out  = output or str(Path.home() / "Desktop" / f"video_{datetime.datetime.now().strftime('%H%M%S')}.mp4")
+    out  = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"video_{datetime.datetime.now().strftime('%H%M%S')}.mp4")
 
     def _write_frames(frames_iter, out_path, vid_fps, width, height):
         """ffmpeg pipe 寫 mp4，失敗時 raise"""
@@ -14247,7 +14267,7 @@ def execute_qr_code(action, content="", path="", duration=30.0):
         if action == "qr_gen":
             import qrcode as _qr
             img = _qr.make(content)
-            save_path = path or str(Path.home() / "Desktop" / "qrcode.png")
+            save_path = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / "qrcode.png")
             img.save(save_path)
             return f"✅ QR Code 已生成：{save_path}"
         elif action == "qr_scan":
@@ -14702,7 +14722,7 @@ def execute_sound_detect(action, threshold=20, duration=5, output=""):
             import time as _t
             import wave
             frames = []
-            out = output or str(__import__("pathlib").Path.home() / "Desktop" / "recording.wav")
+            out = output or str(__import__("pathlib").Path("C:/Users/blue_/Desktop/測試檔案") / "recording.wav")
             CHUNK = int(RATE * 0.5)
             silent_count = 0
             while True:
@@ -14754,7 +14774,7 @@ def execute_face_recognize(action, name="", image_path="", output=""):
 
         if action == "capture":
             frame = _capture_frame()
-            out = output or str(_P.home() / "Desktop" / "face_capture.jpg")
+            out = output or str(_P("C:/Users/blue_/Desktop/測試檔案") / "face_capture.jpg")
             _cv2.imwrite(out, frame)
             return f"✅ 已拍照：{out}"
 
@@ -15350,7 +15370,7 @@ def execute_news_monitor(action, keywords="", interval=300, duration=3600, chat_
                     results.append(f"【{kw}】")
                     for entry in feed.entries[:3]:
                         results.append(f"  • {entry.get('title','')}")
-            except:
+            except Exception:
                 pass
         return "\n".join(results) if results else "無相關新聞"
 
@@ -15392,7 +15412,7 @@ def execute_news_monitor(action, keywords="", interval=300, duration=3600, chat_
                                         _bot_send(chat_id=chat_id, text=msg),
                                         asyncio.get_event_loop()
                                     )
-                    except:
+                    except Exception:
                         pass
                 time.sleep(float(interval))
 
@@ -15963,7 +15983,7 @@ def execute_pentest(action, target="", port_range="1-1000", timeout=2):
         open_ports = []
         try:
             target_ip = socket.gethostbyname(target)
-        except:
+        except Exception:
             target_ip = target
         if "-" in str(port_range):
             start, end = map(int, str(port_range).split("-"))
@@ -15978,11 +15998,11 @@ def execute_pentest(action, target="", port_range="1-1000", timeout=2):
                 if s.connect_ex((target_ip, port)) == 0:
                     try:
                         svc = socket.getservbyport(port)
-                    except:
+                    except Exception:
                         svc = "unknown"
                     open_ports.append((port, svc))
                 s.close()
-            except:
+            except Exception:
                 pass
 
         threads = [threading.Thread(target=scan, args=(p,)) for p in ports]
@@ -16034,7 +16054,7 @@ def execute_pentest(action, target="", port_range="1-1000", timeout=2):
                     r = requests.get(f"{base}/{path}", timeout=3, verify=False, allow_redirects=False)
                     if r.status_code == 200:
                         found.append(f"  ⚠️ /{path} 可存取！")
-                except:
+                except Exception:
                     pass
             if found:
                 return f"🚨 發現 {len(found)} 個潛在漏洞：\n" + "\n".join(found)
@@ -16161,7 +16181,7 @@ def execute_proactive_alert(action, name="", condition="", threshold="", target=
                             if aname in cur_alerts:
                                 cur_alerts[aname]["triggered"] = cur_alerts[aname].get("triggered", 0) + 1
                                 save_alerts(cur_alerts)
-                    except:
+                    except Exception:
                         pass
                 time.sleep(float(interval) if interval else 60)
 
