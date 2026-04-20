@@ -738,7 +738,10 @@ def monitor_and_reply(regions, stop_time, monitor=2):
 
             # === OCR 提取文字 + 像素顏色判斷 ===
             current_messages = ocr_extract_messages(latest_chat)
-            avg_conf = sum(m.get("min_conf", 50) for m in current_messages) / max(len(current_messages), 1)
+            # PaddleOCR rec_scores 是 0-1（不是 0-100），轉成百分比比較
+            avg_conf = sum(m.get("min_conf", 0.5) for m in current_messages) / max(len(current_messages), 1)
+            if avg_conf < 1:
+                avg_conf = avg_conf * 100  # 0.95 → 95
 
             # === 判斷用 OCR 還是 Vision ===
             use_vision = False
