@@ -312,48 +312,52 @@ def chat_hash(chat_img):
 # ============================================================
 def ocr_extract_messages(chat_img):
     """
-    OCR 提取對話區所有文字 + 像素顏色判斷 sender。
-    回傳: [{"text": "...", "sender": "them/me/unknown", "y": int}]
+    EasyOCR 提取對話區所有文字 + 像素顏色判斷 sender。
+    回傳: [{"text": "...", "sender": "them/me/unknown", "y": int, "min_conf": float}]
     """
-    import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    import easyocr
     import numpy as np
 
     arr = np.array(chat_img)
-    cw, ch = chat_img.size
+    ch, cw = arr.shape[:2]
 
-    ocr_data = pytesseract.image_to_data(
-        chat_img, lang="chi_tra+eng", output_type=pytesseract.Output.DICT
-    )
+    # EasyOCR（繁體中文 + 英文）
+    reader = easyocr.Reader(["ch_tra", "en"], gpu=False, verbose=False)
+    results = reader.readtext(arr)
 
     raw_items = []
-    for i, txt in enumerate(ocr_data["text"]):
-        t = txt.strip()
-        conf = int(ocr_data["conf"][i])
-        if not t or conf < 40:
+    for bbox, text, conf in results:
+        t = text.strip()
+        if not t or conf < 0.1:
             continue
-        x = ocr_data["left"][i]
-        y = ocr_data["top"][i]
-        w = ocr_data["width"][i]
-        h = ocr_data["height"][i]
+
+        # bbox = [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+        x = int(bbox[0][0])
+        y = int(bbox[0][1])
+        y_center = int((bbox[0][1] + bbox[2][1]) / 2)
 
         # 像素顏色判斷：取文字左邊 5px 的背景色
         sample_x = max(0, x - 5)
-        sample_y = min(ch - 1, y + h // 2)
+        sample_y = min(ch - 1, y_center)
         if sample_y < arr.shape[0] and sample_x < arr.shape[1]:
             r, g, b = int(arr[sample_y, sample_x, 0]), int(arr[sample_y, sample_x, 1]), int(arr[sample_y, sample_x, 2])
-            if g > 170 and g > r and g > b and r < 220:
-                sender = "me"  # 綠色背景
-            elif r > 225 and g > 225 and b > 225:
+            # Telegram 綠色氣泡 RGB ≈ (239,253,222)：g 最高、r 和 b 偏高但 g-b > 30
+            if g > 230 and (g - b) > 30 and r > 200:
+                sender = "me"  # 綠色背景（淺綠）
+            elif r > 245 and g > 245 and b > 245:
                 sender = "them"  # 白色背景
             else:
                 sender = "unknown"
         else:
             sender = "unknown"
 
+        # 過濾掉時間戳（像 "下午 06:44" 這類）
+        if len(t) < 12 and (":" in t or "上午" in t or "下午" in t or t.startswith("下")):
+            continue
+
         raw_items.append({"text": t, "sender": sender, "x": x, "y": y, "conf": conf})
 
-    # 合併相鄰的同 sender 文字成一條訊息（y 差距 < 30px 視為同一條）
+    # 合併相鄰的同 sender 文字成一條訊息（y 差距 < 40px 視為同一條）
     if not raw_items:
         return []
 
@@ -363,7 +367,7 @@ def ocr_extract_messages(chat_img):
 
     for item in raw_items[1:]:
         same_sender = item["sender"] == current["sender"]
-        close_y = abs(item["y"] - current["y"]) < 30
+        close_y = abs(item["y"] - current["y"]) < 40
         if same_sender and close_y:
             current["text"] += " " + item["text"]
             current["min_conf"] = min(current["min_conf"], item["conf"])
