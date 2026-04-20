@@ -40,6 +40,51 @@ from dotenv import load_dotenv
 from pathlib import Path
 import anthropic
 
+# ============================================================
+# 日期處理工具
+# ============================================================
+def get_date_context():
+    """回傳今天/明天/昨天的具體日期字串，給 prompt 和搜尋用"""
+    today = datetime.today().date() if hasattr(datetime, 'today') else __import__('datetime').date.today()
+    tomorrow = today + __import__('datetime').timedelta(days=1)
+    yesterday = today - __import__('datetime').timedelta(days=1)
+    weekdays = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
+    return {
+        "today": today.strftime("%Y-%m-%d"),
+        "today_weekday": weekdays[today.weekday()],
+        "tomorrow": tomorrow.strftime("%Y-%m-%d"),
+        "yesterday": yesterday.strftime("%Y-%m-%d"),
+        "year": str(today.year),
+        "prompt": (
+            f"今天是 {today.strftime('%Y 年 %m 月 %d 日')}（{weekdays[today.weekday()]}）。"
+            f"「明天」= {tomorrow.strftime('%Y-%m-%d')}，"
+            f"「昨天」= {yesterday.strftime('%Y-%m-%d')}。"
+            f"現在是 {today.year} 年，不是 2025 年。"
+        ),
+    }
+
+
+def resolve_relative_dates(text):
+    """把搜尋關鍵字裡的相對日期替換成具體日期"""
+    dc = get_date_context()
+    replacements = {
+        "明天": dc["tomorrow"],
+        "今天": dc["today"],
+        "昨天": dc["yesterday"],
+        "今日": dc["today"],
+        "明日": dc["tomorrow"],
+        "昨日": dc["yesterday"],
+        "today": dc["today"],
+        "tomorrow": dc["tomorrow"],
+        "yesterday": dc["yesterday"],
+        "2025": dc["year"],  # 防止 Vision 寫錯年份
+    }
+    result = text
+    for old, new in replacements.items():
+        result = result.replace(old, new)
+    return result
+
+
 # 把 scripts 目錄加入 path，讓 tg_locate 可以 import
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
@@ -279,11 +324,14 @@ def analyze_conversation(chat_img):
     with open(tmp, "rb") as f:
         b64 = base64.b64encode(f.read()).decode()
 
+    dc = get_date_context()
     r = client.messages.create(
         model="claude-sonnet-4-6", max_tokens=300,
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
-            {"type": "text", "text": """這是 Telegram 完整對話截圖。
+            {"type": "text", "text": f"""{dc['prompt']}
+
+這是 Telegram 完整對話截圖。
 綠色氣泡（靠右）= 我發的
 白色氣泡（靠左）= 對方發的
 
@@ -298,9 +346,10 @@ def analyze_conversation(chat_img):
 步驟三：如果 sender = "them"，把對方在我最後一條綠色氣泡之後發的【所有白色氣泡的內容】整理出來（可能有多條）。
 
 步驟四：判斷對方的這些新訊息裡有沒有需要查證的事實性問題（比賽比分、股票價格、新聞事件、數據排名等）。如果有，列出具體要搜尋的關鍵字。
+【重要】search_queries 裡面不能寫「明天」「今天」「昨天」，必須轉成具體日期（{dc['today']}、{dc['tomorrow']}、{dc['yesterday']}）。年份是 {dc['year']} 不是 2025。
 
 只回 JSON，不要其他文字：
-{"sender":"them或me","new_messages":"對方新訊息的完整內容（多條合併）","needs_search":true或false,"search_queries":["要搜的關鍵字1","要搜的關鍵字2"]}"""}
+{{"sender":"them或me","new_messages":"對方新訊息的完整內容（多條合併）","needs_search":true或false,"search_queries":["要搜的關鍵字1","要搜的關鍵字2"]}}"""}
         ]}]
     )
     resp = r.content[0].text.strip()
@@ -320,12 +369,17 @@ def analyze_conversation(chat_img):
 # 維修 3: 搜尋函數 — 根據 search_queries 分別用對的工具
 # ============================================================
 def search_for_queries(search_queries):
-    """根據每個 query 的類型用對應的工具搜尋，合併結果"""
+    """根據每個 query 的類型用對應的工具搜尋，合併結果。日期自動修正。"""
     if not search_queries:
         return ""
     try:
         sys.path.insert(0, str(Path("C:/Users/blue_/claude-telegram-bot")))
-        from bot import tavily_search, fetch_sports_scores, fetch_stock
+        from bot import fetch_sports_scores, fetch_stock
+        from tavily import TavilyClient
+        tavily_key = os.environ.get("TAVILY_API_KEY", "")
+
+        # 程式碼端日期轉換（第一層防護）
+        search_queries = [resolve_relative_dates(q) for q in search_queries]
 
         sport_keywords = ["NBA", "nba", "NFL", "MLB", "NHL", "足球", "籃球", "棒球",
                           "比賽", "比分", "球隊", "賽", "冠軍", "季後賽", "playoffs",
@@ -340,33 +394,47 @@ def search_for_queries(search_queries):
             is_sport = any(kw in query for kw in sport_keywords)
             is_stock = any(kw in query for kw in stock_keywords)
 
+            # Tavily 帶日期篩選的搜尋函數
+            def _tavily_dated(q, max_r=2):
+                if not tavily_key:
+                    from bot import tavily_search
+                    return tavily_search(q, max_r, "basic")
+                tc = TavilyClient(api_key=tavily_key)
+                dc = get_date_context()
+                resp = tc.search(
+                    query=q, max_results=max_r, search_depth="basic",
+                    include_answer=True, time_range="week",
+                )
+                lines = []
+                ans = resp.get("answer", "")
+                if ans:
+                    lines.append(f"AI 整合答案：{ans}")
+                for r in resp.get("results", [])[:max_r]:
+                    lines.append(f"{r.get('title','')}\n{r.get('content','')[:150]}")
+                return "\n".join(lines) if lines else ""
+
             if is_sport and not sports_done:
                 scores = fetch_sports_scores("nba")
                 results.append(f"【ESPN 即時比分】\n{scores}")
                 sports_done = True
-                # 也用 Tavily 補充
-                tr = tavily_search(query, 2, "basic")
-                if tr and "失敗" not in tr:
+                tr = _tavily_dated(query, 2)
+                if tr:
                     results.append(f"【{query} 搜尋】\n{tr}")
 
             elif is_stock:
-                # 判斷是哪支股票
                 if "台積電" in query or "TSMC" in query or "2330" in query:
-                    stock_result = fetch_stock("2330.TW")
-                    results.append(f"【台積電台股報價】\n{stock_result}")
+                    results.append(f"【台積電台股報價】\n{fetch_stock('2330.TW')}")
                 elif "鴻海" in query:
-                    stock_result = fetch_stock("2317.TW")
-                    results.append(f"【鴻海台股報價】\n{stock_result}")
+                    results.append(f"【鴻海台股報價】\n{fetch_stock('2317.TW')}")
                 elif "聯發科" in query:
-                    stock_result = fetch_stock("2454.TW")
-                    results.append(f"【聯發科台股報價】\n{stock_result}")
+                    results.append(f"【聯發科台股報價】\n{fetch_stock('2454.TW')}")
                 else:
-                    tr = tavily_search(query, 2, "basic")
-                    if tr and "失敗" not in tr:
+                    tr = _tavily_dated(query, 2)
+                    if tr:
                         results.append(f"【{query} 搜尋】\n{tr}")
             else:
-                tr = tavily_search(query, 2, "basic")
-                if tr and "失敗" not in tr:
+                tr = _tavily_dated(query, 2)
+                if tr:
                     results.append(f"【{query} 搜尋】\n{tr}")
 
         return "\n\n".join(results) if results else ""

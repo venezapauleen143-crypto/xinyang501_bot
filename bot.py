@@ -16933,6 +16933,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         base_system = SYSTEM_PROMPT_OWNER if is_owner else SYSTEM_PROMPT_DEFAULT
 
+        # 注入今天日期（讓 Claude 知道「今天」「明天」是幾號）
+        _today = datetime.date.today()
+        _tomorrow = _today + datetime.timedelta(days=1)
+        _yesterday = _today - datetime.timedelta(days=1)
+        _weekdays = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
+        _date_ctx = (
+            f"\n\n【日期】今天是 {_today.strftime('%Y 年 %m 月 %d 日')}（{_weekdays[_today.weekday()]}）。"
+            f"「明天」= {_tomorrow.strftime('%Y-%m-%d')}，「昨天」= {_yesterday.strftime('%Y-%m-%d')}。"
+            f"現在是 {_today.year} 年，不是 2025 年。"
+        )
+        base_system = base_system + _date_ctx
+
         # 群組：注入當前說話者身份，讓 Claude 知道此訊息是誰發的
         if is_group:
             if is_owner:
