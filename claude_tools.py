@@ -4959,11 +4959,13 @@ def _xtts_generate_wav(text):
     return None
 
 
-# Globals from extracted_functions.py
+# Globals
+OWNER_ID = 8362721681
 _XTTS_PORT = 5678
 _xtts_server_proc = None
 # Globals from extracted_desktop_control.py
-pyautogui = None
+# NOTE: pyautogui is already imported at line 337, do NOT override with None
+_pyautogui_dc = None  # placeholder for desktop control lazy-init if needed
 _yolo_model = None
 
 
@@ -5948,6 +5950,7 @@ def execute_chart(chart_type, data_json, title="", output=""):
 
 
 def execute_clipboard(action, text=""):
+    import pyperclip
     if action == "get":
         return pyperclip.paste() or "（剪貼簿是空的）"
     else:
@@ -9003,6 +9006,8 @@ def execute_think_as(person: str, question: str, list_available: bool = False) -
     skill_content = skill_path.read_text(encoding="utf-8")
 
     # 用 Claude 載入框架分析問題
+    from anthropic import Anthropic
+    client = Anthropic()
     resp = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1500,
@@ -14731,6 +14736,48 @@ def wikipedia_search(query: str, lang: str = "zh") -> str:
         return f"📖 Wikipedia：{title}\n\n{extract}"
     except Exception as e:
         return f"Wikipedia 查詢失敗：{e}"
+
+
+class OperationStateMachine:
+    """多步驟操作的狀態機，每一步有成功/失敗判斷和重試"""
+    def __init__(self, name="operation"):
+        self.name = name
+        self.steps = []
+        self.current = 0
+        self.results = []
+
+    def add_step(self, name: str, action, verify=None, max_retries=3, on_fail="retry"):
+        self.steps.append({"name": name, "action": action, "verify": verify,
+                          "max_retries": max_retries, "on_fail": on_fail})
+
+    def run(self) -> dict:
+        self.current = 0
+        self.results = []
+        for i, step in enumerate(self.steps):
+            self.current = i
+            success = False
+            result = None
+            for attempt in range(step["max_retries"]):
+                try:
+                    result = step["action"]()
+                    if step["verify"] is None:
+                        success = True
+                        break
+                    elif step["verify"](result):
+                        success = True
+                        break
+                except Exception as e:
+                    result = str(e)
+                import time; time.sleep(0.5)
+            self.results.append({"step": step["name"], "success": success, "result": result})
+            if not success:
+                if step["on_fail"] == "abort":
+                    return {"ok": False, "results": self.results, "failed_step": step["name"]}
+                elif step["on_fail"] == "skip":
+                    continue
+                else:
+                    return {"ok": False, "results": self.results, "failed_step": step["name"]}
+        return {"ok": True, "results": self.results, "failed_step": None}
 
 
 def youtube_play_flow(keyword: str, monitor: int = 2) -> dict:
