@@ -9164,6 +9164,8 @@ def execute_user_account(action, username="", password=""):
 
 def execute_vdesktop(action):
     acts = {"left": ("ctrl","win","left"), "right": ("ctrl","win","right"), "new": ("ctrl","win","d")}
+    if action not in acts:
+        return f"不支援的操作「{action}」，支援：{', '.join(acts.keys())}"
     pyautogui.hotkey(*acts[action])
     return f"虛擬桌面：{action}"
 
