@@ -310,52 +310,87 @@ def chat_hash(chat_img):
 # ============================================================
 # OCR 文字追蹤 + 像素顏色判斷 + Vision 保險
 # ============================================================
+# PaddleOCR GPU 全域初始化（只載入一次，之後每次 0.5 秒）
+# ============================================================
+_ocr_engine = None
+
+def _get_ocr_engine():
+    """取得全域 PaddleOCR 引擎（GPU 加速），第一次呼叫載入模型，之後即時"""
+    global _ocr_engine
+    if _ocr_engine is None:
+        # 處理 modelscope 和 torch CPU 版的衝突
+        import types
+        if "modelscope" not in sys.modules:
+            fake = types.ModuleType("modelscope")
+            fake.__version__ = "0.0.0"
+            sys.modules["modelscope"] = fake
+            sys.modules["modelscope.utils"] = types.ModuleType("modelscope.utils")
+            sys.modules["modelscope.utils.import_utils"] = types.ModuleType("modelscope.utils.import_utils")
+
+        os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+        from paddleocr import PaddleOCR
+        _ocr_engine = PaddleOCR(
+            lang="chinese_cht",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+        )
+    return _ocr_engine
+
+
 def ocr_extract_messages(chat_img):
     """
-    EasyOCR 提取對話區所有文字 + 像素顏色判斷 sender。
+    PaddleOCR GPU 提取對話區所有文字 + 像素顏色判斷 sender。
     回傳: [{"text": "...", "sender": "them/me/unknown", "y": int, "min_conf": float}]
     """
-    import easyocr
     import numpy as np
 
     arr = np.array(chat_img)
     ch, cw = arr.shape[:2]
 
-    # EasyOCR（繁體中文 + 英文）
-    reader = easyocr.Reader(["ch_tra", "en"], gpu=False, verbose=False)
-    results = reader.readtext(arr)
+    # PaddleOCR（全域引擎，GPU 加速，不重複載入）
+    ocr = _get_ocr_engine()
+    results = ocr.predict(arr)
 
     raw_items = []
-    for bbox, text, conf in results:
-        t = text.strip()
-        if not t or conf < 0.1:
-            continue
+    if not results:
+        return []
 
-        # bbox = [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
-        x = int(bbox[0][0])
-        y = int(bbox[0][1])
-        y_center = int((bbox[0][1] + bbox[2][1]) / 2)
+    for item in results:
+        texts = item.get("rec_texts", [])
+        scores = item.get("rec_scores", [])
+        boxes = item.get("dt_polys", [])
 
-        # 像素顏色判斷：取文字左邊 5px 的背景色
-        sample_x = max(0, x - 5)
-        sample_y = min(ch - 1, y_center)
-        if sample_y < arr.shape[0] and sample_x < arr.shape[1]:
-            r, g, b = int(arr[sample_y, sample_x, 0]), int(arr[sample_y, sample_x, 1]), int(arr[sample_y, sample_x, 2])
-            # Telegram 綠色氣泡 RGB ≈ (239,253,222)：g 最高、r 和 b 偏高但 g-b > 30
-            if g > 230 and (g - b) > 30 and r > 200:
-                sender = "me"  # 綠色背景（淺綠）
-            elif r > 245 and g > 245 and b > 245:
-                sender = "them"  # 白色背景
+        for i, (text, conf) in enumerate(zip(texts, scores)):
+            t = text.strip()
+            if not t or conf < 0.3:
+                continue
+
+            box = boxes[i] if i < len(boxes) else [[0, 0], [0, 0], [0, 0], [0, 0]]
+            x = int(box[0][0])
+            y = int(box[0][1])
+            y_center = int((box[0][1] + box[2][1]) / 2)
+
+            # 像素顏色判斷：取文字左邊 5px 的背景色
+            sample_x = max(0, x - 5)
+            sample_y = min(ch - 1, y_center)
+            if sample_y < arr.shape[0] and sample_x < arr.shape[1]:
+                r, g, b = int(arr[sample_y, sample_x, 0]), int(arr[sample_y, sample_x, 1]), int(arr[sample_y, sample_x, 2])
+                # Telegram 綠色氣泡 RGB ≈ (239,253,222)
+                if g > 230 and (g - b) > 30 and r > 200:
+                    sender = "me"
+                elif r > 245 and g > 245 and b > 245:
+                    sender = "them"
+                else:
+                    sender = "unknown"
             else:
                 sender = "unknown"
-        else:
-            sender = "unknown"
 
-        # 過濾掉時間戳（像 "下午 06:44" 這類）
-        if len(t) < 12 and (":" in t or "上午" in t or "下午" in t or t.startswith("下")):
-            continue
+            # 過濾時間戳
+            if len(t) < 12 and (":" in t or "上午" in t or "下午" in t or t.startswith("下")):
+                continue
 
-        raw_items.append({"text": t, "sender": sender, "x": x, "y": y, "conf": conf})
+            raw_items.append({"text": t, "sender": sender, "x": x, "y": y, "conf": conf})
 
     # 合併相鄰的同 sender 文字成一條訊息（y 差距 < 40px 視為同一條）
     if not raw_items:
