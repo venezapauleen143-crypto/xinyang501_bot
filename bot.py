@@ -9699,6 +9699,42 @@ def fetch_global_news(query: str = "", category: str = "", country: str = "", co
         return f"新聞查詢失敗：{e}"
 
 
+# ── 百度搜尋（中國資訊專用）──────────────────────────────────────
+def baidu_search(query: str, max_results: int = 5) -> str:
+    """搜尋中國大陸的資訊 — 用 DuckDuckGo cn-zh 區域 + 中國新聞源"""
+    try:
+        from ddgs import DDGS
+        lines = []
+        # DuckDuckGo 中國區域搜尋
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, region="cn-zh", max_results=max_results))
+            for r in results:
+                title = r.get("title", "")
+                body = r.get("body", "")[:150]
+                href = r.get("href", "")
+                lines.append(f"🔍 {title}\n   {body}\n   {href}")
+        # 補充中國新聞 RSS
+        try:
+            import feedparser
+            cn_feeds = [
+                f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+            ]
+            for feed_url in cn_feeds:
+                feed = feedparser.parse(feed_url)
+                for entry in feed.entries[:3]:
+                    title = entry.get("title", "").split(" - ")[0]
+                    pub = entry.get("published", "")[:16]
+                    lines.append(f"📰 {title}（{pub}）")
+        except Exception:
+            pass
+        if not lines:
+            # 最後備援：用 Tavily 搜中文
+            return tavily_search(query, max_results)
+        return "\n\n".join(lines)
+    except Exception as e:
+        return f"百度搜尋失敗：{e}"
+
+
 def add_text_overlay(image_bytes: bytes, text: str) -> bytes:
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")

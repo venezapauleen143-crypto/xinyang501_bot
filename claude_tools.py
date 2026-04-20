@@ -14455,6 +14455,36 @@ def fetch_global_news(query: str = "", category: str = "", country: str = "", co
         return f"新聞查詢失敗：{e}"
 
 
+# ── 百度搜尋（中國資訊專用）──────────────────────────────────────
+def baidu_search(query: str, max_results: int = 5) -> str:
+    """搜尋中國大陸的資訊 — 用 DuckDuckGo cn-zh 區域 + 中國新聞源"""
+    try:
+        from ddgs import DDGS
+        lines = []
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, region="cn-zh", max_results=max_results))
+            for r in results:
+                title = r.get("title", "")
+                body = r.get("body", "")[:150]
+                href = r.get("href", "")
+                lines.append(f"🔍 {title}\n   {body}\n   {href}")
+        try:
+            import feedparser
+            feed_url = f"https://news.google.com/rss/search?q={requests.utils.quote(query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:3]:
+                title = entry.get("title", "").split(" - ")[0]
+                pub = entry.get("published", "")[:16]
+                lines.append(f"📰 {title}（{pub}）")
+        except Exception:
+            pass
+        if not lines:
+            return tavily_search(query, max_results)
+        return "\n\n".join(lines)
+    except Exception as e:
+        return f"百度搜尋失敗：{e}"
+
+
 def fetch_window_manager(action: str = "list", window_name: str = "") -> str:
     """視窗管理：列出所有視窗 / 切換焦點 / 最大化 / 最小化 / 關閉"""
     try:
