@@ -19930,27 +19930,105 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def auto_compile_knowledge(context: ContextTypes.DEFAULT_TYPE):
-    """每天 22:30 自動編譯知識庫，防止 SessionEnd hook 沒觸發時丟失知識"""
+    """每天 22:45 自動：讀今天的 Claude Code session → 存 daily log → 編譯知識庫"""
     logging.info("【排程觸發】auto_compile_knowledge 開始執行")
     with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
         f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] auto_compile_knowledge 觸發\n")
     import asyncio
     loop = asyncio.get_running_loop()
 
-    def _run_compile():
+    def _extract_and_compile():
+        results = []
         try:
-            result = subprocess.run(
+            # Step 1: 讀今天的 Claude Code session JSONL
+            import json as _json
+            session_dir = Path.home() / ".claude" / "projects" / "C--WINDOWS-System32"
+            today_str = datetime.date.today().strftime("%Y-%m-%d")
+            daily_dir = Path(r"C:\Users\blue_\claude-memory-compiler\daily")
+            daily_dir.mkdir(parents=True, exist_ok=True)
+            daily_file = daily_dir / f"{today_str}.md"
+
+            today_sessions = []
+            if session_dir.exists():
+                for sf in session_dir.glob("*.jsonl"):
+                    mdate = datetime.datetime.fromtimestamp(sf.stat().st_mtime).strftime("%Y-%m-%d")
+                    if mdate == today_str:
+                        today_sessions.append(sf)
+
+            if today_sessions:
+                # Step 2: 從每個 session 提取對話摘要
+                summaries = []
+                for sf in today_sessions:
+                    try:
+                        turns = []
+                        with open(sf, encoding="utf-8") as fh:
+                            for line in fh:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    entry = _json.loads(line)
+                                except Exception:
+                                    continue
+                                msg = entry.get("message", {})
+                                if isinstance(msg, dict):
+                                    role = msg.get("role", "")
+                                    content = msg.get("content", "")
+                                else:
+                                    continue
+                                if role not in ("user", "assistant"):
+                                    continue
+                                if isinstance(content, list):
+                                    text_parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+                                    content = "\n".join(text_parts)
+                                if isinstance(content, str) and content.strip():
+                                    turns.append((role, content.strip()[:200]))
+                        if turns:
+                            first_user = next((t[1] for t in turns if t[0] == "user"), "")
+                            last_asst = next((t[1] for t in reversed(turns) if t[0] == "assistant"), "")
+                            mtime = datetime.datetime.fromtimestamp(sf.stat().st_mtime).strftime("%H:%M")
+                            summaries.append(
+                                f"### Session {mtime} ({len(turns)} turns, {sf.stat().st_size // 1024}KB)\n\n"
+                                f"**開始:** {first_user[:150]}\n"
+                                f"**最後:** {last_asst[:150]}\n"
+                                f"**檔案:** {sf.name[:12]}...\n"
+                            )
+                    except Exception as e:
+                        summaries.append(f"### Session (error: {e})\n")
+
+                # Step 3: 寫入 daily log
+                if summaries:
+                    new_content = "\n".join(summaries)
+                    if daily_file.exists():
+                        existing = daily_file.read_text(encoding="utf-8")
+                        if "auto_compile" not in existing:
+                            daily_file.write_text(
+                                existing + f"\n## Auto Compile ({datetime.datetime.now().strftime('%H:%M')})\n\n" + new_content,
+                                encoding="utf-8"
+                            )
+                    else:
+                        daily_file.write_text(
+                            f"# Daily Log: {today_str}\n\n## Auto Compile ({datetime.datetime.now().strftime('%H:%M')})\n\n" + new_content,
+                            encoding="utf-8"
+                        )
+                    results.append(f"extracted {len(summaries)} sessions to {daily_file.name}")
+            else:
+                results.append("no sessions found for today")
+
+            # Step 4: 跑 compile.py
+            r = subprocess.run(
                 [r"C:\Users\blue_\.local\bin\uv.exe", "run",
                  "--directory", r"C:\Users\blue_\claude-memory-compiler",
                  "python", "scripts/compile.py"],
                 capture_output=True, text=True, encoding="utf-8", timeout=120
             )
-            return result.stdout.strip() or "(no output)"
+            results.append(f"compile: {r.stdout.strip()[:100] or '(no output)'}")
         except Exception as e:
-            return f"compile failed: {e}"
+            results.append(f"error: {e}")
+        return " | ".join(results)
 
-    result = await loop.run_in_executor(None, _run_compile)
-    logging.info(f"auto_compile_knowledge result: {result[:200]}")
+    result = await loop.run_in_executor(None, _extract_and_compile)
+    logging.info(f"auto_compile_knowledge result: {result[:300]}")
 
 
 def collect_daily_report() -> str:
