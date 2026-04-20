@@ -20124,6 +20124,7 @@ def collect_daily_report() -> str:
                     if r[1] == "user":
                         try:
                             h = int(r[3][11:13])  # HH from "YYYY-MM-DD HH:MM:SS"
+                            h = (h + 8) % 24  # UTC → 台灣時間（UTC+8）
                             slot = f"{h:02d}:00~{h+2:02d}:00" if h % 2 == 0 else f"{h-1:02d}:00~{h+1:02d}:00"
                             hour_counts[f"{(h//2)*2:02d}:00"] += 1
                         except Exception:
