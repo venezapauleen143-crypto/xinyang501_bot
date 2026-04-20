@@ -1594,6 +1594,56 @@ TOOLS = [
         }
     },
     {
+        "name": "tavily_search",
+        "description": "AI 智慧搜尋（比 ddg_search 更強）。直接回傳整理好的內容而非只是連結。適合搜尋全球任何問題：新聞、人物、事件、科技、歷史、經濟等。優先使用此工具搜尋。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字，中文或英文都行"},
+                "max_results": {"type": "integer", "description": "最多幾筆結果，預設 5"},
+                "search_depth": {"type": "string", "enum": ["basic", "advanced"], "description": "搜尋深度，basic=快速，advanced=深入（預設）"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "sports_scores",
+        "description": "ESPN 體育即時比分。支援 NBA、NFL、MLB、NHL、英超、西甲、德甲、意甲、法甲、歐冠、世界盃、MLS。當用戶問比賽結果、比分、今天誰贏時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sport": {"type": "string", "description": "聯賽名稱", "enum": ["nba", "wnba", "nfl", "mlb", "nhl", "mls", "epl", "laliga", "bundesliga", "seriea", "ligue1", "champions", "worldcup"]},
+                "date": {"type": "string", "description": "日期（YYYY-MM-DD），不填就是今天"}
+            },
+            "required": ["sport"]
+        }
+    },
+    {
+        "name": "global_news",
+        "description": "全球新聞搜尋（80000+ 來源）。可搜特定主題或瀏覽各國頭條。當用戶問最新新聞、國際新聞、某話題的新聞報導時使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字（留空=頭條新聞）"},
+                "category": {"type": "string", "description": "新聞分類", "enum": ["科技", "商業", "體育", "娛樂", "健康", "科學", ""]},
+                "country": {"type": "string", "description": "國家代碼：us=美國, tw=台灣, cn=中國, jp=日本, gb=英國, kr=韓國"},
+                "count": {"type": "integer", "description": "幾則新聞，預設 5，最多 10"}
+            }
+        }
+    },
+    {
+        "name": "baidu_search",
+        "description": "中國大陸資訊搜尋。搜尋中國的新聞、社群（知乎、微博、虎扑）、經濟數據、文化、旅遊等。當用戶問中國相關問題時優先使用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字，用中文"},
+                "max_results": {"type": "integer", "description": "最多幾筆結果，預設 5"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
         "name": "get_stock_advanced",
         "description": "股票進階技術分析：MACD、布林通道（BB）、KD隨機指標。當用戶問 MACD、布林通道、KD、進階技術分析時使用。",
         "input_schema": {
@@ -19237,6 +19287,66 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                 )
 
+            elif tool_use.name == "tavily_search":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, tavily_search,
+                    tool_use.input["query"],
+                    tool_use.input.get("max_results", 5),
+                    tool_use.input.get("search_depth", "advanced"))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "sports_scores":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_sports_scores,
+                    tool_use.input["sport"],
+                    tool_use.input.get("league", ""),
+                    tool_use.input.get("date", ""))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "global_news":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, fetch_global_news,
+                    tool_use.input.get("query", ""),
+                    tool_use.input.get("category", ""),
+                    tool_use.input.get("country", ""),
+                    tool_use.input.get("count", 5))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
+            elif tool_use.name == "baidu_search":
+                import asyncio
+                loop = asyncio.get_running_loop()
+                tool_result = await loop.run_in_executor(None, baidu_search,
+                    tool_use.input["query"],
+                    tool_use.input.get("max_results", 5))
+                response = client.messages.create(
+                    model="claude-sonnet-4-6", max_tokens=1024, system=system, tools=TOOLS,
+                    messages=history + [
+                        {"role": "assistant", "content": response.content},
+                        {"role": "user", "content": _build_tool_results(response.content, tool_use.id, tool_result)}
+                    ]
+                )
+
             elif tool_use.name == "get_fundamentals":
                 import asyncio
                 loop = asyncio.get_running_loop()
@@ -19615,6 +19725,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "position_statement":     lambda: fetch_position_statement(i.get("issue", ""), i.get("stance", ""), i.get("lang", "zh-tw")),
                 # ── 搜尋/網頁工具 ──
                 "ddg_search":             lambda: execute_ddg_search(i.get("query", ""), i.get("region", "zh-tw"), i.get("max_results", 5)),
+                "tavily_search":          lambda: tavily_search(i.get("query", ""), i.get("max_results", 5), i.get("search_depth", "advanced")),
+                "sports_scores":          lambda: fetch_sports_scores(i.get("sport", "nba"), i.get("league", ""), i.get("date", "")),
+                "global_news":            lambda: fetch_global_news(i.get("query", ""), i.get("category", ""), i.get("country", ""), i.get("count", 5)),
+                "baidu_search":           lambda: baidu_search(i.get("query", ""), i.get("max_results", 5)),
                 "multi_perspective":      lambda: multi_perspective(i.get("topic", ""), i.get("lang", "zh-tw")),
                 "google_trends":          lambda: fetch_google_trends(i.get("keywords", []), i.get("timeframe", "today 3-m"), i.get("geo", "TW")),
                 "read_webpage":           lambda: read_webpage(i.get("url", ""), i.get("max_chars", 3000)),
@@ -20010,10 +20124,10 @@ if __name__ == "__main__":
         goodnight,
         time=datetime.time(hour=14, minute=30, tzinfo=datetime.timezone.utc)
     )
-    # 每天晚上 10:35 台灣時間（UTC+8）= 14:35 UTC — 自動編譯知識庫
+    # 每天晚上 10:45 台灣時間（UTC+8）= 14:45 UTC — 自動編譯知識庫（晚安後 15 分鐘避免衝突）
     app.job_queue.run_daily(
         auto_compile_knowledge,
-        time=datetime.time(hour=14, minute=35, tzinfo=datetime.timezone.utc)
+        time=datetime.time(hour=14, minute=45, tzinfo=datetime.timezone.utc)
     )
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("chatid", chatid))
