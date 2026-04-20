@@ -308,16 +308,146 @@ def chat_hash(chat_img):
 
 
 # ============================================================
-# 維修 1+2: 分析函數 — 分層分析完整對話截圖
+# OCR 文字追蹤 + 像素顏色判斷 + Vision 保險
 # ============================================================
-def analyze_conversation(chat_img):
+def ocr_extract_messages(chat_img):
     """
-    Vision 分析完整對話截圖（不裁切）。
-    分層邏輯：
-    1. 讀完整對話理解上下文
-    2. 找到自己最後一條綠色氣泡的位置
-    3. 之後所有白色氣泡 = 對方的新訊息
-    4. 回傳：sender + 新訊息內容 + 是否需搜尋 + 搜尋關鍵字列表
+    OCR 提取對話區所有文字 + 像素顏色判斷 sender。
+    回傳: [{"text": "...", "sender": "them/me/unknown", "y": int}]
+    """
+    import pytesseract
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    import numpy as np
+
+    arr = np.array(chat_img)
+    cw, ch = chat_img.size
+
+    ocr_data = pytesseract.image_to_data(
+        chat_img, lang="chi_tra+eng", output_type=pytesseract.Output.DICT
+    )
+
+    raw_items = []
+    for i, txt in enumerate(ocr_data["text"]):
+        t = txt.strip()
+        conf = int(ocr_data["conf"][i])
+        if not t or conf < 40:
+            continue
+        x = ocr_data["left"][i]
+        y = ocr_data["top"][i]
+        w = ocr_data["width"][i]
+        h = ocr_data["height"][i]
+
+        # 像素顏色判斷：取文字左邊 5px 的背景色
+        sample_x = max(0, x - 5)
+        sample_y = min(ch - 1, y + h // 2)
+        if sample_y < arr.shape[0] and sample_x < arr.shape[1]:
+            r, g, b = int(arr[sample_y, sample_x, 0]), int(arr[sample_y, sample_x, 1]), int(arr[sample_y, sample_x, 2])
+            if g > 170 and g > r and g > b and r < 220:
+                sender = "me"  # 綠色背景
+            elif r > 225 and g > 225 and b > 225:
+                sender = "them"  # 白色背景
+            else:
+                sender = "unknown"
+        else:
+            sender = "unknown"
+
+        raw_items.append({"text": t, "sender": sender, "x": x, "y": y, "conf": conf})
+
+    # 合併相鄰的同 sender 文字成一條訊息（y 差距 < 30px 視為同一條）
+    if not raw_items:
+        return []
+
+    messages = []
+    current = {"text": raw_items[0]["text"], "sender": raw_items[0]["sender"],
+               "y": raw_items[0]["y"], "min_conf": raw_items[0]["conf"]}
+
+    for item in raw_items[1:]:
+        same_sender = item["sender"] == current["sender"]
+        close_y = abs(item["y"] - current["y"]) < 30
+        if same_sender and close_y:
+            current["text"] += " " + item["text"]
+            current["min_conf"] = min(current["min_conf"], item["conf"])
+        else:
+            messages.append(current)
+            current = {"text": item["text"], "sender": item["sender"],
+                       "y": item["y"], "min_conf": item["conf"]}
+    messages.append(current)
+
+    return messages
+
+
+def detect_new_messages(previous_msgs, current_msgs):
+    """
+    比對新舊訊息列表，回傳新增的對方訊息。
+    用模糊比對（相似度 > 70%）避免 OCR 微小差異導致誤判。
+    """
+    from difflib import SequenceMatcher
+
+    prev_texts = [m["text"] for m in previous_msgs]
+    new_them = []
+
+    for msg in current_msgs:
+        if msg["sender"] != "them":
+            continue
+        # 檢查這條訊息是不是已經存在於上一次的列表
+        is_old = False
+        for pt in prev_texts:
+            ratio = SequenceMatcher(None, msg["text"], pt).ratio()
+            if ratio > 0.7:
+                is_old = True
+                break
+        if not is_old:
+            new_them.append(msg["text"])
+
+    return new_them
+
+
+def detect_search_needs(new_messages_text):
+    """
+    關鍵字偵測：新訊息需不需要搜尋事實資料。
+    回傳: (needs_search: bool, search_queries: list)
+    """
+    dc = get_date_context()
+    all_text = " ".join(new_messages_text)
+
+    sport_kw = ["NBA", "nba", "NFL", "MLB", "NHL", "足球", "籃球", "棒球",
+                "比賽", "比分", "球隊", "賽", "冠軍", "季後賽", "playoffs",
+                "Celtics", "Thunder", "Lakers", "Warriors", "馬刺", "勇士", "湖人"]
+    stock_kw = ["台積電", "鴻海", "聯發科", "股票", "股價", "TSMC", "2330",
+                "大盤", "加權指數", "美股", "股市"]
+    news_kw = ["新聞", "最新", "發生了什麼", "頭條"]
+    weather_kw = ["天氣", "氣溫", "下雨", "颱風"]
+
+    queries = []
+
+    has_sport = any(kw in all_text for kw in sport_kw)
+    has_stock = any(kw in all_text for kw in stock_kw)
+    has_news = any(kw in all_text for kw in news_kw)
+    has_weather = any(kw in all_text for kw in weather_kw)
+
+    if has_sport:
+        q = resolve_relative_dates(all_text[:60] + " NBA賽程")
+        queries.append(q)
+    if has_stock:
+        for kw in ["台積電", "鴻海", "聯發科"]:
+            if kw in all_text:
+                queries.append(f"{kw}股價")
+                break
+        else:
+            queries.append(resolve_relative_dates(all_text[:40] + " 股價"))
+    if has_news:
+        queries.append(resolve_relative_dates(all_text[:40] + f" {dc['today']}"))
+    if has_weather:
+        queries.append("台灣天氣")
+
+    needs_search = len(queries) > 0
+    return needs_search, queries
+
+
+def vision_fallback_analyze(chat_img):
+    """
+    Vision 保險：OCR 失敗或信心度太低時，用 Vision 分析。
+    只在 OCR 搞不定時才呼叫，不是每次都用。
     """
     tmp = os.path.join(TMPDIR, "tg_analyze.png")
     chat_img.save(tmp, quality=95)
@@ -443,54 +573,59 @@ def search_for_queries(search_queries):
 
 
 # ============================================================
-# 維修 2+4+5: 回覆函數 — 帶搜尋結果生成回覆
+# 文字 API 回覆（不傳圖片，比 Vision 快 2-3 倍）
 # ============================================================
-def generate_reply_with_context(chat_img, new_messages, search_context=""):
+def generate_text_reply(conversation_history, new_messages_text, search_context=""):
     """
-    Vision 看完整對話截圖 + 對方新訊息摘要 + 搜尋結果 → 生成回覆
-    維修 5: prompt 禁止引用自己綠色氣泡的數字
+    Claude 文字 API 回覆。用對話歷史文字 + 新訊息 + 搜尋結果。
+    不傳圖片 → 快很多。
+    conversation_history: [{"text": "...", "sender": "them/me"}]
+    new_messages_text: ["新訊息1", "新訊息2"]
     """
-    tmp = os.path.join(TMPDIR, "tg_auto_chat.png")
-    chat_img.save(tmp, quality=95)
-    with open(tmp, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
+    dc = get_date_context()
+    system_prompt = PERSONA + f"\n\n{dc['prompt']}"
 
-    system_prompt = PERSONA
     if search_context:
         system_prompt += (
             "\n\n====== 搜尋到的最新事實資料 ======\n"
             + search_context[:2000]
             + "\n====== 事實資料結束 ======\n\n"
             "【絕對規則】\n"
-            "1. 上面搜尋結果裡有的比分、數字、價格 → 必須用搜尋結果的，一個字都不能改\n"
-            "2. 搜尋結果裡沒有提到的比分、數字、球員數據 → 絕對不能自己編，說「這個我不確定」\n"
-            "3. 不能把 A 隊的比分說成 B 隊的，不能把昨天的說成今天的\n"
-            "4. 寧可回答「我不知道細節」也不能編造任何數字\n"
-            "5. 【重要】綠色氣泡是你自己之前說的話，裡面的數字不是事實來源。"
-            "每次回答都用上面搜尋結果的數字，不要引用自己之前說過的任何數字。\n"
+            "1. 搜尋結果裡有的比分、數字、價格 → 必須用搜尋結果的，一個字都不能改\n"
+            "2. 搜尋結果沒提到的數字 → 絕對不能自己編，說「這個我不確定」\n"
+            "3. 不能把 A 隊的比分說成 B 隊的\n"
+            "4. 寧可回答「我不知道」也不能編造任何數字\n"
+            "5. 不要引用你自己之前說過的數字當事實，每次都用搜尋結果\n"
         )
 
-    user_prompt = f"""這是 Telegram 完整對話截圖。
+    # 組對話歷史（最近 15 條）
+    history_lines = []
+    for msg in conversation_history[-15:]:
+        label = "[對方]" if msg["sender"] == "them" else "[我]"
+        history_lines.append(f"{label} {msg['text']}")
+    history_text = "\n".join(history_lines)
 
-對方在你最後一條綠色氣泡之後發了以下新訊息：
-「{new_messages}」
+    new_text = "\n".join(f"• {m}" for m in new_messages_text)
 
-請針對對方的這些新訊息回覆。
-- 讀完整對話理解上下文和前因後果
-- 但只回覆對方的新訊息，不要重複回覆之前已經回過的內容
+    user_content = f"""以下是 Telegram 對話紀錄（最近的訊息）：
+
+{history_text}
+
+對方剛發了新訊息：
+{new_text}
+
+請回覆對方的新訊息。
+- 根據對話上下文回覆，不要重複之前說過的
 - 對方問問題就回答，嗆人就幽默化解，聊天就接話
 - 如果對方連發多條，整體理解後一次回覆
-- 如果涉及比賽結果、股價等事實 → 只能用搜尋結果的數字
-- 搜尋結果沒有的就說「這個我沒查到」
+- 如果涉及事實（比賽/股價/新聞），只能用搜尋結果的數字
+- 搜尋結果沒有的就說不確定
 
 只回覆要發送的文字，不要加任何格式或解釋。"""
 
     r = client.messages.create(
         model="claude-sonnet-4-6", max_tokens=200, system=system_prompt,
-        messages=[{"role": "user", "content": [
-            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
-            {"type": "text", "text": user_prompt}
-        ]}]
+        messages=[{"role": "user", "content": user_content}]
     )
     return r.content[0].text.strip()
 
@@ -509,110 +644,135 @@ def send_reply(msg, regions):
 
 def monitor_and_reply(regions, stop_time, monitor=2):
     """
-    監控對話區，偵測變化後：
-    1. 等 1.5 秒穩定（避免動畫/已讀標記觸發假變化）
-    2. 二次截圖確認真的有變化
-    3. 等對方說完（最多 2+2=4 秒）
-    4. 一次 Vision 分析完整對話（分層：上下文 + 新訊息 + sender）
-    5. sender=them → 搜尋（如需要）→ 生成回覆
+    OCR 文字追蹤監控。
+    1. 截圖 → OCR 提取文字 + 像素顏色判斷 sender
+    2. 跟上次比對 → 找新增的對方訊息
+    3. 等對方說完（2+2 秒）
+    4. 關鍵字搜尋（本地判斷）
+    5. Claude 文字 API 回覆（不傳圖片）
+    6. OCR 失敗時 → Vision 保險
     """
-    STABILIZE_WAIT = 1.5    # 維修 4: 從 3 秒降到 1.5 秒
-    WAIT_COMPLETE = 2       # 維修 4: 等對方說完每輪 2 秒（最多 2 輪）
+    WAIT_COMPLETE = 2
     WAIT_COMPLETE_ROUNDS = 2
 
-    # 先截一張當基準
+    # OCR 追蹤：儲存上次的訊息列表
     chat = grab_chat(regions, monitor)
+    previous_messages = ocr_extract_messages(chat)
     last_hash = chat_hash(chat)
     cooldown_until = 0
 
+    # 對話歷史（給 Claude 文字 API 用）
+    conversation_history = list(previous_messages)  # 初始化
+
     print(f"[Monitor] 開始監控 → {stop_time}", flush=True)
-    print(f"[Monitor] 冷卻：{COOLDOWN_SECONDS}s / 輪詢：{POLL_INTERVAL}s / 穩定：{STABILIZE_WAIT}s / 等說完：{WAIT_COMPLETE}sx{WAIT_COMPLETE_ROUNDS}", flush=True)
+    print(f"[Monitor] 模式：OCR 文字追蹤 + Vision 保險", flush=True)
+    print(f"[Monitor] 冷卻：{COOLDOWN_SECONDS}s / 輪詢：{POLL_INTERVAL}s / 等說完：{WAIT_COMPLETE}sx{WAIT_COMPLETE_ROUNDS}", flush=True)
+    print(f"[Monitor] 初始訊息數：{len(previous_messages)}", flush=True)
 
     while datetime.now().strftime("%H:%M") < stop_time:
         time.sleep(POLL_INTERVAL)
         try:
-            # 冷卻期間跳過
             if time.time() < cooldown_until:
                 continue
 
             chat = grab_chat(regions, monitor)
             h = chat_hash(chat)
 
-            if h != last_hash:
-                t = datetime.now().strftime("%H:%M:%S")
-                print(f"[{t}] 偵測到畫面變化，等 {STABILIZE_WAIT}s 穩定...", flush=True)
+            if h == last_hash:
+                continue
 
-                # === 穩定等待 ===
-                time.sleep(STABILIZE_WAIT)
+            t = datetime.now().strftime("%H:%M:%S")
 
-                # === 二次截圖確認 ===
-                chat2 = grab_chat(regions, monitor)
-                h2 = chat_hash(chat2)
-                if h2 == last_hash:
-                    print(f"[{t}] 假變化，跳過", flush=True)
-                    last_hash = h2
-                    continue
+            # === 等對方說完（最多 2 輪 x 2 秒）===
+            latest_chat = chat
+            latest_hash = h
+            for wait_round in range(WAIT_COMPLETE_ROUNDS):
+                time.sleep(WAIT_COMPLETE)
+                check = grab_chat(regions, monitor)
+                check_h = chat_hash(check)
+                if check_h != latest_hash:
+                    print(f"[{t}] 對方還在發（第{wait_round+1}輪），等...", flush=True)
+                    latest_chat = check
+                    latest_hash = check_h
+                else:
+                    break
 
-                # === 等對方說完（最多 2 輪 x 2 秒 = 4 秒）===
-                latest_chat = chat2
-                latest_hash = h2
-                for wait_round in range(WAIT_COMPLETE_ROUNDS):
-                    time.sleep(WAIT_COMPLETE)
-                    check = grab_chat(regions, monitor)
-                    check_h = chat_hash(check)
-                    if check_h != latest_hash:
-                        print(f"[{t}] 對方還在發訊息（第{wait_round+1}輪），等...", flush=True)
-                        latest_chat = check
-                        latest_hash = check_h
-                    else:
-                        break  # 穩定了，對方說完了
+            # === OCR 提取文字 + 像素顏色判斷 ===
+            current_messages = ocr_extract_messages(latest_chat)
+            avg_conf = sum(m.get("min_conf", 50) for m in current_messages) / max(len(current_messages), 1)
 
-                # === 維修 1+2: 一次 Vision 分析完整對話 ===
-                analysis = analyze_conversation(latest_chat)
+            # === 判斷用 OCR 還是 Vision ===
+            use_vision = False
+            if len(current_messages) == 0:
+                print(f"[{t}] OCR 提取不到文字，啟用 Vision 保險", flush=True)
+                use_vision = True
+            elif avg_conf < 45:
+                print(f"[{t}] OCR 信心度太低（{avg_conf:.0f}），啟用 Vision 保險", flush=True)
+                use_vision = True
+
+            if use_vision:
+                # === Vision 保險 ===
+                analysis = vision_fallback_analyze(latest_chat)
                 sender = analysis.get("sender", "unknown")
-                new_msgs = analysis.get("new_messages", "")
+                new_msgs_text = [analysis.get("new_messages", "")] if analysis.get("new_messages") else []
                 needs_search = analysis.get("needs_search", False)
                 search_queries = analysis.get("search_queries", [])
+                print(f"[{t}] Vision: sender={sender} new={new_msgs_text[:1]} search={needs_search}", flush=True)
 
-                print(f"[{t}] 分析：sender={sender} new_msgs={new_msgs[:50]} needs_search={needs_search} queries={search_queries}", flush=True)
-
-                if sender == "me":
-                    print(f"[{t}] 最後是自己的訊息，跳過", flush=True)
+                if sender != "them" or not new_msgs_text:
                     last_hash = latest_hash
+                    previous_messages = current_messages if current_messages else previous_messages
+                    if sender == "me":
+                        print(f"[{t}] 自己的訊息，跳過", flush=True)
+                    else:
+                        print(f"[{t}] sender={sender}，跳過", flush=True)
                     continue
-
-                if sender == "unknown":
-                    print(f"[{t}] 無法判斷發送者，跳過", flush=True)
-                    last_hash = latest_hash
-                    continue
-
-                # === sender == "them"：對方發了新訊息 ===
-
-                # === 維修 3: 搜尋（用 search_queries，分別用對的工具）===
-                search_context = ""
-                if needs_search and search_queries:
-                    print(f"[{t}] 搜尋：{search_queries}", flush=True)
-                    search_context = search_for_queries(search_queries)
-                    print(f"[{t}] 搜尋完成（{len(search_context)} chars）", flush=True)
-
-                # === 維修 2+5: 生成回覆（帶新訊息摘要 + 搜尋結果）===
-                reply = generate_reply_with_context(latest_chat, new_msgs, search_context)
-
-                if reply and len(reply) > 1:
-                    print(f"[{t}] → 回覆：{reply}", flush=True)
-                    send_reply(reply, regions)
-
-                    cooldown_until = time.time() + COOLDOWN_SECONDS
-                    print(f"[{t}] 冷卻 {COOLDOWN_SECONDS} 秒", flush=True)
-
-                    time.sleep(COOLDOWN_SECONDS)
-                    chat = grab_chat(regions, monitor)
-                    last_hash = chat_hash(chat)
-                else:
-                    print(f"[{t}] 生成回覆為空，跳過", flush=True)
-                    last_hash = latest_hash
             else:
-                last_hash = h
+                # === OCR 主流程：比對找新訊息 ===
+                new_them_msgs = detect_new_messages(previous_messages, current_messages)
+
+                if not new_them_msgs:
+                    # 沒有新的對方訊息（可能是自己的訊息或系統變化）
+                    last_hash = latest_hash
+                    previous_messages = current_messages
+                    conversation_history = list(current_messages)
+                    continue
+
+                print(f"[{t}] OCR 偵測到 {len(new_them_msgs)} 條新訊息：{new_them_msgs}", flush=True)
+                new_msgs_text = new_them_msgs
+
+                # 關鍵字偵測搜尋需求（本地，0.01 秒）
+                needs_search, search_queries = detect_search_needs(new_msgs_text)
+                print(f"[{t}] 關鍵字偵測：needs_search={needs_search} queries={search_queries}", flush=True)
+
+            # === 搜尋（如需要）===
+            search_context = ""
+            if needs_search and search_queries:
+                print(f"[{t}] 搜尋：{search_queries}", flush=True)
+                search_context = search_for_queries(search_queries)
+                print(f"[{t}] 搜尋完成（{len(search_context)} chars）", flush=True)
+
+            # === Claude 文字 API 回覆（不傳圖片）===
+            reply = generate_text_reply(conversation_history, new_msgs_text, search_context)
+
+            if reply and len(reply) > 1:
+                print(f"[{t}] → 回覆：{reply}", flush=True)
+                send_reply(reply, regions)
+
+                cooldown_until = time.time() + COOLDOWN_SECONDS
+                print(f"[{t}] 冷卻 {COOLDOWN_SECONDS} 秒", flush=True)
+
+                # 冷卻結束後更新追蹤
+                time.sleep(COOLDOWN_SECONDS)
+                chat = grab_chat(regions, monitor)
+                last_hash = chat_hash(chat)
+                previous_messages = ocr_extract_messages(chat)
+                conversation_history = list(previous_messages)
+            else:
+                print(f"[{t}] 回覆為空，跳過", flush=True)
+                last_hash = latest_hash
+                previous_messages = current_messages
+                conversation_history = list(current_messages)
 
         except Exception as e:
             print(f"[ERR] {e}", flush=True)
