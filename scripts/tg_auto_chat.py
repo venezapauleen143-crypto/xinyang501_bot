@@ -22,7 +22,9 @@ import base64
 import hashlib
 import ctypes
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+# 只在直接執行時替換 stdout
+if __name__ == "__main__":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(0)

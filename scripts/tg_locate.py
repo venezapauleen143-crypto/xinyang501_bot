@@ -27,6 +27,19 @@ import numpy as np
 if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
+
+def _print(msg):
+    """安全 print，避免 cp950 編碼或 closed stdout 問題"""
+    try:
+        print(msg)
+    except (ValueError, UnicodeEncodeError):
+        try:
+            sys.stderr.write(msg + "\n")
+            sys.stderr.flush()
+        except Exception:
+            pass
+
+
 import win32gui
 import mss
 import pytesseract
@@ -198,25 +211,25 @@ def locate_telegram_regions(monitor=2, debug=False):
     }
     所有座標都是螢幕絕對座標（可以直接用 pyautogui.click）
     """
-    print("[tg_locate] 開始定位...", flush=True)
+    _print("[tg_locate] 開始定位...")
 
     # Step 1: 截圖
     full_img, tg_crop, (il, it, ir, ib), mon = screenshot_telegram(monitor)
     tg_w, tg_h = tg_crop.size
-    print(f"[tg_locate] Telegram: {tg_w}x{tg_h} at ({il},{it})-({ir},{ib})", flush=True)
+    print(f"[tg_locate] Telegram: {tg_w}x{tg_h} at ({il},{it})-({ir},{ib})")
 
     # Step 2: 像素分析找分隔線
     sep_x = find_separator_by_pixel(tg_crop)
-    print(f"[tg_locate] 分隔線: x={sep_x}", flush=True)
+    print(f"[tg_locate] 分隔線: x={sep_x}")
 
     # Step 3: OCR 找搜尋欄
     ocr_search = find_search_by_ocr(tg_crop)
     if ocr_search:
-        print(f"[tg_locate] OCR 找到「{ocr_search['text']}」at ({ocr_search['left']},{ocr_search['top']})", flush=True)
+        print(f"[tg_locate] OCR 找到「{ocr_search['text']}」at ({ocr_search['left']},{ocr_search['top']})")
 
     # Step 4: Claude Vision 找所有元素
     vision = find_regions_by_vision(tg_crop)
-    print(f"[tg_locate] Vision: {json.dumps(vision, ensure_ascii=False)}", flush=True)
+    print(f"[tg_locate] Vision: {json.dumps(vision, ensure_ascii=False)}")
 
     # Step 5: 組合結果，交叉驗證
     # 搜尋欄：優先用 OCR（更精確），Vision 當備援
@@ -236,7 +249,7 @@ def locate_telegram_regions(monitor=2, debug=False):
     fn = {"left": v_fn["l"], "top": v_fn["t"], "right": v_fn["r"], "bottom": v_fn["b"]}
     # 驗證：名字框不應該太大
     if (fn["bottom"] - fn["top"]) > 40 or (fn["right"] - fn["left"]) > 400:
-        print("[tg_locate] WARNING: friend_name 框太大，可能不準確", flush=True)
+        _print("[tg_locate] WARNING: friend_name 框太大，可能不準確")
 
     # 輸入框：用 Vision
     v_ib = vision["input_box"]
@@ -283,10 +296,10 @@ def locate_telegram_regions(monitor=2, debug=False):
         "tg_window": {"left": il, "top": it, "right": ir, "bottom": ib},
     }
 
-    print("[tg_locate] 定位完成", flush=True)
+    _print("[tg_locate] 定位完成")
     for name in ["search_bar", "friend_name", "chat_area", "input_box", "contact_list"]:
         r = result[name]
-        print(f"  {name}: ({r['left']},{r['top']})-({r['right']},{r['bottom']}) center={r['center']}", flush=True)
+        _print(f"  {name}: ({r['left']},{r['top']})-({r['right']},{r['bottom']}) center={r['center']}")
 
     # Debug: 畫出來存檔
     if debug:
@@ -310,7 +323,7 @@ def locate_telegram_regions(monitor=2, debug=False):
             )
         out = os.path.join(TMPDIR, "tg_locate_debug.png")
         full_img.save(out)
-        print(f"  debug 截圖: {out}", flush=True)
+        _print(f"  debug 截圖: {out}")
 
     return result
 
@@ -319,4 +332,4 @@ def locate_telegram_regions(monitor=2, debug=False):
 if __name__ == "__main__":
     regions = locate_telegram_regions(monitor=2, debug=False)
     print("\n=== 結果 ===")
-    print(json.dumps(regions, ensure_ascii=False, indent=2, default=str))
+    _print(json.dumps(regions, ensure_ascii=False, indent=2, default=str))
