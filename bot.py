@@ -290,10 +290,12 @@ SYSTEM_PROMPT_OWNER = """你的名字叫小牛馬。
 簡單說：**能查就查，寧可多查也不要用過時的記憶回答。**
 
 查完之後的規則：
-- 查到了 → 消化後用自己的話回答，不要列原始資料
+- 查到了具體資料 → 消化後用自己的話回答，不要列原始資料
+- 查到了連結但沒有具體數字/比分/結果 → 用 read_webpage 打開連結看內容，不要自己編數字
 - 查不到 → 老實說「我查了但查不到」，不要編造
 - 工具回傳「失敗」「錯誤」→ 如實告訴用戶工具失敗了，絕對不能假裝查到了
-- 不確定的事不能說「我已經是XX」「我就是XX」，必須說「我不確定，讓我查一下」"""
+- 不確定的事不能說「我已經是XX」「我就是XX」，必須說「我不確定，讓我查一下」
+- 【最重要】絕對不能自己編造具體數字、比分、排名、價格、統計數據。搜尋結果裡沒有的數字就是不知道，說不知道比說錯好一萬倍。"""
 
 SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 
@@ -372,10 +374,12 @@ SYSTEM_PROMPT_DEFAULT = """你的名字叫小牛馬。
 簡單說：**能查就查，寧可多查也不要用過時的記憶回答。**
 
 查完之後的規則：
-- 查到了 → 消化後用自己的話回答，不要列原始資料
+- 查到了具體資料 → 消化後用自己的話回答，不要列原始資料
+- 查到了連結但沒有具體數字/比分/結果 → 用 read_webpage 打開連結看內容，不要自己編數字
 - 查不到 → 老實說「我查了但查不到」，不要編造
 - 工具回傳「失敗」「錯誤」→ 如實告訴用戶工具失敗了，絕對不能假裝查到了
-- 不確定的事不能說「我已經是XX」「我就是XX」，必須說「我不確定，讓我查一下」"""
+- 不確定的事不能說「我已經是XX」「我就是XX」，必須說「我不確定，讓我查一下」
+- 【最重要】絕對不能自己編造具體數字、比分、排名、價格、統計數據。搜尋結果裡沒有的數字就是不知道，說不知道比說錯好一萬倍。"""
 
 # ── 意圖分類器 ──────────────────────────────────────────────────────────────
 def classify_intent(user_text: str, last_bot_msg: str = "") -> str:
@@ -16743,6 +16747,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ── 自動預查：詢問性問題先搜尋，結果注入 context ──────────────
         _auto_search_result = ""
+        _auto_webpage_content = ""
         if _intent in ("chat", "research", "finance", "search"):
             import re as _re_q
             _is_question = bool(_re_q.search(
@@ -16755,13 +16760,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ))
             if _is_question and len((user_text or "").strip()) >= 4:
                 try:
-                    _q = (user_text or "").strip()[:80]
+                    _q_raw = (user_text or "").strip()[:80]
                     _loop_pre = __import__("asyncio").get_running_loop()
+                    # 加日期讓搜尋更精確
+                    _today_str = datetime.date.today().strftime("%Y-%m-%d")
+                    _q = f"{_q_raw} {_today_str}"
+                    # Step 1: 搜尋拿連結（中文 + 英文各搜一次，取較好的）
                     _auto_search_result = await _loop_pre.run_in_executor(
-                        None, execute_ddg_search, _q, "zh-tw", 3
+                        None, execute_ddg_search, _q, "zh-tw", 5
                     )
+                    # 如果中文結果太少或品質差，補搜英文
+                    if not _auto_search_result or len(_auto_search_result) < 200:
+                        _en_result = await _loop_pre.run_in_executor(
+                            None, execute_ddg_search, _q_raw, "us-en", 5
+                        )
+                        if _en_result and "搜尋失敗" not in _en_result:
+                            _auto_search_result = (_auto_search_result or "") + "\n\n" + _en_result
                     if _auto_search_result and "搜尋失敗" not in _auto_search_result:
                         logging.info(f"AutoSearch: query={_q[:30]} results={len(_auto_search_result)} chars")
+                        # Step 2: 自動讀第一個搜尋結果的網頁內容
+                        try:
+                            _urls = _re_q.findall(r'https?://[^\s\n]+', _auto_search_result)
+                            if _urls:
+                                # 跳過 Yahoo/Google 等入口頁，找有內容的 URL
+                                _skip_domains = ['yahoo.com/nba/scoreboard', 'google.com', 'youtube.com', 'facebook.com', 'tiktok.com', 'olympics.com', 'instagram.com', 'twitter.com', 'x.com']
+                                _target_url = None
+                                for _u in _urls[:3]:
+                                    if not any(sd in _u for sd in _skip_domains):
+                                        _target_url = _u
+                                        break
+                                if not _target_url:
+                                    _target_url = _urls[0]
+                                _auto_webpage_content = await _loop_pre.run_in_executor(
+                                    None, read_webpage, _target_url, 2000
+                                )
+                                if _auto_webpage_content and "失敗" not in _auto_webpage_content:
+                                    logging.info(f"AutoRead: url={_target_url[:50]} content={len(_auto_webpage_content)} chars")
+                                else:
+                                    _auto_webpage_content = ""
+                        except Exception as _e_ar:
+                            logging.warning(f"AutoRead failed: {_e_ar}")
+                            _auto_webpage_content = ""
                     else:
                         _auto_search_result = ""
                 except Exception as _e_as:
@@ -16772,8 +16811,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         system_blocks = [{"type": "text", "text": base_system, "cache_control": {"type": "ephemeral"}}]
         if memories:
             system_blocks.append({"type": "text", "text": f"\n\n【長期記憶】以下是你記住的重要資訊，回覆時請參考：\n{mem_text}"})
-        if _auto_search_result:
-            system_blocks.append({"type": "text", "text": f"\n\n【自動搜尋結果】以下是剛剛自動搜尋到的最新資料，回答時請優先參考這些資料，不要用你的舊記憶：\n{_auto_search_result}"})
+        if _auto_search_result or _auto_webpage_content:
+            _search_ctx = ""
+            if _auto_search_result:
+                _search_ctx += f"【搜尋結果】\n{_auto_search_result}\n\n"
+            if _auto_webpage_content:
+                _search_ctx += f"【網頁內容（自動讀取）】\n{_auto_webpage_content}\n\n"
+            _search_ctx += "【重要規則】以上是自動搜尋到的最新資料。回答時：\n" \
+                          "1. 必須基於以上資料回答，不要用你的舊記憶\n" \
+                          "2. 如果資料裡沒有具體答案（如具體比分、具體數字），你必須說「我查到了相關資訊但沒有找到具體數據」，絕對不能自己編造\n" \
+                          "3. 寧可回答不完整，也不要補上假資料"
+            system_blocks.append({"type": "text", "text": f"\n\n{_search_ctx}"})
 
         # ── 對話歷史修復：確保每個 tool_use 都有對應的 tool_result ──
         def _fix_history(hist):
