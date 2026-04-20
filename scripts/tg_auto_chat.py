@@ -262,10 +262,17 @@ def chat_hash(chat_img):
     return hashlib.md5(small.tobytes()).hexdigest()
 
 
-def analyze_last_sender(chat_img):
+# ============================================================
+# 維修 1+2: 分析函數 — 分層分析完整對話截圖
+# ============================================================
+def analyze_conversation(chat_img):
     """
-    Vision 分析最底部的訊息是誰發的 + 對話主題
-    回傳: {"sender": "them" 或 "me", "topic": "對話主題摘要", "needs_search": True/False}
+    Vision 分析完整對話截圖（不裁切）。
+    分層邏輯：
+    1. 讀完整對話理解上下文
+    2. 找到自己最後一條綠色氣泡的位置
+    3. 之後所有白色氣泡 = 對方的新訊息
+    4. 回傳：sender + 新訊息內容 + 是否需搜尋 + 搜尋關鍵字列表
     """
     tmp = os.path.join(TMPDIR, "tg_analyze.png")
     chat_img.save(tmp, quality=95)
@@ -273,20 +280,27 @@ def analyze_last_sender(chat_img):
         b64 = base64.b64encode(f.read()).decode()
 
     r = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=150,
+        model="claude-sonnet-4-6", max_tokens=300,
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
-            {"type": "text", "text": """這是 Telegram 對話截圖。
+            {"type": "text", "text": """這是 Telegram 完整對話截圖。
 綠色氣泡（靠右）= 我發的
 白色氣泡（靠左）= 對方發的
 
-請分析：
-1. 最底部最後一條訊息是誰發的？看氣泡顏色和位置。
-2. 對話在聊什麼主題？用一句話摘要。
-3. 對話是否涉及事實性問題（比賽結果、新聞、數據、排名、價格等需要查證的資訊）？
+請按以下步驟分析：
+
+步驟一：找到畫面中【我的最後一條綠色氣泡】的位置。
+
+步驟二：看那條綠色氣泡【之後】有沒有白色氣泡。
+- 如果最底部是綠色氣泡（我的）→ sender = "me"
+- 如果綠色氣泡之後有白色氣泡（對方的）→ sender = "them"
+
+步驟三：如果 sender = "them"，把對方在我最後一條綠色氣泡之後發的【所有白色氣泡的內容】整理出來（可能有多條）。
+
+步驟四：判斷對方的這些新訊息裡有沒有需要查證的事實性問題（比賽比分、股票價格、新聞事件、數據排名等）。如果有，列出具體要搜尋的關鍵字。
 
 只回 JSON，不要其他文字：
-{"sender":"them或me","topic":"主題摘要","needs_search":true或false}"""}
+{"sender":"them或me","new_messages":"對方新訊息的完整內容（多條合併）","needs_search":true或false,"search_queries":["要搜的關鍵字1","要搜的關鍵字2"]}"""}
         ]}]
     )
     resp = r.content[0].text.strip()
@@ -299,33 +313,75 @@ def analyze_last_sender(chat_img):
             return json.loads(match.group())
     except Exception:
         pass
-    return {"sender": "unknown", "topic": "", "needs_search": False}
+    return {"sender": "unknown", "new_messages": "", "needs_search": False, "search_queries": []}
 
 
-def search_for_context(topic):
-    """如果對話涉及事實性問題，先搜尋再回覆"""
+# ============================================================
+# 維修 3: 搜尋函數 — 根據 search_queries 分別用對的工具
+# ============================================================
+def search_for_queries(search_queries):
+    """根據每個 query 的類型用對應的工具搜尋，合併結果"""
+    if not search_queries:
+        return ""
     try:
         sys.path.insert(0, str(Path("C:/Users/blue_/claude-telegram-bot")))
-        from bot import tavily_search, fetch_sports_scores
+        from bot import tavily_search, fetch_sports_scores, fetch_stock
 
-        # 判斷是否體育相關
         sport_keywords = ["NBA", "nba", "NFL", "MLB", "NHL", "足球", "籃球", "棒球",
-                          "比賽", "比分", "球", "隊", "賽", "冠軍", "季後賽", "playoffs"]
-        is_sports = any(kw in topic for kw in sport_keywords)
+                          "比賽", "比分", "球隊", "賽", "冠軍", "季後賽", "playoffs",
+                          "Celtics", "Thunder", "Lakers", "Warriors"]
+        stock_keywords = ["台積電", "鴻海", "聯發科", "股票", "股價", "TSMC", "2330",
+                          "大盤", "加權指數", "美股", "股市"]
 
-        if is_sports:
-            # 先用 ESPN 拿即時比分
-            scores = fetch_sports_scores("nba")
-            search_result = tavily_search(topic, 3, "basic")
-            return f"【即時比分】\n{scores}\n\n【搜尋結果】\n{search_result}"
-        else:
-            return tavily_search(topic, 3, "basic")
+        results = []
+        sports_done = False
+
+        for query in search_queries[:3]:  # 最多搜 3 個
+            is_sport = any(kw in query for kw in sport_keywords)
+            is_stock = any(kw in query for kw in stock_keywords)
+
+            if is_sport and not sports_done:
+                scores = fetch_sports_scores("nba")
+                results.append(f"【ESPN 即時比分】\n{scores}")
+                sports_done = True
+                # 也用 Tavily 補充
+                tr = tavily_search(query, 2, "basic")
+                if tr and "失敗" not in tr:
+                    results.append(f"【{query} 搜尋】\n{tr}")
+
+            elif is_stock:
+                # 判斷是哪支股票
+                if "台積電" in query or "TSMC" in query or "2330" in query:
+                    stock_result = fetch_stock("2330.TW")
+                    results.append(f"【台積電台股報價】\n{stock_result}")
+                elif "鴻海" in query:
+                    stock_result = fetch_stock("2317.TW")
+                    results.append(f"【鴻海台股報價】\n{stock_result}")
+                elif "聯發科" in query:
+                    stock_result = fetch_stock("2454.TW")
+                    results.append(f"【聯發科台股報價】\n{stock_result}")
+                else:
+                    tr = tavily_search(query, 2, "basic")
+                    if tr and "失敗" not in tr:
+                        results.append(f"【{query} 搜尋】\n{tr}")
+            else:
+                tr = tavily_search(query, 2, "basic")
+                if tr and "失敗" not in tr:
+                    results.append(f"【{query} 搜尋】\n{tr}")
+
+        return "\n\n".join(results) if results else ""
     except Exception as e:
         return f"搜尋失敗：{e}"
 
 
-def generate_reply(chat_img, search_context=""):
-    """Claude Vision 分析對話並生成回覆，可帶入搜尋到的事實資料"""
+# ============================================================
+# 維修 2+4+5: 回覆函數 — 帶搜尋結果生成回覆
+# ============================================================
+def generate_reply_with_context(chat_img, new_messages, search_context=""):
+    """
+    Vision 看完整對話截圖 + 對方新訊息摘要 + 搜尋結果 → 生成回覆
+    維修 5: prompt 禁止引用自己綠色氣泡的數字
+    """
     tmp = os.path.join(TMPDIR, "tg_auto_chat.png")
     chat_img.save(tmp, quality=95)
     with open(tmp, "rb") as f:
@@ -335,30 +391,37 @@ def generate_reply(chat_img, search_context=""):
     if search_context:
         system_prompt += (
             "\n\n====== 搜尋到的最新事實資料 ======\n"
-            + search_context[:1500]
+            + search_context[:2000]
             + "\n====== 事實資料結束 ======\n\n"
             "【絕對規則】\n"
-            "1. 上面搜尋結果裡有的比分、數字、隊伍名稱 → 必須用搜尋結果的，一個字都不能改\n"
-            "2. 上面搜尋結果裡沒有提到的比分、數字、球員數據 → 絕對不能自己編，直接說「這個我不確定」\n"
+            "1. 上面搜尋結果裡有的比分、數字、價格 → 必須用搜尋結果的，一個字都不能改\n"
+            "2. 搜尋結果裡沒有提到的比分、數字、球員數據 → 絕對不能自己編，說「這個我不確定」\n"
             "3. 不能把 A 隊的比分說成 B 隊的，不能把昨天的說成今天的\n"
             "4. 寧可回答「我不知道細節」也不能編造任何數字\n"
+            "5. 【重要】綠色氣泡是你自己之前說的話，裡面的數字不是事實來源。"
+            "每次回答都用上面搜尋結果的數字，不要引用自己之前說過的任何數字。\n"
         )
+
+    user_prompt = f"""這是 Telegram 完整對話截圖。
+
+對方在你最後一條綠色氣泡之後發了以下新訊息：
+「{new_messages}」
+
+請針對對方的這些新訊息回覆。
+- 讀完整對話理解上下文和前因後果
+- 但只回覆對方的新訊息，不要重複回覆之前已經回過的內容
+- 對方問問題就回答，嗆人就幽默化解，聊天就接話
+- 如果對方連發多條，整體理解後一次回覆
+- 如果涉及比賽結果、股價等事實 → 只能用搜尋結果的數字
+- 搜尋結果沒有的就說「這個我沒查到」
+
+只回覆要發送的文字，不要加任何格式或解釋。"""
 
     r = client.messages.create(
         model="claude-sonnet-4-6", max_tokens=200, system=system_prompt,
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
-            {"type": "text", "text": """這是 Telegram 對話截圖。最底部是對方發的白色氣泡，需要回覆。
-
-分析整段對話上下文後回覆。對方問問題就回答，嗆人就幽默化解，聊天就接話。
-如果對方連發多條，整體理解後一次回覆。
-
-【重要】如果對話涉及比賽結果、比分、數據：
-- 只能用上面搜尋結果裡有的數字
-- 搜尋結果沒有的數字就說「這個我沒查到」
-- 絕對不能自己編數字
-
-只回覆要發送的文字，不要加任何格式或解釋。"""}
+            {"type": "text", "text": user_prompt}
         ]}]
     )
     return r.content[0].text.strip()
@@ -379,13 +442,15 @@ def send_reply(msg, regions):
 def monitor_and_reply(regions, stop_time, monitor=2):
     """
     監控對話區，偵測變化後：
-    1. 等 3 秒讓畫面穩定（避免動畫/已讀標記觸發假變化）
+    1. 等 1.5 秒穩定（避免動畫/已讀標記觸發假變化）
     2. 二次截圖確認真的有變化
-    3. Vision 判斷最後一條是誰發的
-    4. 只有對方發的才回覆
-    5. 如果涉及事實性問題，先搜尋再回覆
+    3. 等對方說完（最多 2+2=4 秒）
+    4. 一次 Vision 分析完整對話（分層：上下文 + 新訊息 + sender）
+    5. sender=them → 搜尋（如需要）→ 生成回覆
     """
-    STABILIZE_WAIT = 3  # 偵測變化後等幾秒讓畫面穩定
+    STABILIZE_WAIT = 1.5    # 維修 4: 從 3 秒降到 1.5 秒
+    WAIT_COMPLETE = 2       # 維修 4: 等對方說完每輪 2 秒（最多 2 輪）
+    WAIT_COMPLETE_ROUNDS = 2
 
     # 先截一張當基準
     chat = grab_chat(regions, monitor)
@@ -393,7 +458,7 @@ def monitor_and_reply(regions, stop_time, monitor=2):
     cooldown_until = 0
 
     print(f"[Monitor] 開始監控 → {stop_time}", flush=True)
-    print(f"[Monitor] 冷卻：{COOLDOWN_SECONDS}s / 輪詢：{POLL_INTERVAL}s / 穩定等待：{STABILIZE_WAIT}s", flush=True)
+    print(f"[Monitor] 冷卻：{COOLDOWN_SECONDS}s / 輪詢：{POLL_INTERVAL}s / 穩定：{STABILIZE_WAIT}s / 等說完：{WAIT_COMPLETE}sx{WAIT_COMPLETE_ROUNDS}", flush=True)
 
     while datetime.now().strftime("%H:%M") < stop_time:
         time.sleep(POLL_INTERVAL)
@@ -407,95 +472,77 @@ def monitor_and_reply(regions, stop_time, monitor=2):
 
             if h != last_hash:
                 t = datetime.now().strftime("%H:%M:%S")
-                print(f"[{t}] 偵測到畫面變化，等 {STABILIZE_WAIT} 秒穩定...", flush=True)
+                print(f"[{t}] 偵測到畫面變化，等 {STABILIZE_WAIT}s 穩定...", flush=True)
 
-                # === 穩定等待：避免動畫/已讀標記/正在輸入等假變化 ===
+                # === 穩定等待 ===
                 time.sleep(STABILIZE_WAIT)
 
                 # === 二次截圖確認 ===
                 chat2 = grab_chat(regions, monitor)
                 h2 = chat_hash(chat2)
                 if h2 == last_hash:
-                    # 穩定後跟之前一樣 = 假變化（動畫等），跳過
-                    print(f"[{t}] 假變化（穩定後恢復），跳過", flush=True)
+                    print(f"[{t}] 假變化，跳過", flush=True)
                     last_hash = h2
                     continue
 
-                # === Vision 分析：誰發的 + 主題 + 是否需要搜尋 ===
-                analysis = analyze_last_sender(chat2)
-                sender = analysis.get("sender", "unknown")
-                topic = analysis.get("topic", "")
-                needs_search = analysis.get("needs_search", False)
+                # === 等對方說完（最多 2 輪 x 2 秒 = 4 秒）===
+                latest_chat = chat2
+                latest_hash = h2
+                for wait_round in range(WAIT_COMPLETE_ROUNDS):
+                    time.sleep(WAIT_COMPLETE)
+                    check = grab_chat(regions, monitor)
+                    check_h = chat_hash(check)
+                    if check_h != latest_hash:
+                        print(f"[{t}] 對方還在發訊息（第{wait_round+1}輪），等...", flush=True)
+                        latest_chat = check
+                        latest_hash = check_h
+                    else:
+                        break  # 穩定了，對方說完了
 
-                print(f"[{t}] 分析：sender={sender} topic={topic} needs_search={needs_search}", flush=True)
+                # === 維修 1+2: 一次 Vision 分析完整對話 ===
+                analysis = analyze_conversation(latest_chat)
+                sender = analysis.get("sender", "unknown")
+                new_msgs = analysis.get("new_messages", "")
+                needs_search = analysis.get("needs_search", False)
+                search_queries = analysis.get("search_queries", [])
+
+                print(f"[{t}] 分析：sender={sender} new_msgs={new_msgs[:50]} needs_search={needs_search} queries={search_queries}", flush=True)
 
                 if sender == "me":
-                    # 最後一條是自己發的，不回覆
                     print(f"[{t}] 最後是自己的訊息，跳過", flush=True)
-                    last_hash = h2
+                    last_hash = latest_hash
                     continue
 
                 if sender == "unknown":
-                    # 判斷不了，保守跳過
                     print(f"[{t}] 無法判斷發送者，跳過", flush=True)
-                    last_hash = h2
+                    last_hash = latest_hash
                     continue
 
-                # === sender == "them"：對方發的 ===
+                # === sender == "them"：對方發了新訊息 ===
 
-                # === 等對方說完：再等 5 秒看有沒有更多訊息 ===
-                print(f"[{t}] 對方發了訊息，等 5 秒確認對方說完...", flush=True)
-                time.sleep(5)
-                chat3 = grab_chat(regions, monitor)
-                h3 = chat_hash(chat3)
-                if h3 != h2:
-                    # 5 秒內又有新變化 = 對方還在打字，再等 5 秒
-                    print(f"[{t}] 對方還在發訊息，再等 5 秒...", flush=True)
-                    time.sleep(5)
-                    chat3 = grab_chat(regions, monitor)
-                    h3 = chat_hash(chat3)
-                    if h3 != h2:
-                        # 還在變 = 對方連續打字中，再等最後 5 秒
-                        print(f"[{t}] 對方持續發訊息，最後等 5 秒...", flush=True)
-                        time.sleep(5)
-                        chat3 = grab_chat(regions, monitor)
-
-                # 用最新的截圖重新分析 sender（確認對方真的說完了）
-                analysis2 = analyze_last_sender(chat3)
-                if analysis2.get("sender") == "me":
-                    print(f"[{t}] 等待後最後一條變成自己的，跳過", flush=True)
-                    last_hash = chat_hash(chat3)
-                    continue
-
-                # 更新 topic 和 needs_search（用最新的分析）
-                topic = analysis2.get("topic", topic)
-                needs_search = analysis2.get("needs_search", needs_search)
-
-                # === 搜尋事實資料 ===
+                # === 維修 3: 搜尋（用 search_queries，分別用對的工具）===
                 search_context = ""
-                if needs_search and topic:
-                    print(f"[{t}] 搜尋事實資料：{topic}", flush=True)
-                    search_context = search_for_context(topic)
+                if needs_search and search_queries:
+                    print(f"[{t}] 搜尋：{search_queries}", flush=True)
+                    search_context = search_for_queries(search_queries)
                     print(f"[{t}] 搜尋完成（{len(search_context)} chars）", flush=True)
 
-                # 生成回覆（用最新的截圖 chat3，包含對方所有訊息）
-                reply = generate_reply(chat3, search_context)
+                # === 維修 2+5: 生成回覆（帶新訊息摘要 + 搜尋結果）===
+                reply = generate_reply_with_context(latest_chat, new_msgs, search_context)
 
                 if reply and len(reply) > 1:
                     print(f"[{t}] → 回覆：{reply}", flush=True)
                     send_reply(reply, regions)
 
-                    # 冷卻
                     cooldown_until = time.time() + COOLDOWN_SECONDS
                     print(f"[{t}] 冷卻 {COOLDOWN_SECONDS} 秒", flush=True)
 
-                    # 冷卻結束後重新截圖當基準
                     time.sleep(COOLDOWN_SECONDS)
                     chat = grab_chat(regions, monitor)
                     last_hash = chat_hash(chat)
                 else:
                     print(f"[{t}] 生成回覆為空，跳過", flush=True)
-                    last_hash = chat_hash(chat3)
+                    last_hash = latest_hash
             else:
                 last_hash = h
 
