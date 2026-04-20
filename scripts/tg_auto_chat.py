@@ -260,30 +260,90 @@ def chat_hash(chat_img):
     return hashlib.md5(small.tobytes()).hexdigest()
 
 
-def generate_reply(chat_img):
-    """Claude Vision 分析對話並生成回覆"""
-    tmp = os.path.join(TMPDIR, "tg_auto_chat.png")
+def analyze_last_sender(chat_img):
+    """
+    Vision 分析最底部的訊息是誰發的 + 對話主題
+    回傳: {"sender": "them" 或 "me", "topic": "對話主題摘要", "needs_search": True/False}
+    """
+    tmp = os.path.join(TMPDIR, "tg_analyze.png")
     chat_img.save(tmp, quality=95)
     with open(tmp, "rb") as f:
         b64 = base64.b64encode(f.read()).decode()
 
     r = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=200, system=PERSONA,
+        model="claude-sonnet-4-6", max_tokens=150,
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
-            {"type": "text", "text": """這是 Telegram 對話截圖，請依照以下步驟分析：
+            {"type": "text", "text": """這是 Telegram 對話截圖。
+綠色氣泡（靠右）= 我發的
+白色氣泡（靠左）= 對方發的
 
-1. 辨識對話結構：
-   - 綠色氣泡（靠右）= 我（小牛馬）發的
-   - 白色氣泡（靠左）= 對方發的
+請分析：
+1. 最底部最後一條訊息是誰發的？看氣泡顏色和位置。
+2. 對話在聊什麼主題？用一句話摘要。
+3. 對話是否涉及事實性問題（比賽結果、新聞、數據、排名、價格等需要查證的資訊）？
 
-2. 分析上下文：從上到下讀完整段對話，理解主題和情緒
+只回 JSON，不要其他文字：
+{"sender":"them或me","topic":"主題摘要","needs_search":true或false}"""}
+        ]}]
+    )
+    resp = r.content[0].text.strip()
+    if resp.startswith("```"):
+        resp = re.sub(r"^```(?:json)?\s*", "", resp)
+        resp = re.sub(r"\s*```$", "", resp)
+    try:
+        match = re.search(r"\{.*\}", resp, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+    except Exception:
+        pass
+    return {"sender": "unknown", "topic": "", "needs_search": False}
 
-3. 判斷是否回覆：
-   - 最底部是白色氣泡 → 需要回覆
-   - 最底部是綠色氣泡 → 只回一個字「等」
 
-4. 如果需要回覆：根據整段上下文回應，不是只看最後一條。對方問問題就回答，嗆人就幽默化解，聊天就接話。如果對方連發多條，整體理解後一次回覆。
+def search_for_context(topic):
+    """如果對話涉及事實性問題，先搜尋再回覆"""
+    try:
+        sys.path.insert(0, str(Path("C:/Users/blue_/claude-telegram-bot")))
+        from bot import tavily_search, fetch_sports_scores
+
+        # 判斷是否體育相關
+        sport_keywords = ["NBA", "nba", "NFL", "MLB", "NHL", "足球", "籃球", "棒球",
+                          "比賽", "比分", "球", "隊", "賽", "冠軍", "季後賽", "playoffs"]
+        is_sports = any(kw in topic for kw in sport_keywords)
+
+        if is_sports:
+            # 先用 ESPN 拿即時比分
+            scores = fetch_sports_scores("nba")
+            search_result = tavily_search(topic, 3, "basic")
+            return f"【即時比分】\n{scores}\n\n【搜尋結果】\n{search_result}"
+        else:
+            return tavily_search(topic, 3, "basic")
+    except Exception as e:
+        return f"搜尋失敗：{e}"
+
+
+def generate_reply(chat_img, search_context=""):
+    """Claude Vision 分析對話並生成回覆，可帶入搜尋到的事實資料"""
+    tmp = os.path.join(TMPDIR, "tg_auto_chat.png")
+    chat_img.save(tmp, quality=95)
+    with open(tmp, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+
+    system_prompt = PERSONA
+    if search_context:
+        system_prompt += (
+            "\n\n【重要】以下是剛剛搜尋到的最新資料，回答涉及事實的問題時必須參考這些資料，"
+            "不要用你的舊記憶，資料裡沒有的數字不能自己編：\n" + search_context[:1500]
+        )
+
+    r = client.messages.create(
+        model="claude-sonnet-4-6", max_tokens=200, system=system_prompt,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
+            {"type": "text", "text": """這是 Telegram 對話截圖。最底部是對方發的白色氣泡，需要回覆。
+
+分析整段對話上下文後回覆。對方問問題就回答，嗆人就幽默化解，聊天就接話。
+如果對方連發多條，整體理解後一次回覆。
 
 只回覆要發送的文字，不要加任何格式或解釋。"""}
         ]}]
@@ -304,15 +364,23 @@ def send_reply(msg, regions):
 
 
 def monitor_and_reply(regions, stop_time, monitor=2):
-    """監控對話區，偵測變化就回覆"""
+    """
+    監控對話區，偵測變化後：
+    1. 等 3 秒讓畫面穩定（避免動畫/已讀標記觸發假變化）
+    2. 二次截圖確認真的有變化
+    3. Vision 判斷最後一條是誰發的
+    4. 只有對方發的才回覆
+    5. 如果涉及事實性問題，先搜尋再回覆
+    """
+    STABILIZE_WAIT = 3  # 偵測變化後等幾秒讓畫面穩定
+
     # 先截一張當基準
     chat = grab_chat(regions, monitor)
     last_hash = chat_hash(chat)
     cooldown_until = 0
 
-    print(f"[Step 5] 開始監控 → {stop_time}", flush=True)
-    print(f"[Step 5] 冷卻時間：{COOLDOWN_SECONDS} 秒", flush=True)
-    print(f"[Step 5] 輪詢間隔：{POLL_INTERVAL} 秒", flush=True)
+    print(f"[Monitor] 開始監控 → {stop_time}", flush=True)
+    print(f"[Monitor] 冷卻：{COOLDOWN_SECONDS}s / 輪詢：{POLL_INTERVAL}s / 穩定等待：{STABILIZE_WAIT}s", flush=True)
 
     while datetime.now().strftime("%H:%M") < stop_time:
         time.sleep(POLL_INTERVAL)
@@ -326,15 +394,57 @@ def monitor_and_reply(regions, stop_time, monitor=2):
 
             if h != last_hash:
                 t = datetime.now().strftime("%H:%M:%S")
-                print(f"[{t}] 偵測到對話變化", flush=True)
+                print(f"[{t}] 偵測到畫面變化，等 {STABILIZE_WAIT} 秒穩定...", flush=True)
 
-                reply = generate_reply(chat)
+                # === 穩定等待：避免動畫/已讀標記/正在輸入等假變化 ===
+                time.sleep(STABILIZE_WAIT)
 
-                if reply and reply != "等" and len(reply) > 2:
+                # === 二次截圖確認 ===
+                chat2 = grab_chat(regions, monitor)
+                h2 = chat_hash(chat2)
+                if h2 == last_hash:
+                    # 穩定後跟之前一樣 = 假變化（動畫等），跳過
+                    print(f"[{t}] 假變化（穩定後恢復），跳過", flush=True)
+                    last_hash = h2
+                    continue
+
+                # === Vision 分析：誰發的 + 主題 + 是否需要搜尋 ===
+                analysis = analyze_last_sender(chat2)
+                sender = analysis.get("sender", "unknown")
+                topic = analysis.get("topic", "")
+                needs_search = analysis.get("needs_search", False)
+
+                print(f"[{t}] 分析：sender={sender} topic={topic} needs_search={needs_search}", flush=True)
+
+                if sender == "me":
+                    # 最後一條是自己發的，不回覆
+                    print(f"[{t}] 最後是自己的訊息，跳過", flush=True)
+                    last_hash = h2
+                    continue
+
+                if sender == "unknown":
+                    # 判斷不了，保守跳過
+                    print(f"[{t}] 無法判斷發送者，跳過", flush=True)
+                    last_hash = h2
+                    continue
+
+                # === sender == "them"：對方發的，需要回覆 ===
+
+                # 如果涉及事實性問題，先搜尋
+                search_context = ""
+                if needs_search and topic:
+                    print(f"[{t}] 搜尋事實資料：{topic}", flush=True)
+                    search_context = search_for_context(topic)
+                    print(f"[{t}] 搜尋完成（{len(search_context)} chars）", flush=True)
+
+                # 生成回覆
+                reply = generate_reply(chat2, search_context)
+
+                if reply and len(reply) > 1:
                     print(f"[{t}] → 回覆：{reply}", flush=True)
                     send_reply(reply, regions)
 
-                    # 20 秒冷卻
+                    # 冷卻
                     cooldown_until = time.time() + COOLDOWN_SECONDS
                     print(f"[{t}] 冷卻 {COOLDOWN_SECONDS} 秒", flush=True)
 
@@ -343,8 +453,8 @@ def monitor_and_reply(regions, stop_time, monitor=2):
                     chat = grab_chat(regions, monitor)
                     last_hash = chat_hash(chat)
                 else:
-                    print(f"[{t}] 不需回覆（最底部是綠色氣泡）", flush=True)
-                    last_hash = h
+                    print(f"[{t}] 生成回覆為空，跳過", flush=True)
+                    last_hash = h2
             else:
                 last_hash = h
 

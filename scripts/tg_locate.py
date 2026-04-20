@@ -23,7 +23,9 @@ import json
 import base64
 import numpy as np
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+# 只在直接執行時替換 stdout，被 import 時不動（避免跟呼叫方衝突）
+if __name__ == "__main__":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 import win32gui
 import mss
