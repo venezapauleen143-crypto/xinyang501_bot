@@ -334,8 +334,14 @@ def generate_reply(chat_img, search_context=""):
     system_prompt = PERSONA
     if search_context:
         system_prompt += (
-            "\n\n【重要】以下是剛剛搜尋到的最新資料，回答涉及事實的問題時必須參考這些資料，"
-            "不要用你的舊記憶，資料裡沒有的數字不能自己編：\n" + search_context[:1500]
+            "\n\n====== 搜尋到的最新事實資料 ======\n"
+            + search_context[:1500]
+            + "\n====== 事實資料結束 ======\n\n"
+            "【絕對規則】\n"
+            "1. 上面搜尋結果裡有的比分、數字、隊伍名稱 → 必須用搜尋結果的，一個字都不能改\n"
+            "2. 上面搜尋結果裡沒有提到的比分、數字、球員數據 → 絕對不能自己編，直接說「這個我不確定」\n"
+            "3. 不能把 A 隊的比分說成 B 隊的，不能把昨天的說成今天的\n"
+            "4. 寧可回答「我不知道細節」也不能編造任何數字\n"
         )
 
     r = client.messages.create(
@@ -346,6 +352,11 @@ def generate_reply(chat_img, search_context=""):
 
 分析整段對話上下文後回覆。對方問問題就回答，嗆人就幽默化解，聊天就接話。
 如果對方連發多條，整體理解後一次回覆。
+
+【重要】如果對話涉及比賽結果、比分、數據：
+- 只能用上面搜尋結果裡有的數字
+- 搜尋結果沒有的數字就說「這個我沒查到」
+- 絕對不能自己編數字
 
 只回覆要發送的文字，不要加任何格式或解釋。"""}
         ]}]
@@ -430,17 +441,45 @@ def monitor_and_reply(regions, stop_time, monitor=2):
                     last_hash = h2
                     continue
 
-                # === sender == "them"：對方發的，需要回覆 ===
+                # === sender == "them"：對方發的 ===
 
-                # 如果涉及事實性問題，先搜尋
+                # === 等對方說完：再等 5 秒看有沒有更多訊息 ===
+                print(f"[{t}] 對方發了訊息，等 5 秒確認對方說完...", flush=True)
+                time.sleep(5)
+                chat3 = grab_chat(regions, monitor)
+                h3 = chat_hash(chat3)
+                if h3 != h2:
+                    # 5 秒內又有新變化 = 對方還在打字，再等 5 秒
+                    print(f"[{t}] 對方還在發訊息，再等 5 秒...", flush=True)
+                    time.sleep(5)
+                    chat3 = grab_chat(regions, monitor)
+                    h3 = chat_hash(chat3)
+                    if h3 != h2:
+                        # 還在變 = 對方連續打字中，再等最後 5 秒
+                        print(f"[{t}] 對方持續發訊息，最後等 5 秒...", flush=True)
+                        time.sleep(5)
+                        chat3 = grab_chat(regions, monitor)
+
+                # 用最新的截圖重新分析 sender（確認對方真的說完了）
+                analysis2 = analyze_last_sender(chat3)
+                if analysis2.get("sender") == "me":
+                    print(f"[{t}] 等待後最後一條變成自己的，跳過", flush=True)
+                    last_hash = chat_hash(chat3)
+                    continue
+
+                # 更新 topic 和 needs_search（用最新的分析）
+                topic = analysis2.get("topic", topic)
+                needs_search = analysis2.get("needs_search", needs_search)
+
+                # === 搜尋事實資料 ===
                 search_context = ""
                 if needs_search and topic:
                     print(f"[{t}] 搜尋事實資料：{topic}", flush=True)
                     search_context = search_for_context(topic)
                     print(f"[{t}] 搜尋完成（{len(search_context)} chars）", flush=True)
 
-                # 生成回覆
-                reply = generate_reply(chat2, search_context)
+                # 生成回覆（用最新的截圖 chat3，包含對方所有訊息）
+                reply = generate_reply(chat3, search_context)
 
                 if reply and len(reply) > 1:
                     print(f"[{t}] → 回覆：{reply}", flush=True)
@@ -456,7 +495,7 @@ def monitor_and_reply(regions, stop_time, monitor=2):
                     last_hash = chat_hash(chat)
                 else:
                     print(f"[{t}] 生成回覆為空，跳過", flush=True)
-                    last_hash = h2
+                    last_hash = chat_hash(chat3)
             else:
                 last_hash = h
 
