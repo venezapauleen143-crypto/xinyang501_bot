@@ -9553,6 +9553,152 @@ def fetch_weather(city: str) -> str:
         return f"查不到「{city}」的天氣資訊。"
 
 
+# ── Tavily AI 搜尋（取代 ddg_search 作為主力搜尋）──────────────────
+def tavily_search(query: str, max_results: int = 5, search_depth: str = "advanced") -> str:
+    """Tavily AI 搜尋 — 直接回傳乾淨的內容，不只是連結"""
+    try:
+        _key = os.environ.get("TAVILY_API_KEY", "")
+        if not _key:
+            # fallback 到 ddg_search
+            return execute_ddg_search(query, "zh-tw", max_results)
+        from tavily import TavilyClient
+        client = TavilyClient(api_key=_key)
+        response = client.search(
+            query=query,
+            search_depth=search_depth,
+            max_results=max_results,
+            include_answer=True,
+        )
+        lines = []
+        # Tavily 會直接給一個整合答案
+        answer = response.get("answer", "")
+        if answer:
+            lines.append(f"📝 AI 整合答案：\n{answer}\n")
+        # 加上來源
+        results = response.get("results", [])
+        for r in results[:max_results]:
+            title = r.get("title", "")
+            content = r.get("content", "")[:200]
+            url = r.get("url", "")
+            lines.append(f"🔍 {title}\n   {content}\n   {url}")
+        return "\n\n".join(lines) if lines else "無搜尋結果"
+    except Exception as e:
+        # Tavily 失敗就 fallback 到 ddg_search
+        logging.warning(f"Tavily failed, fallback to DDG: {e}")
+        return execute_ddg_search(query, "zh-tw", max_results)
+
+
+# ── ESPN 體育即時比分 ──────────────────────────────────────────────
+def fetch_sports_scores(sport: str = "nba", league: str = "", date: str = "") -> str:
+    """ESPN 即時比分 — 支援 NBA/NFL/MLB/NHL/足球"""
+    try:
+        sport_map = {
+            "nba": ("basketball", "nba"),
+            "wnba": ("basketball", "wnba"),
+            "nfl": ("football", "nfl"),
+            "mlb": ("baseball", "mlb"),
+            "nhl": ("hockey", "nhl"),
+            "mls": ("soccer", "usa.1"),
+            "epl": ("soccer", "eng.1"),
+            "laliga": ("soccer", "esp.1"),
+            "bundesliga": ("soccer", "ger.1"),
+            "seriea": ("soccer", "ita.1"),
+            "ligue1": ("soccer", "fra.1"),
+            "champions": ("soccer", "uefa.champions"),
+            "worldcup": ("soccer", "fifa.world"),
+        }
+        key = sport.lower().replace(" ", "")
+        if key not in sport_map:
+            available = ", ".join(sport_map.keys())
+            return f"不支援「{sport}」，支援的有：{available}"
+        sport_cat, league_id = sport_map[key]
+        url = f"https://site.api.espn.com/apis/site/v2/sports/{sport_cat}/{league_id}/scoreboard"
+        if date:
+            url += f"?dates={date.replace('-', '')}"
+        resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        data = resp.json()
+        events = data.get("events", [])
+        if not events:
+            return f"🏟️ {sport.upper()} 今天沒有比賽"
+        sport_emoji = {"nba": "🏀", "nfl": "🏈", "mlb": "⚾", "nhl": "🏒"}.get(key, "⚽")
+        lines = [f"{sport_emoji} {sport.upper()} 比分\n"]
+        for e in events:
+            status_desc = e.get("status", {}).get("type", {}).get("description", "")
+            comps = e.get("competitions", [{}])[0]
+            teams = comps.get("competitors", [])
+            if len(teams) >= 2:
+                away = teams[0]
+                home = teams[1]
+                away_name = away["team"]["displayName"]
+                away_score = away.get("score", "?")
+                away_record = away.get("records", [{}])[0].get("summary", "") if away.get("records") else ""
+                home_name = home["team"]["displayName"]
+                home_score = home.get("score", "?")
+                home_record = home.get("records", [{}])[0].get("summary", "") if home.get("records") else ""
+                # 系列賽資訊
+                series = comps.get("series", {})
+                series_info = ""
+                if series:
+                    s_sum = series.get("summary", "")
+                    if s_sum:
+                        series_info = f"  📊 {s_sum}"
+                # 狀態
+                if status_desc == "Final":
+                    winner = "⬅️" if int(away_score) > int(home_score) else "➡️"
+                    lines.append(f"  {away_name} ({away_record}) {away_score} - {home_score} {home_name} ({home_record})  🏁{series_info}")
+                elif status_desc == "Scheduled":
+                    game_time = e.get("status", {}).get("type", {}).get("detail", "")
+                    lines.append(f"  {away_name} vs {home_name}  ⏰ {game_time}{series_info}")
+                else:
+                    period = e.get("status", {}).get("period", "")
+                    clock = e.get("status", {}).get("displayClock", "")
+                    lines.append(f"  {away_name} {away_score} - {home_score} {home_name}  🔴 LIVE Q{period} {clock}{series_info}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"體育比分查詢失敗：{e}"
+
+
+# ── NewsAPI 全球新聞 ──────────────────────────────────────────────
+def fetch_global_news(query: str = "", category: str = "", country: str = "", count: int = 5) -> str:
+    """NewsAPI 全球新聞搜尋 — 80000+ 來源"""
+    try:
+        _key = os.environ.get("NEWSAPI_KEY", "")
+        if not _key:
+            # fallback 到 news_search
+            return search_news(query or "top news", "zh-TW", count)
+        count = min(max(count, 1), 10)
+        if query:
+            # 搜尋特定新聞
+            url = f"https://newsapi.org/v2/everything?q={requests.utils.quote(query)}&sortBy=publishedAt&pageSize={count}&apiKey={_key}"
+        elif category:
+            # 分類新聞
+            cat_map = {"科技": "technology", "商業": "business", "體育": "sports",
+                       "娛樂": "entertainment", "健康": "health", "科學": "science"}
+            cat = cat_map.get(category, category.lower())
+            ctry = country or "us"
+            url = f"https://newsapi.org/v2/top-headlines?category={cat}&country={ctry}&pageSize={count}&apiKey={_key}"
+        else:
+            ctry = country or "us"
+            url = f"https://newsapi.org/v2/top-headlines?country={ctry}&pageSize={count}&apiKey={_key}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data.get("status") != "ok":
+            return f"新聞查詢失敗：{data.get('message', 'unknown error')}"
+        articles = data.get("articles", [])
+        if not articles:
+            return "沒有找到相關新聞"
+        lines = [f"📰 全球新聞" + (f"（{query}）" if query else "") + "\n"]
+        for a in articles[:count]:
+            title = a.get("title", "")
+            source = a.get("source", {}).get("name", "")
+            published = a.get("publishedAt", "")[:16].replace("T", " ")
+            desc = a.get("description", "") or ""
+            lines.append(f"• {title}\n  {source} | {published}\n  {desc[:100]}")
+        return "\n\n".join(lines)
+    except Exception as e:
+        return f"新聞查詢失敗：{e}"
+
+
 def add_text_overlay(image_bytes: bytes, text: str) -> bytes:
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
@@ -16765,11 +16911,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # 加日期讓搜尋更精確
                     _today_str = datetime.date.today().strftime("%Y-%m-%d")
                     _q = f"{_q_raw} {_today_str}"
-                    # Step 1: 搜尋拿連結（中文 + 英文各搜一次，取較好的）
+                    # Step 1: 用 Tavily（主力）或 ddg_search（備援）搜尋
                     _auto_search_result = await _loop_pre.run_in_executor(
-                        None, execute_ddg_search, _q, "zh-tw", 5
+                        None, tavily_search, _q, 5, "advanced"
                     )
-                    # 如果中文結果太少或品質差，補搜英文
+                    # 如果 Tavily 結果不夠或失敗，補搜英文 ddg
                     if not _auto_search_result or len(_auto_search_result) < 200:
                         _en_result = await _loop_pre.run_in_executor(
                             None, execute_ddg_search, _q_raw, "us-en", 5
