@@ -19831,6 +19831,36 @@ async def goodnight(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"goodnight 發送失敗：{e}", exc_info=True)
 
 
+async def elder_goodnight(context: ContextTypes.DEFAULT_TYPE):
+    """每天 22:15 長輩晚安問候"""
+    logging.info("【排程觸發】elder_goodnight 開始執行")
+    with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
+        f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] elder_goodnight 觸發\n")
+    group_id = int(os.getenv("GROUP_CHAT_ID"))
+    import asyncio
+    loop = asyncio.get_running_loop()
+    def generate_elder_goodnight():
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=400,
+            system=(
+                "用真實女孩子會打字的方式寫一段晚安祝福，對象是群組裡的大家。"
+                "要像真人女生在手機上打的訊息，不是AI生成的文章。"
+                "內容可以分享今天做了什麼、看了什麼書、吃了什麼好吃的、散步時想到的事、一個小感悟、對季節的感受、對生活的感謝，五花八門都可以，每天不一樣，發揮創意。"
+                "規則：不要用emoji、不要用破折號（——）、不要用疊字（舒舒服服、開開心心、平平安安）、不要用分號、不要排比句、不要文藝腔。"
+                "用正常的標點符號（逗號句號問號驚嘆號就好）。要口語自然，像真的在聊天打字。"
+                "最後跟大家說晚安，讓人看了覺得溫暖，想好好休息。約60-120字。繁體中文。"
+            ),
+            messages=[{"role": "user", "content": "寫一段長輩晚安語"}]
+        )
+        return response.content[0].text
+    try:
+        msg = await loop.run_in_executor(None, generate_elder_goodnight)
+        await context.bot.send_message(chat_id=group_id, text=msg)
+    except Exception as e:
+        logging.error(f"elder_goodnight 發送失敗：{e}", exc_info=True)
+
+
 async def auto_compile_knowledge(context: ContextTypes.DEFAULT_TYPE):
     """每天 22:45 自動：讀今天的 Claude Code session → 存 daily log → 編譯知識庫"""
     logging.info("【排程觸發】auto_compile_knowledge 開始執行")
@@ -20099,6 +20129,11 @@ if __name__ == "__main__":
     app.job_queue.run_daily(
         daily_pc_report,
         time=datetime.time(hour=14, minute=0, tzinfo=datetime.timezone.utc)
+    )
+    # 每天晚上 10:15 台灣時間（UTC+8）= 14:15 UTC — 長輩晚安問候
+    app.job_queue.run_daily(
+        elder_goodnight,
+        time=datetime.time(hour=14, minute=15, tzinfo=datetime.timezone.utc)
     )
     # 每天晚上 10:30 台灣時間（UTC+8）= 14:30 UTC
     app.job_queue.run_daily(
