@@ -179,6 +179,12 @@ def find_line_window():
 
 def screenshot_line(monitor=2):
     """截圖指定螢幕，裁切出 LINE 區域"""
+    # 確保 DPI 設定正確（每次呼叫都設，防止被其他模組覆蓋）
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(0)
+    except Exception:
+        pass
+
     line = find_line_window()
     if not line:
         raise RuntimeError("找不到 LINE 視窗")
@@ -264,16 +270,82 @@ def calc_sidebar_icons(sidebar_width, line_height, il, it, mon, full_img_size):
     sx_ratio = mon["width"] / full_img_size[0]
     sy_ratio = mon["height"] / full_img_size[1]
 
-    x_center = sidebar_width // 2  # 按鈕 x 中心 = sidebar 寬度的一半
+    x_center = sidebar_width // 2
 
     icons = {}
     for btn_name, btn_info in SIDEBAR_BUTTONS.items():
         local_y = int(line_height * btn_info["y_ratio"])
         abs_x = int(mon["left"] + (il + x_center) * sx_ratio)
         abs_y = int(mon["top"] + (it + local_y) * sy_ratio)
-        icons[btn_name] = {"center": (abs_x, abs_y), "label": btn_info["label"]}
+        icons[btn_name] = {"center": (abs_x, abs_y), "label": btn_info["label"], "local_y": local_y}
 
     return icons
+
+
+def detect_current_page_by_pixel(line_crop, sidebar_width):
+    """
+    用像素亮度偵測當前頁面（0 秒，不用 API）。
+    選中的 sidebar 按鈕會高亮（亮度 > 150），未選中的暗（亮度 < 130）。
+    """
+    arr = np.array(line_crop)
+    x_center = sidebar_width // 2
+    lh = arr.shape[0]
+
+    page_buttons = {
+        "friend": int(lh * SIDEBAR_BUTTONS["btn_friend"]["y_ratio"]),
+        "chat": int(lh * SIDEBAR_BUTTONS["btn_chat"]["y_ratio"]),
+        "add_friend": int(lh * SIDEBAR_BUTTONS["btn_add_friend"]["y_ratio"]),
+    }
+
+    # 取每個按鈕 10x10 區域的最大亮度
+    brightness = {}
+    for page, y in page_buttons.items():
+        y1 = max(0, y - 5)
+        y2 = min(arr.shape[0], y + 6)
+        x1 = max(0, x_center - 10)
+        x2 = min(arr.shape[1], x_center + 10)
+        region = arr[y1:y2, x1:x2, :]
+        brightness[page] = float(np.max(np.mean(region, axis=2)))
+
+    # 最亮的就是當前頁面
+    max_val = max(brightness.values())
+    min_val = min(brightness.values())
+
+    # 如果三個亮度差距太小，無法判斷
+    if max_val - min_val < 20:
+        _print(f"[line_locate] 像素偵測無法判斷（差距太小）: {brightness}")
+        return "unknown"
+
+    current = max(brightness, key=brightness.get)
+    _print(f"[line_locate] 像素偵測頁面: {brightness} → {current}")
+    return current
+
+
+def detect_current_page_by_ocr(ocr_items):
+    """
+    用 OCR 關鍵字偵測當前頁面（備援，從已掃描的 OCR 結果判斷）。
+    """
+    all_text = " ".join(item["text"] for item in ocr_items)
+
+    # 聊天頁特徵：有「全部」「群組」「社群」分頁標籤
+    chat_keywords = ["全部", "搜尋聊天和訊息"]
+    # 好友頁特徵：有分類標題
+    friend_keywords = ["社群 1", "群組 1", "好友 ", "以姓名搜尋", "Keep筆記"]
+    # 加好友頁特徵
+    add_friend_keywords = ["搜尋好友", "建立群組", "建立社群", "官方推薦"]
+
+    chat_score = sum(1 for kw in chat_keywords if kw in all_text)
+    friend_score = sum(1 for kw in friend_keywords if kw in all_text)
+    add_friend_score = sum(1 for kw in add_friend_keywords if kw in all_text)
+
+    scores = {"friend": friend_score, "chat": chat_score, "add_friend": add_friend_score}
+    best = max(scores, key=scores.get)
+
+    if scores[best] == 0:
+        return "unknown"
+
+    _print(f"[line_locate] OCR 偵測頁面: {scores} → {best}")
+    return best
 
 
 # ============================================================
@@ -299,18 +371,12 @@ def find_framework_by_vision(line_crop):
         "3. chat_title: Name text at top of chat area (right side). Just the name.\n"
         "4. chat_area: Message area with conversation bubbles.\n"
         "5. input_box: Text input field at bottom right. Only the text area.\n\n"
-        "=== CURRENT PAGE ===\n"
-        "Look at the LEFT PANEL content (NOT the sidebar icons):\n"
-        '"friend" if it shows categorized lists with headers like 社群/群組/好友\n'
-        '"chat" if it shows a conversation list with tabs 全部/群組/社群 at top\n'
-        '"add_friend" if it shows buttons like 搜尋好友/建立群組/建立社群\n\n'
         "Return RAW JSON only:\n"
         '{"search_bar":{"l":0,"t":0,"r":0,"b":0},'
         '"left_panel":{"l":0,"t":0,"r":0,"b":0},'
         '"chat_title":{"l":0,"t":0,"r":0,"b":0},'
         '"chat_area":{"l":0,"t":0,"r":0,"b":0},'
-        '"input_box":{"l":0,"t":0,"r":0,"b":0},'
-        '"current_page":"friend or chat or add_friend"}'
+        '"input_box":{"l":0,"t":0,"r":0,"b":0}}'
     )
 
     r = client.messages.create(
@@ -324,7 +390,15 @@ def find_framework_by_vision(line_crop):
     if resp.startswith("```"):
         resp = re.sub(r"^```(?:json)?\s*", "", resp)
         resp = re.sub(r"\s*```$", "", resp)
-    return json.loads(resp)
+    data = json.loads(resp)
+
+    # 確保所有座標值都是 int（Vision 有時回傳字串）
+    for key in data:
+        if isinstance(data[key], dict):
+            for k, v in data[key].items():
+                if isinstance(v, str) and v.isdigit():
+                    data[key][k] = int(v)
+    return data
 
 
 # ============================================================
@@ -677,9 +751,12 @@ def locate_line_regions(monitor=2):
     sep_x = find_separator_by_pixel(line_crop, sidebar_w)
     _print(f"[line_locate] sidebar: {sidebar_w}px, 分隔線: x={sep_x}")
 
-    # Step 3: Vision 定位框架 + sidebar 按鈕
+    # Step 3: 像素偵測當前頁面（0 秒）
+    current_page = detect_current_page_by_pixel(line_crop, sidebar_w)
+
+    # Step 4: Vision 定位框架區域（不判斷頁面，只定位區域）
     vision = find_framework_by_vision(line_crop)
-    current_page = vision.get("current_page", "unknown")
+    # 忽略 Vision 的 current_page 判斷，用像素偵測的結果
     _print(f"[line_locate] 當前頁面: {current_page}")
 
     # 座標轉換函數
@@ -715,7 +792,7 @@ def locate_line_regions(monitor=2):
     # sidebar 按鈕（用像素分析 + 模板比例，不靠 Vision）
     sidebar_icons = calc_sidebar_icons(sidebar_w, lh, il, it, mon, full_img.size)
 
-    # Step 4: 掃描當前頁面內容（PaddleOCR 主力）
+    # Step 5: 掃描當前頁面內容（PaddleOCR 主力）
     _print(f"[line_locate] 掃描 {current_page} 頁面內容...")
     panel_rect = vision["left_panel"]
     panel_crop = line_crop.crop((panel_rect["l"], panel_rect["t"], panel_rect["r"], panel_rect["b"]))
@@ -728,6 +805,20 @@ def locate_line_regions(monitor=2):
             page_content = scan_chat_page(panel_crop, panel_rect, mon, full_img.size, il, it)
         elif current_page == "add_friend":
             page_content = scan_add_friend_page(panel_crop, panel_rect, mon, full_img.size, il, it)
+
+        # OCR 交叉驗證（只在像素偵測不確定時才介入）
+        ocr_items = page_content.get("all_ocr_items", [])
+        if current_page == "unknown":
+            ocr_page = detect_current_page_by_ocr(ocr_items)
+            if ocr_page != "unknown":
+                _print(f"[line_locate] 像素無法判斷，OCR 判斷為 {ocr_page}")
+                current_page = ocr_page
+                if current_page == "friend":
+                    page_content = scan_friend_page(panel_crop, panel_rect, mon, full_img.size, il, it)
+                elif current_page == "chat":
+                    page_content = scan_chat_page(panel_crop, panel_rect, mon, full_img.size, il, it)
+                elif current_page == "add_friend":
+                    page_content = scan_add_friend_page(panel_crop, panel_rect, mon, full_img.size, il, it)
 
         # 檢查 OCR 結果是否足夠（太少項目就啟動 Vision 備援）
         ocr_count = len(page_content.get("all_ocr_items", []))
