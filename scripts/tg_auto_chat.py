@@ -21,6 +21,7 @@ import time
 import base64
 import hashlib
 import ctypes
+import signal
 
 # 只在直接執行時替換 stdout
 if __name__ == "__main__":
@@ -93,6 +94,42 @@ sys.path.insert(0, str(SCRIPT_DIR.parent))
 load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
 client = anthropic.Anthropic()
 TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
+
+# ============================================================
+# 優雅停止機制（方案 A + C）
+# ============================================================
+STOP_FILE = "C:/Users/blue_/Desktop/測試檔案/.stop_auto_reply"
+_should_stop = False
+
+
+def _signal_handler(signum, frame):
+    """SIGBREAK / SIGINT handler — 設定停止旗標"""
+    global _should_stop
+    _should_stop = True
+    print(f"\n[STOP] 收到信號 {signum}，準備停止...", flush=True)
+
+
+# 註冊信號（Windows: SIGBREAK + SIGINT）
+signal.signal(signal.SIGINT, _signal_handler)
+if hasattr(signal, "SIGBREAK"):
+    signal.signal(signal.SIGBREAK, _signal_handler)
+
+
+def should_stop():
+    """檢查是否該停止（旗標檔案 or 信號）"""
+    global _should_stop
+    if _should_stop:
+        return True
+    if os.path.exists(STOP_FILE):
+        try:
+            os.remove(STOP_FILE)
+        except OSError:
+            pass
+        _should_stop = True
+        print("[STOP] 偵測到停止旗標檔案，準備停止...", flush=True)
+        return True
+    return False
+
 
 PERSONA = """你是小牛馬，一個嘴賤幽默的男生，說話像真人一樣自然。絕對不能暴露自己是AI、機器人、程式。
 風格：
@@ -707,10 +744,15 @@ def monitor_and_reply(regions, stop_time, monitor=2):
     print(f"[Monitor] 模式：OCR 文字追蹤 + Vision 保險", flush=True)
     print(f"[Monitor] 冷卻：{COOLDOWN_SECONDS}s / 輪詢：{POLL_INTERVAL}s / 等說完：{WAIT_COMPLETE}sx{WAIT_COMPLETE_ROUNDS}", flush=True)
     print(f"[Monitor] 初始訊息數：{len(previous_messages)}", flush=True)
+    print(f"[Monitor] 停止方式：touch {STOP_FILE}", flush=True)
 
     while datetime.now().strftime("%H:%M") < stop_time:
+        if should_stop():
+            break
         time.sleep(POLL_INTERVAL)
         try:
+            if should_stop():
+                break
             if time.time() < cooldown_until:
                 continue
 
@@ -804,8 +846,11 @@ def monitor_and_reply(regions, stop_time, monitor=2):
                 cooldown_until = time.time() + COOLDOWN_SECONDS
                 print(f"[{t}] 冷卻 {COOLDOWN_SECONDS} 秒", flush=True)
 
-                # 冷卻結束後更新追蹤
-                time.sleep(COOLDOWN_SECONDS)
+                # 冷卻期間每秒檢查停止信號（不再一次 sleep 20 秒）
+                for _ in range(COOLDOWN_SECONDS):
+                    if should_stop():
+                        break
+                    time.sleep(1)
                 chat = grab_chat(regions, monitor)
                 last_hash = chat_hash(chat)
                 previous_messages = ocr_extract_messages(chat)
@@ -820,7 +865,8 @@ def monitor_and_reply(regions, stop_time, monitor=2):
             print(f"[ERR] {e}", flush=True)
             time.sleep(5)
 
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] 監控結束", flush=True)
+    reason = "收到停止信號" if _should_stop else "到達結束時間"
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 監控結束（{reason}）", flush=True)
 
 
 # ============================================================
