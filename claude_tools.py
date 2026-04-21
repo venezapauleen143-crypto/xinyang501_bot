@@ -16254,6 +16254,25 @@ def tg_auto_reply_tool(action="start", contact="", stop_time="", duration="30"):
     print(f"自動回覆已開啟：對象 {contact}，監控到 {stop_time}")
 
 
+# ── LINE 工具 ──────────────────────────────────────────────────────────
+
+def line_send_msg_tool(contact="", message=""):
+    """LINE 搜尋好友並發送訊息。用法：line_send_msg <好友名稱> <訊息>"""
+    if not contact or not message:
+        print("請提供好友名稱和訊息。用法：line_send_msg <好友名稱> <訊息>")
+        return
+    script = "C:/Users/blue_/claude-telegram-bot/scripts/line_send_msg.py"
+    proc = subprocess.Popen(
+        [sys.executable, script, contact, message],
+        cwd="C:/Users/blue_/claude-telegram-bot",
+    )
+    proc.wait(timeout=120)
+    if proc.returncode == 0:
+        print(f"LINE 訊息已發送給 {contact}")
+    else:
+        print(f"LINE 發送失敗 (exit code={proc.returncode})")
+
+
 # ── 從 bot.py 同步的 29 個 execute_* 函數 ──────────────────────────────
 
 _interval_schedules = {}
@@ -17438,6 +17457,7 @@ if __name__ == "__main__":
         "workflow":              lambda: workflow_tool(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else ""),
         "youtube_summary":       lambda: youtube_summary_tool(args[0]),
         "tg_auto_reply":         lambda: tg_auto_reply_tool(args[0] if args else "start", args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        "line_send_msg":         lambda: line_send_msg_tool(args[0] if args else "", " ".join(args[1:]) if len(args)>1 else ""),
         # ── 29 個 execute_* 函數（與 bot.py 同步）──────────────
         "execute_ai_plan":       lambda: print(execute_ai_plan(" ".join(args))),
         "execute_api_call":      lambda: print(execute_api_call(args[0], args[1], args[2] if len(args)>2 else "{}", args[3] if len(args)>3 else "{}")),

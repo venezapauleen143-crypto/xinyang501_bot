@@ -1729,6 +1729,18 @@ TOOLS = [
         }
     },
     {
+        "name": "line_send_msg",
+        "description": "在 LINE 電腦版搜尋好友並發送訊息。用戶說「LINE傳訊息給XXX說OOO」「用LINE跟XXX說OOO」「LINE發給XXX」時使用。會自動搜尋好友、偵測新好友（綠色聊天按鈕）、發送訊息。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contact_name": {"type": "string", "description": "好友名稱（如 '仁輝 JAMES'）"},
+                "message": {"type": "string", "description": "要發送的訊息內容"}
+            },
+            "required": ["contact_name", "message"]
+        }
+    },
+    {
         "name": "find_image_on_screen",
         "description": "在螢幕上找到指定圖片檔案的位置，回傳座標。用於視覺定位按鈕或元素。",
         "input_schema": {
@@ -10397,6 +10409,32 @@ def execute_send_email(to, subject, body):
         s.send_message(msg)
     return f"Email 已寄出到 {to}"
 
+_LINE_SEND_SCRIPT = "C:/Users/blue_/claude-telegram-bot/scripts/line_send_msg.py"
+
+
+def execute_line_send_msg(contact_name: str, message: str) -> str:
+    """LINE 搜尋好友並發送訊息（subprocess 呼叫 line_send_msg.py）"""
+    if not contact_name or not message:
+        return "請提供好友名稱和訊息內容"
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, _LINE_SEND_SCRIPT, contact_name, message],
+            cwd="C:/Users/blue_/claude-telegram-bot",
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        output, _ = proc.communicate(timeout=120)
+        if proc.returncode == 0:
+            return f"LINE 訊息已發送給 {contact_name}：{message}"
+        else:
+            return f"LINE 發送失敗：{output[-500:]}"
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return "LINE 發送超時（120秒）"
+    except Exception as e:
+        return f"LINE 發送失敗：{e}"
+
+
 _tg_auto_reply_proc = None
 _TG_AUTO_STOP_FILE = "C:/Users/blue_/Desktop/測試檔案/.stop_auto_reply"
 _TG_AUTO_LOG = "C:/Users/blue_/claude-telegram-bot/tg_auto_reply.log"
@@ -18064,6 +18102,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 st = tool_use.input.get("stop_time", "")
                 cn = tool_use.input.get("contact_name", "")
                 result_text = execute_tg_auto_reply(action, duration, st, cn)
+                save_message(chat_id, "assistant", result_text)
+                await _fr(result_text)
+                return
+
+            elif tool_use.name == "line_send_msg":
+                cn = tool_use.input.get("contact_name", "")
+                msg = tool_use.input.get("message", "")
+                result_text = execute_line_send_msg(cn, msg)
                 save_message(chat_id, "assistant", result_text)
                 await _fr(result_text)
                 return
