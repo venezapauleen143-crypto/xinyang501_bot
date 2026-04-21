@@ -16254,6 +16254,692 @@ def tg_auto_reply_tool(action="start", contact="", stop_time="", duration="30"):
     print(f"自動回覆已開啟：對象 {contact}，監控到 {stop_time}")
 
 
+# ── 從 bot.py 同步的 29 個 execute_* 函數 ──────────────────────────────
+
+_interval_schedules = {}
+_screen_live_running = False
+
+
+def execute_ai_plan(goal: str) -> str:
+    import anthropic, json, time as _time
+    _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    response = _client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2048,
+        system="""你是電腦自動化規劃師。把目標拆解成可執行步驟，以 JSON 陣列回傳：
+[{"tool":"click","args":[x,y],"delay":0},{"tool":"type","args":["文字"]}]
+可用工具：click/type/press/hotkey/open/screenshot/wait/notify/move/scroll
+只回傳 JSON。""",
+        messages=[{"role": "user", "content": f"目標：{goal}"}]
+    )
+    plan_text = response.content[0].text.strip()
+    try:
+        steps = json.loads(plan_text)
+        results = []
+        tool_map = {
+            "click": lambda a: pyautogui.click(int(a[0]), int(a[1])),
+            "type": lambda a: (
+                __import__("pyperclip").copy(" ".join(str(x) for x in a)),
+                __import__("time").sleep(0.2),
+                pyautogui.hotkey("ctrl", "v")
+            ),
+            "press": lambda a: pyautogui.press(a[0]),
+            "hotkey": lambda a: pyautogui.hotkey(*a),
+            "open": lambda a: subprocess.Popen(" ".join(str(x) for x in a), shell=True),
+            "wait": lambda a: _time.sleep(float(a[0])),
+            "move": lambda a: pyautogui.moveTo(int(a[0]), int(a[1]), duration=0.3),
+            "scroll": lambda a: pyautogui.scroll(int(a[1]) if a[0]=="up" else -int(a[1])),
+        }
+        for i, step in enumerate(steps, 1):
+            t = step.get("tool"); a = step.get("args", []); d = step.get("delay", 0)
+            if d: _time.sleep(d)
+            if t in tool_map:
+                tool_map[t](a)
+                results.append(f"步驟 {i} ✅ {t}")
+            else:
+                results.append(f"步驟 {i} ⚠️ 未知：{t}")
+        return f"目標「{goal}」執行完畢\n" + "\n".join(results)
+    except Exception as e:
+        return f"規劃結果：{plan_text}\n執行錯誤：{e}"
+
+
+def execute_api_call(method, url, headers="{}", body="{}"):
+    try:
+        import json
+        h = json.loads(headers) if headers else {}
+        b = json.loads(body) if body else None
+        resp = requests.request(method.upper(), url, headers=h, json=b, timeout=30)
+        try:
+            return json.dumps(resp.json(), ensure_ascii=False, indent=2)[:2000]
+        except Exception:
+            return resp.text[:2000]
+    except Exception as e:
+        return f"❌ API 呼叫失敗：{e}"
+
+
+def execute_chrome_bookmarks():
+    try:
+        import json
+        bookmark_path = Path.home() / "AppData/Local/Google/Chrome/User Data/Default/Bookmarks"
+        if not bookmark_path.exists():
+            return "❌ 找不到 Chrome 書籤（Chrome 未安裝或路徑不同）"
+        data = json.loads(bookmark_path.read_text(encoding="utf-8"))
+        lines = []
+        def _collect(node, indent=0):
+            if node.get("type") == "url":
+                lines.append("  " * indent + f"🔗 {node['name']}  {node['url']}")
+            elif node.get("type") == "folder":
+                lines.append("  " * indent + f"📁 {node['name']}")
+                for child in node.get("children", []):
+                    _collect(child, indent + 1)
+        for root in data["roots"].values():
+            _collect(root)
+        return "📚 Chrome 書籤：\n" + "\n".join(lines[:80])
+    except Exception as e:
+        return f"❌ 讀取書籤失敗：{e}"
+
+
+def execute_defender(action, path=""):
+    try:
+        if action == "status":
+            r = subprocess.run(["powershell", "-Command",
+                "Get-MpComputerStatus | Select-Object AMRunningMode,RealTimeProtectionEnabled,AntivirusSignatureLastUpdated | Format-List"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"🛡️ Defender 狀態：\n{r.stdout.strip()}"
+        elif action == "quick_scan":
+            r = subprocess.run(["powershell", "-Command",
+                "Start-MpScan -ScanType QuickScan"],
+                capture_output=True, text=True, timeout=30)
+            return "🛡️ 快速掃描已啟動（背景執行中）"
+        elif action == "full_scan":
+            r = subprocess.run(["powershell", "-Command",
+                "Start-MpScan -ScanType FullScan"],
+                capture_output=True, text=True, timeout=30)
+            return "🛡️ 完整掃描已啟動（背景執行中）"
+        elif action == "threats":
+            r = subprocess.run(["powershell", "-Command",
+                "Get-MpThreatDetection | Select-Object ThreatID,Resources,ActionSuccess | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            out = r.stdout.strip()
+            return f"🛡️ 威脅記錄：\n{out}" if out else "✅ 無威脅記錄"
+        elif action == "add_exclusion":
+            r = subprocess.run(["powershell", "-Command",
+                f"Add-MpPreference -ExclusionPath '{path}'"],
+                capture_output=True, text=True)
+            return f"✅ 已新增排除：{path}" if r.returncode == 0 else f"❌ 失敗：{r.stderr.strip()}"
+        elif action == "remove_exclusion":
+            r = subprocess.run(["powershell", "-Command",
+                f"Remove-MpPreference -ExclusionPath '{path}'"],
+                capture_output=True, text=True)
+            return f"✅ 已移除排除：{path}" if r.returncode == 0 else f"❌ 失敗：{r.stderr.strip()}"
+        elif action == "list_exclusions":
+            r = subprocess.run(["powershell", "-Command",
+                "(Get-MpPreference).ExclusionPath"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            out = r.stdout.strip()
+            return f"🛡️ 排除清單：\n{out}" if out else "✅ 無排除項目"
+    except subprocess.TimeoutExpired:
+        return "⏳ 掃描已啟動（在背景執行）"
+    except Exception as e:
+        return f"❌ Defender 操作失敗：{e}"
+
+
+def execute_disk_clean(action="list"):
+    try:
+        import tempfile, shutil
+        tmp = Path(tempfile.gettempdir())
+        if action == "list":
+            files = list(tmp.rglob("*"))
+            total = sum(f.stat().st_size for f in files if f.is_file())
+            return f"🗑️ 暫存資料夾：{tmp}\n檔案數：{len(files)}\n佔用：{total/1024/1024:.1f} MB"
+        elif action == "clean":
+            count = 0
+            for f in tmp.iterdir():
+                try:
+                    if f.is_file(): f.unlink(); count += 1
+                    elif f.is_dir(): shutil.rmtree(f, ignore_errors=True); count += 1
+                except Exception: pass
+            return f"✅ 已清理 {count} 個暫存項目"
+    except Exception as e:
+        return f"❌ 磁碟清理失敗：{e}"
+
+
+def execute_drag(x1, y1, x2, y2, dur=0.5):
+    pyautogui.moveTo(int(x1), int(y1))
+    pyautogui.dragTo(int(x2), int(y2), duration=float(dur), button="left")
+    return f"已拖曳 ({x1},{y1}) → ({x2},{y2})"
+
+
+def execute_firewall(action, name="", port=None, protocol="TCP", direction="Inbound"):
+    try:
+        if action == "status":
+            r = subprocess.run(["powershell", "-Command",
+                "Get-NetFirewallProfile | Select-Object Name,Enabled | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"🔥 防火牆狀態：\n{r.stdout.strip()}"
+        elif action == "list":
+            r = subprocess.run(["powershell", "-Command",
+                f"Get-NetFirewallRule | Where-Object {{$_.Enabled -eq 'True'}} | Select-Object DisplayName,Direction,Action | Sort-Object Direction | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"🔥 防火牆規則：\n{r.stdout.strip()[:2000]}"
+        elif action == "add":
+            r = subprocess.run(["powershell", "-Command",
+                f"New-NetFirewallRule -DisplayName '{name}' -Direction {direction} -Protocol {protocol} -LocalPort {port} -Action Allow -Enabled True"],
+                capture_output=True, text=True)
+            return f"✅ 已新增防火牆規則：{name} ({direction} {protocol}:{port})" if r.returncode == 0 else f"❌ 失敗：{r.stderr.strip()}"
+        elif action == "remove":
+            r = subprocess.run(["powershell", "-Command",
+                f"Remove-NetFirewallRule -DisplayName '{name}' -Confirm:$false"],
+                capture_output=True, text=True)
+            return f"✅ 已移除規則：{name}" if r.returncode == 0 else f"❌ 失敗：{r.stderr.strip()}"
+        elif action == "enable":
+            subprocess.run(["powershell", "-Command",
+                "Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled True"], capture_output=True)
+            return "✅ 防火牆已啟用"
+        elif action == "disable":
+            subprocess.run(["powershell", "-Command",
+                "Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False"], capture_output=True)
+            return "✅ 防火牆已停用"
+    except Exception as e:
+        return f"❌ 防火牆操作失敗：{e}"
+
+
+def execute_font_list(keyword=""):
+    try:
+        r = subprocess.run(["powershell", "-Command",
+            "[System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null; [System.Drawing.FontFamily]::Families | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        fonts = r.stdout.strip().splitlines()
+        if keyword:
+            fonts = [f for f in fonts if keyword.lower() in f.lower()]
+        result = "\n".join(fonts[:50])
+        suffix = f"\n...（共 {len(fonts)} 個字型）" if len(fonts) > 50 else f"\n共 {len(fonts)} 個字型"
+        return f"🔤 字型清單：\n{result}{suffix}"
+    except Exception as e:
+        return f"❌ 字型查詢失敗：{e}"
+
+
+def execute_ftp(action, host="", user="", password="", local="", remote="", port=21):
+    try:
+        from ftplib import FTP
+        ftp = FTP()
+        ftp.connect(host, int(port), timeout=30)
+        ftp.login(user, password)
+        if action == "list":
+            items = ftp.nlst(remote or ".")
+            ftp.quit()
+            return f"📂 FTP {host}{remote or '/'}：\n" + "\n".join(items[:50])
+        elif action == "upload":
+            with open(local, "rb") as f:
+                ftp.storbinary(f"STOR {remote or Path(local).name}", f)
+            ftp.quit()
+            return f"✅ 已上傳：{local} → {host}/{remote}"
+        elif action == "download":
+            out = local or str(Path("C:/Users/blue_/Desktop/測試檔案") / Path(remote).name)
+            with open(out, "wb") as f:
+                ftp.retrbinary(f"RETR {remote}", f.write)
+            ftp.quit()
+            return f"✅ 已下載：{host}/{remote} → {out}"
+        elif action == "delete":
+            ftp.delete(remote); ftp.quit()
+            return f"✅ 已刪除：{remote}"
+        elif action == "mkdir":
+            ftp.mkd(remote); ftp.quit()
+            return f"✅ 已建立目錄：{remote}"
+        elif action == "rename":
+            ftp.rename(remote, local); ftp.quit()
+            return f"✅ 已重新命名：{remote} → {local}"
+    except Exception as e:
+        return f"❌ FTP 操作失敗：{e}"
+
+
+def execute_hotkey(keys: str):
+    parts = [k.strip() for k in keys.split("+")]
+    pyautogui.hotkey(*parts)
+    return f"已執行組合鍵：{keys}"
+
+
+def execute_hyperv(action, name="", snapshot=""):
+    try:
+        def ps(cmd):
+            r = subprocess.run(["powershell", "-Command", cmd],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout.strip(), r.returncode
+        if action == "list":
+            out, _ = ps("Get-VM | Select-Object Name,State,CPUUsage,MemoryAssigned | Format-Table -AutoSize")
+            return f"💻 虛擬機清單：\n{out}" if out else "⚠️ 未找到虛擬機（請確認已啟用 Hyper-V）"
+        elif action == "status":
+            out, _ = ps(f"Get-VM -Name '{name}' | Select-Object * | Format-List")
+            return f"💻 {name} 狀態：\n{out}"
+        elif action == "start":
+            out, rc = ps(f"Start-VM -Name '{name}'")
+            return f"✅ 已啟動：{name}" if rc == 0 else f"❌ 啟動失敗：{out}"
+        elif action == "stop":
+            out, rc = ps(f"Stop-VM -Name '{name}' -Force")
+            return f"✅ 已停止：{name}" if rc == 0 else f"❌ 停止失敗：{out}"
+        elif action == "pause":
+            ps(f"Suspend-VM -Name '{name}'")
+            return f"✅ 已暫停：{name}"
+        elif action == "resume":
+            ps(f"Resume-VM -Name '{name}'")
+            return f"✅ 已繼續：{name}"
+        elif action == "snapshot":
+            sname = snapshot or datetime.datetime.now().strftime("snap_%Y%m%d_%H%M%S")
+            out, rc = ps(f"Checkpoint-VM -Name '{name}' -SnapshotName '{sname}'")
+            return f"✅ 快照已建立：{sname}" if rc == 0 else f"❌ 失敗：{out}"
+        elif action == "restore":
+            out, rc = ps(f"Restore-VMSnapshot -Name '{name}' -VMName '{name}' -Confirm:$false")
+            return f"✅ 已還原快照：{snapshot}" if rc == 0 else f"❌ 失敗：{out}"
+        elif action == "delete_snapshot":
+            ps(f"Remove-VMSnapshot -VMName '{name}' -Name '{snapshot}' -Confirm:$false")
+            return f"✅ 已刪除快照：{snapshot}"
+    except Exception as e:
+        return f"❌ Hyper-V 操作失敗：{e}"
+
+
+def execute_interval_schedule(action, name="", command="", every_minutes=60.0, repeat=0, duration_hours=0.0):
+    global _interval_schedules
+    try:
+        if action == "list":
+            if not _interval_schedules:
+                return "⚠️ 無執行中排程"
+            return "⏱️ 間隔排程：\n" + "\n".join(f"- {k}: 每{v['mins']}分鐘，已執行{v['count']}次" for k,v in _interval_schedules.items())
+        elif action == "stop":
+            if name in _interval_schedules:
+                _interval_schedules[name]["running"] = False
+                del _interval_schedules[name]
+                return f"✅ 已停止排程：{name}"
+            return f"⚠️ 找不到排程：{name}"
+        elif action == "start":
+            if name in _interval_schedules:
+                return f"⚠️ 已有同名排程：{name}"
+            cfg = {"command": command, "mins": every_minutes, "repeat": repeat, "count": 0, "running": True}
+            _interval_schedules[name] = cfg
+            def _run():
+                import time as t
+                end_time = t.time() + float(duration_hours) * 3600 if duration_hours > 0 else float("inf")
+                max_count = int(repeat) if repeat > 0 else float("inf")
+                while _interval_schedules.get(name, {}).get("running"):
+                    if t.time() > end_time or _interval_schedules.get(name, {}).get("count", 0) >= max_count:
+                        _interval_schedules.pop(name, None); break
+                    subprocess.Popen(command, shell=True)
+                    _interval_schedules[name]["count"] = _interval_schedules[name].get("count", 0) + 1
+                    t.sleep(float(every_minutes) * 60)
+            threading.Thread(target=_run, daemon=True).start()
+            desc = f"每 {every_minutes} 分鐘" + (f"，共 {repeat} 次" if repeat else "") + (f"，持續 {duration_hours} 小時" if duration_hours else "")
+            return f"✅ 間隔排程已啟動：{name}（{desc}）"
+    except Exception as e:
+        return f"❌ 間隔排程失敗：{e}"
+
+
+def execute_lock_screen(action):
+    try:
+        if action == "lock":
+            subprocess.Popen(["rundll32.exe", "user32.dll,LockWorkStation"])
+            return "🔒 螢幕已鎖定"
+        elif action == "logoff":
+            subprocess.run(["shutdown", "/l"], capture_output=True)
+            return "✅ 已登出"
+        elif action == "switch_user":
+            subprocess.Popen(["tsdiscon.exe"])
+            return "✅ 已切換使用者"
+    except Exception as e:
+        return f"❌ 鎖定/登出失敗：{e}"
+
+
+def execute_net_share(action, share_path="", drive="Z:", user="", password=""):
+    try:
+        if action == "list":
+            r = subprocess.run(["net", "use"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return f"🌐 網路磁碟機：\n{r.stdout.strip()}"
+        elif action == "connect":
+            args = ["net", "use", drive, share_path]
+            if user: args += [f"/user:{user}", password]
+            r = subprocess.run(args, capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout.strip() or f"✅ 已連線 {share_path} → {drive}"
+        elif action == "disconnect":
+            r = subprocess.run(["net", "use", drive, "/delete"], capture_output=True, text=True, encoding="cp950", errors="replace")
+            return r.stdout.strip() or f"✅ 已中斷 {drive}"
+    except Exception as e:
+        return f"❌ 網路芳鄰失敗：{e}"
+
+
+def execute_object_detect(target, action="find", region=""):
+    try:
+        import anthropic, base64, io as _io, json, re
+        reg = None
+        if region:
+            parts = [int(v) for v in region.split(",")]
+            if len(parts) == 4: reg = tuple(parts)
+        screenshot = pyautogui.screenshot(region=reg)
+        buf = _io.BytesIO(); screenshot.save(buf, format="PNG")
+        img_b64 = base64.standard_b64encode(buf.getvalue()).decode()
+        offset_x = reg[0] if reg else 0
+        offset_y = reg[1] if reg else 0
+        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        resp = _client.messages.create(
+            model="claude-sonnet-4-6", max_tokens=256,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text", "text": f"在圖片中找到「{target}」的位置。回答 JSON：{{\"found\": true/false, \"x\": 中心X座標, \"y\": 中心Y座標, \"description\": \"說明\"}}"}
+            ]}]
+        )
+        m = re.search(r'\{.*\}', resp.content[0].text, re.DOTALL)
+        if not m: return f"⚠️ AI 無法解析回應"
+        result = json.loads(m.group())
+        if not result.get("found"): return f"⚠️ 未找到：{target}"
+        ax = result["x"] + offset_x
+        ay = result["y"] + offset_y
+        if action == "click": pyautogui.click(ax, ay); return f"✅ 已點擊「{target}」({ax},{ay})"
+        elif action == "double_click": pyautogui.doubleClick(ax, ay); return f"✅ 已雙擊「{target}」({ax},{ay})"
+        return f"✅ 找到「{target}」：座標({ax},{ay}) — {result.get('description','')}"
+    except Exception as e:
+        return f"❌ 物件偵測失敗：{e}"
+
+
+def execute_onedrive(action, path="", remote=""):
+    try:
+        import shutil
+        onedrive_path = os.path.expandvars(r"%USERPROFILE%\OneDrive")
+        if not Path(onedrive_path).exists():
+            onedrive_path = os.path.expandvars(r"%OneDrive%") or str(Path.home() / "OneDrive")
+        if action == "status":
+            r = subprocess.run(["powershell", "-Command",
+                "Get-Process OneDrive -ErrorAction SilentlyContinue | Select-Object Name,CPU,WorkingSet"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            size = sum(f.stat().st_size for f in Path(onedrive_path).rglob("*") if f.is_file()) / 1024 / 1024 / 1024
+            return f"☁️ OneDrive 路徑：{onedrive_path}\n使用空間：{size:.2f} GB\n程序狀態：\n{r.stdout.strip()}"
+        elif action == "list":
+            target = Path(onedrive_path) / (remote or "")
+            if not target.exists(): return f"⚠️ 路徑不存在：{target}"
+            items = list(target.iterdir())
+            lines = [f"{'📁' if p.is_dir() else '📄'} {p.name}" for p in sorted(items)]
+            return f"☁️ OneDrive/{remote or ''}：\n" + "\n".join(lines[:30])
+        elif action == "upload":
+            dest = Path(onedrive_path) / (remote or Path(path).name)
+            shutil.copy2(path, dest)
+            return f"✅ 已上傳至 OneDrive：{dest}"
+        elif action == "download":
+            src = Path(onedrive_path) / remote
+            if not src.exists(): return f"⚠️ 找不到：{src}"
+            dest = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / src.name)
+            shutil.copy2(src, dest)
+            return f"✅ 已從 OneDrive 下載：{dest}"
+        elif action == "sync":
+            subprocess.Popen(["powershell", "-Command",
+                'Start-Process "$env:LOCALAPPDATA\\Microsoft\\OneDrive\\OneDrive.exe"'])
+            return "✅ OneDrive 同步已觸發"
+        elif action == "open":
+            os.startfile(onedrive_path)
+            return f"✅ 已開啟 OneDrive 資料夾：{onedrive_path}"
+    except Exception as e:
+        return f"❌ OneDrive 操作失敗：{e}"
+
+
+def execute_proxy(action, host=""):
+    try:
+        import winreg
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
+            if action == "get":
+                try:
+                    enabled = winreg.QueryValueEx(k, "ProxyEnable")[0]
+                    server = winreg.QueryValueEx(k, "ProxyServer")[0]
+                    return f"🌐 代理設定：{'啟用' if enabled else '停用'}\n伺服器：{server}"
+                except Exception:
+                    return "🌐 代理：未設定"
+            elif action == "set":
+                winreg.SetValueEx(k, "ProxyEnable", 0, winreg.REG_DWORD, 1)
+                winreg.SetValueEx(k, "ProxyServer", 0, winreg.REG_SZ, host)
+                return f"✅ 代理已設定：{host}"
+            elif action == "disable":
+                winreg.SetValueEx(k, "ProxyEnable", 0, winreg.REG_DWORD, 0)
+                return "✅ 代理已停用"
+    except Exception as e:
+        return f"❌ 代理設定失敗：{e}"
+
+
+def execute_rdp_connect(host, user="", width=1280, height=720):
+    try:
+        args = ["/v:" + host, f"/w:{width}", f"/h:{height}"]
+        if user:
+            args.append(f"/u:{user}")
+        subprocess.Popen(["mstsc"] + args)
+        return f"✅ 正在連線 RDP：{host}"
+    except Exception as e:
+        return f"❌ RDP 連線失敗：{e}"
+
+
+def execute_right_menu(x, y, item=""):
+    try:
+        pyautogui.rightClick(int(x), int(y))
+        time.sleep(0.3)
+        if item:
+            pyautogui.write(item, interval=0.05)
+            time.sleep(0.2)
+            pyautogui.press("enter")
+            return f"✅ 已右鍵點擊並選擇：{item}"
+        return f"✅ 已右鍵點擊 ({x},{y})"
+    except Exception as e:
+        return f"❌ 右鍵選單失敗：{e}"
+
+
+def execute_screen_live(action, fps=0.5, duration=60.0, quality=50, _bot_send=None, _chat_id=None):
+    global _screen_live_running
+    try:
+        if action == "stop":
+            _screen_live_running = False
+            return "✅ 螢幕串流已停止"
+        elif action == "start":
+            if _screen_live_running:
+                return "⚠️ 螢幕串流已在執行中"
+            _screen_live_running = True
+            def _stream():
+                global _screen_live_running
+                import io as _io, time as t, asyncio
+                interval = 1.0 / max(float(fps), 0.1)
+                end = t.time() + float(duration)
+                try:
+                    loop = asyncio.get_event_loop()
+                except Exception:
+                    loop = None
+                count = 0
+                while _screen_live_running and t.time() < end:
+                    try:
+                        screenshot = pyautogui.screenshot()
+                        buf = _io.BytesIO()
+                        screenshot.save(buf, format="JPEG", quality=int(quality))
+                        buf.seek(0)
+                        if _bot_send and _chat_id and loop:
+                            import telegram
+                            asyncio.run_coroutine_threadsafe(
+                                _bot_send(_chat_id, photo=buf),
+                                loop)
+                        count += 1
+                    except Exception:
+                        pass
+                    t.sleep(interval)
+                _screen_live_running = False
+            threading.Thread(target=_stream, daemon=True).start()
+            return f"✅ 螢幕串流已啟動（{fps} FPS，{duration}s，畫質 {quality}）"
+    except Exception as e:
+        return f"❌ 螢幕串流失敗：{e}"
+
+
+def execute_screen_stream(duration=10, interval=2):
+    screenshots = []
+    end = time.time() + duration
+    while time.time() < end:
+        img = pyautogui.screenshot()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        screenshots.append(buf.getvalue())
+        time.sleep(interval)
+    return screenshots
+
+
+def execute_screen_watch(template_path, command, timeout=60):
+    import time as t
+    start = t.time()
+    while t.time() - start < timeout:
+        try:
+            loc = pyautogui.locateOnScreen(template_path, confidence=0.8)
+            if loc:
+                subprocess.run(command, shell=True)
+                return f"偵測到目標，已執行：{command}"
+        except Exception:
+            pass
+        t.sleep(2)
+    return "監控逾時，未偵測到目標"
+
+
+def execute_sysres_chart(duration=10):
+    try:
+        import psutil, matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt, time as t
+        cpu_vals, mem_vals = [], []
+        for _ in range(duration):
+            cpu_vals.append(psutil.cpu_percent(interval=1))
+            mem_vals.append(psutil.virtual_memory().percent)
+        out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"sysres_{datetime.datetime.now().strftime('%H%M%S')}.png")
+        fig, ax = plt.subplots()
+        ax.plot(range(1,duration+1), cpu_vals, label="CPU %", color="blue")
+        ax.plot(range(1,duration+1), mem_vals, label="RAM %", color="orange")
+        ax.set_ylim(0,100); ax.legend(); ax.set_title("系統資源使用率")
+        plt.tight_layout(); plt.savefig(out); plt.close()
+        return out
+    except Exception as e:
+        return f"❌ 失敗：{e}"
+
+
+def execute_usb_list():
+    try:
+        r = subprocess.run(["powershell", "-Command",
+            "Get-PnpDevice | Where-Object {$_.Class -eq 'USB' -and $_.Status -eq 'OK'} | Select-Object FriendlyName,InstanceId | Format-Table -AutoSize"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return f"🔌 USB 裝置：\n{r.stdout.strip()[:2000]}" if r.stdout.strip() else "⚠️ 無 USB 裝置"
+    except Exception as e:
+        return f"❌ USB 查詢失敗：{e}"
+
+
+def execute_wake_on_lan(mac, broadcast="255.255.255.255", port=9):
+    try:
+        import socket
+        mac_clean = mac.replace(":", "").replace("-", "")
+        if len(mac_clean) != 12:
+            return f"❌ MAC 位址格式錯誤：{mac}"
+        mac_bytes = bytes.fromhex(mac_clean)
+        magic = b"\xff" * 6 + mac_bytes * 16
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.sendto(magic, (broadcast, int(port)))
+        return f"✅ WOL 魔法封包已送出 → {mac}（{broadcast}:{port}）"
+    except Exception as e:
+        return f"❌ WOL 失敗：{e}"
+
+
+def execute_wifi(action, ssid="", password=""):
+    try:
+        if action == "scan":
+            r = subprocess.run(["netsh", "wlan", "show", "networks", "mode=Bssid"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"📡 附近 Wi-Fi：\n{r.stdout.strip()[:2000]}"
+        elif action == "status":
+            r = subprocess.run(["netsh", "wlan", "show", "interfaces"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"📡 Wi-Fi 狀態：\n{r.stdout.strip()}"
+        elif action == "saved":
+            r = subprocess.run(["netsh", "wlan", "show", "profiles"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"📡 已儲存 Wi-Fi：\n{r.stdout.strip()}"
+        elif action == "password":
+            r = subprocess.run(["netsh", "wlan", "show", "profile", f"name={ssid}", "key=clear"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"🔑 '{ssid}' 密碼資訊：\n{r.stdout.strip()}"
+        elif action == "connect":
+            r = subprocess.run(["netsh", "wlan", "connect", f"name={ssid}"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ 嘗試連線 '{ssid}'：{r.stdout.strip()}"
+        elif action == "disconnect":
+            r = subprocess.run(["netsh", "wlan", "disconnect"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ Wi-Fi 已斷線：{r.stdout.strip()}"
+    except Exception as e:
+        return f"❌ Wi-Fi 操作失敗：{e}"
+
+
+def execute_wifi_hotspot(action, ssid="", password=""):
+    try:
+        if action == "status":
+            r = subprocess.run(["powershell", "-Command",
+                "Get-NetConnectionProfile | Select-Object Name,NetworkCategory | Format-Table; netsh wlan show hostednetwork"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"📡 熱點狀態：\n{r.stdout.strip()}"
+        elif action == "set":
+            r = subprocess.run(["netsh", "wlan", "set", "hostednetwork",
+                f"mode=allow", f"ssid={ssid}", f"key={password}"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ 熱點設定完成：SSID={ssid}\n{r.stdout.strip()}"
+        elif action == "start":
+            r = subprocess.run(["netsh", "wlan", "start", "hostednetwork"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ 熱點已啟動\n{r.stdout.strip()}"
+        elif action == "stop":
+            r = subprocess.run(["netsh", "wlan", "stop", "hostednetwork"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"✅ 熱點已停止\n{r.stdout.strip()}"
+    except Exception as e:
+        return f"❌ WiFi 熱點失敗：{e}"
+
+
+def execute_win_service(action, name=""):
+    try:
+        if action == "list":
+            r = subprocess.run(["powershell.exe", "-Command",
+                "Get-Service | Select-Object Name,Status | Format-Table -AutoSize"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout[:2000]
+        else:
+            cmd = f"{'Start' if action=='start' else 'Stop'}-Service -Name '{name}' -Force"
+            r = subprocess.run(["powershell.exe", "-Command", cmd],
+                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return r.stdout or r.stderr or f"✅ {action} {name}"
+    except Exception as e:
+        return f"❌ 服務操作失敗：{e}"
+
+
+def execute_wsl(action, distro="", command=""):
+    try:
+        if action == "list":
+            r = subprocess.run(["wsl", "--list", "--verbose"],
+                capture_output=True, text=True, encoding="utf-16-le", errors="replace")
+            return f"🐧 WSL 發行版：\n{r.stdout.strip()}"
+        elif action == "status":
+            r = subprocess.run(["wsl", "--status"],
+                capture_output=True, text=True, encoding="utf-16-le", errors="replace")
+            return f"🐧 WSL 狀態：\n{r.stdout.strip()}"
+        elif action == "run":
+            cmd = ["wsl"]
+            if distro: cmd += ["-d", distro]
+            cmd += ["--", "bash", "-c", command]
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            return f"🐧 WSL 輸出：\n{r.stdout.strip()}" + (f"\n錯誤：{r.stderr.strip()}" if r.stderr.strip() else "")
+        elif action == "start":
+            subprocess.Popen(["wsl"] + (["-d", distro] if distro else []))
+            return f"✅ WSL 已啟動：{distro or '預設'}"
+        elif action == "stop":
+            cmd = ["wsl", "--terminate", distro] if distro else ["wsl", "--shutdown"]
+            subprocess.run(cmd, capture_output=True)
+            return f"✅ WSL 已停止：{distro or '全部'}"
+        elif action == "install":
+            r = subprocess.run(["wsl", "--install", "-d", distro],
+                capture_output=True, text=True)
+            return f"✅ 正在安裝 {distro}（需要網路）"
+    except Exception as e:
+        return f"❌ WSL 操作失敗：{e}（請確認已啟用 WSL）"
+
+
 # ── 主程式 ──────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -16752,6 +17438,36 @@ if __name__ == "__main__":
         "workflow":              lambda: workflow_tool(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else ""),
         "youtube_summary":       lambda: youtube_summary_tool(args[0]),
         "tg_auto_reply":         lambda: tg_auto_reply_tool(args[0] if args else "start", args[1] if len(args)>1 else "", args[2] if len(args)>2 else ""),
+        # ── 29 個 execute_* 函數（與 bot.py 同步）──────────────
+        "execute_ai_plan":       lambda: print(execute_ai_plan(" ".join(args))),
+        "execute_api_call":      lambda: print(execute_api_call(args[0], args[1], args[2] if len(args)>2 else "{}", args[3] if len(args)>3 else "{}")),
+        "execute_chrome_bookmarks": lambda: print(execute_chrome_bookmarks()),
+        "execute_defender":      lambda: print(execute_defender(args[0], args[1] if len(args)>1 else "")),
+        "execute_disk_clean":    lambda: print(execute_disk_clean(args[0] if args else "list")),
+        "execute_drag":          lambda: print(execute_drag(args[0], args[1], args[2], args[3], float(args[4]) if len(args)>4 else 0.5)),
+        "execute_firewall":      lambda: print(execute_firewall(args[0], args[1] if len(args)>1 else "", int(args[2]) if len(args)>2 else None, args[3] if len(args)>3 else "TCP", args[4] if len(args)>4 else "Inbound")),
+        "execute_font_list":     lambda: print(execute_font_list(args[0] if args else "")),
+        "execute_ftp":           lambda: print(execute_ftp(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "", args[5] if len(args)>5 else "", int(args[6]) if len(args)>6 else 21)),
+        "execute_hotkey":        lambda: print(execute_hotkey(args[0])),
+        "execute_hyperv":        lambda: print(execute_hyperv(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "")),
+        "execute_interval_schedule": lambda: print(execute_interval_schedule(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", float(args[3]) if len(args)>3 else 60.0, int(args[4]) if len(args)>4 else 0, float(args[5]) if len(args)>5 else 0.0)),
+        "execute_lock_screen":   lambda: print(execute_lock_screen(args[0] if args else "lock")),
+        "execute_net_share":     lambda: print(execute_net_share(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "Z:", args[3] if len(args)>3 else "", args[4] if len(args)>4 else "")),
+        "execute_object_detect": lambda: print(execute_object_detect(" ".join(args[:-1]) if len(args)>1 else args[0], args[-1] if len(args)>1 and args[-1] in ("click","double_click","find") else "find")),
+        "execute_onedrive":      lambda: print(execute_onedrive(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "")),
+        "execute_proxy":         lambda: print(execute_proxy(args[0], args[1] if len(args)>1 else "")),
+        "execute_rdp_connect":   lambda: print(execute_rdp_connect(args[0], args[1] if len(args)>1 else "", int(args[2]) if len(args)>2 else 1280, int(args[3]) if len(args)>3 else 720)),
+        "execute_right_menu":    lambda: print(execute_right_menu(args[0], args[1], args[2] if len(args)>2 else "")),
+        "execute_screen_live":   lambda: print(execute_screen_live(args[0] if args else "start", float(args[1]) if len(args)>1 else 0.5, float(args[2]) if len(args)>2 else 60.0, int(args[3]) if len(args)>3 else 50)),
+        "execute_screen_stream": lambda: print(f"已擷取 {len(execute_screen_stream(int(args[0]) if args else 10, int(args[1]) if len(args)>1 else 2))} 張截圖"),
+        "execute_screen_watch":  lambda: print(execute_screen_watch(args[0], args[1], float(args[2]) if len(args)>2 else 60)),
+        "execute_sysres_chart":  lambda: print(execute_sysres_chart(int(args[0]) if args else 10)),
+        "execute_usb_list":      lambda: print(execute_usb_list()),
+        "execute_wake_on_lan":   lambda: print(execute_wake_on_lan(args[0], args[1] if len(args)>1 else "255.255.255.255", int(args[2]) if len(args)>2 else 9)),
+        "execute_wifi":          lambda: print(execute_wifi(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "")),
+        "execute_wifi_hotspot":  lambda: print(execute_wifi_hotspot(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "")),
+        "execute_win_service":   lambda: print(execute_win_service(args[0], args[1] if len(args)>1 else "")),
+        "execute_wsl":           lambda: print(execute_wsl(args[0], args[1] if len(args)>1 else "", " ".join(args[2:]) if len(args)>2 else "")),
     }
 
     if tool not in tools:
