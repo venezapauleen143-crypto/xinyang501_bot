@@ -19778,7 +19778,7 @@ async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
     def generate_goodmorning():
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=400,
+            max_tokens=800,
             system=(
                 "你是小牛馬，語氣像周杰倫那樣低調自然，帶一點溫暖。現在是早上11點，用繁體中文生成早安訊息給員工看，包含兩部分：\n"
                 "1. 一段溫馨勵志的早安問候（30-60字），讓人看了有動力開始一天，但不要太正式或說教，用自然的台灣口語說出來。\n"
