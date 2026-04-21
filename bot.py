@@ -1716,10 +1716,11 @@ TOOLS = [
     },
     {
         "name": "tg_auto_reply",
-        "description": "開啟/停止 Telegram 自動回覆監控。監控螢幕2的 Telegram 對話，偵測到對方新訊息時自動用小牛馬風格回覆。用戶說「開啟自動回覆」「監控聊天」「幫我回訊息」時使用。當用戶說「到幾點」「時間到XX:XX」時，必須用 stop_time 參數帶入結束時間。",
+        "description": "開啟/停止 Telegram 自動回覆監控。監控螢幕2的 Telegram 對話，用 PaddleOCR GPU 偵測新訊息，自動搜尋事實資料後用小牛馬風格回覆。用戶說「開啟自動回覆」「監控聊天」「幫我回訊息」「自動回覆XXX」時使用。當用戶說「到幾點」「時間到XX:XX」時，必須用 stop_time 參數帶入結束時間。",
         "input_schema": {
             "type": "object",
             "properties": {
+                "contact_name": {"type": "string", "description": "要自動回覆的好友名稱（如 'KK2.0'、'巴斯'）。會自動搜尋並點選該好友"},
                 "duration_minutes": {"type": "number", "description": "監控持續時間（分鐘），預設 30。如果用戶指定了結束時間則不需要此參數"},
                 "stop_time": {"type": "string", "description": "監控結束時間，格式 HH:MM（如 '15:15'）。用戶說「到15:15」「時間到15:15」時必須填入此參數，優先於 duration_minutes"},
                 "action": {"type": "string", "description": "start 開啟 / stop 停止，預設 start"}
@@ -10396,9 +10397,11 @@ def execute_send_email(to, subject, body):
         s.send_message(msg)
     return f"Email 已寄出到 {to}"
 
-_tg_auto_reply_running = False
-_tg_auto_reply_thread = None
+_tg_auto_reply_proc = None
+_TG_AUTO_STOP_FILE = "C:/Users/blue_/Desktop/測試檔案/.stop_auto_reply"
 _TG_AUTO_LOG = "C:/Users/blue_/claude-telegram-bot/tg_auto_reply.log"
+_TG_AUTO_SCRIPT = "C:/Users/blue_/claude-telegram-bot/scripts/tg_auto_chat.py"
+
 
 def _tg_log(msg):
     """寫 log 到檔案"""
@@ -10408,184 +10411,55 @@ def _tg_log(msg):
     except Exception:
         pass
 
-def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, stop_time: str = "") -> str:
-    """開啟/停止 Telegram 自動回覆監控"""
-    global _tg_auto_reply_running, _tg_auto_reply_thread
-    import threading, base64
-    import win32gui
-    import mss as mss_module
-    import pyperclip
-    import numpy as np
+
+def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, stop_time: str = "", contact_name: str = "") -> str:
+    """開啟/停止 Telegram 自動回覆監控（subprocess 呼叫 tg_auto_chat.py）"""
+    global _tg_auto_reply_proc
 
     if action == "stop":
-        _tg_auto_reply_running = False
-        _tg_log("手動停止")
+        # 寫旗標檔案，腳本 1 秒內自己退出
+        try:
+            with open(_TG_AUTO_STOP_FILE, "w") as f:
+                f.write("stop")
+            _tg_log("手動停止（寫入旗標檔案）")
+        except Exception as e:
+            _tg_log(f"停止失敗：{e}")
+        _tg_auto_reply_proc = None
         return "自動回覆已停止"
 
-    if _tg_auto_reply_running:
-        return "自動回覆已在運行中"
+    # 檢查是否已在運行
+    if _tg_auto_reply_proc is not None:
+        try:
+            if _tg_auto_reply_proc.poll() is None:
+                return "自動回覆已在運行中"
+        except Exception:
+            pass
+        _tg_auto_reply_proc = None
 
     # 計算結束時間
     if stop_time:
-        _end_str = stop_time
+        end_str = stop_time
     else:
-        _end_dt = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
-        _end_str = _end_dt.strftime("%H:%M")
+        end_dt = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
+        end_str = end_dt.strftime("%H:%M")
 
-    _client = client
+    # 必須有好友名稱
+    if not contact_name:
+        return "請提供要自動回覆的好友名稱（contact_name 參數）"
 
-    def run_monitor():
-        global _tg_auto_reply_running
-        _tg_auto_reply_running = True
-
-        end_str = _end_str
-        TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
-        last_reply = ""
-
-        PERSONA = """你是小牛馬，一個嘴賤幽默的男生，說話像真人一樣自然。絕對不能暴露自己是AI、機器人、程式。
-風格：
-- 台灣口語：然後、就是、對啊、沒有啦、還好啦
-- 嘴賤互嗆但不惡意，兄弟之間的感覺
-- 會吐槽、自嘲、幽默
-- 最多5句不超過120字
-- 不用emoji
-- 說話像真人朋友聊天，有情緒、有個性、會生氣會開玩笑
-- 絕對禁止說出「我是AI」「我是機器人」「我是程式」「作為AI」等任何暴露身份的話"""
-
-        try:
-            # 找 Telegram 窗口
-            tg_results = []
-            def cb(hwnd, _):
-                if win32gui.IsWindowVisible(hwnd):
-                    cls = win32gui.GetClassName(hwnd)
-                    if "Qt" in cls and "QWindow" in cls:
-                        tg_results.append((hwnd, win32gui.GetWindowText(hwnd), win32gui.GetWindowRect(hwnd)))
-            win32gui.EnumWindows(cb, tg_results)
-
-            if not tg_results:
-                _tg_log("ERROR: 找不到 Telegram 窗口")
-                _tg_auto_reply_running = False
-                return
-            main_tg = max(tg_results, key=lambda x: (x[2][2]-x[2][0]) * (x[2][3]-x[2][1]))
-            hwnd, title, (wl, wt, wr, wb) = main_tg
-            _tg_log(f"Telegram: {title} at ({wl},{wt})-({wr},{wb})")
-
-            with mss_module.mss() as sct:
-                mon = sct.monitors[2]
-                img = sct.grab(mon)
-                pil = Image.frombytes("RGB", img.size, img.rgb)
-                iw, ih = pil.size
-            _tg_log(f"mss: {iw}x{ih}")
-
-            sx = iw / mon["width"]
-            sy = ih / mon["height"]
-            il = int((wl - mon["left"]) * sx)
-            it = int((wt - mon["top"]) * sy)
-            ir = int((wr - mon["left"]) * sx)
-            ib = int((wb - mon["top"]) * sy)
-
-            arr = np.array(pil.crop((il, it, ir, ib)))
-            th, tw, _ = arr.shape
-
-            candidates = []
-            for check_y in range(int(th*0.3), int(th*0.8), int(th*0.05)):
-                row = arr[check_y, :, :]
-                for x in range(tw // 5, tw * 3 // 4):
-                    r, g, b = int(row[x, 0]), int(row[x, 1]), int(row[x, 2])
-                    if g > r + 5 and g > 150 and r < 220 and b < g:
-                        candidates.append(x)
-                        break
-            split_x = sorted(candidates)[len(candidates)//2] if candidates else tw // 2
-
-            chat_region = (il + split_x, it, ir, ib)
-
-            # 輸入框：像素分析找底部白色區域（分隔線右邊）
-            _input_y1 = th - 1
-            for _y in range(th - 1, th - 60, -1):
-                _row = arr[it + _y, il + split_x:ir, :]
-                _white = np.sum((_row[:, 0] > 240) & (_row[:, 1] > 240) & (_row[:, 2] > 240))
-                if _white > (ir - il - split_x) * 0.5:
-                    _input_y1 = _y
-                elif _input_y1 < th - 1:
-                    break
-            _i_x1, _i_x2 = split_x, tw
-            _mid_iy = (_input_y1 + th - 1) // 2
-            _irow = arr[it + _mid_iy, il + split_x:ir, :]
-            for _x in range(0, ir - il - split_x):
-                if _irow[_x, 0] > 240 and _irow[_x, 1] > 240 and _irow[_x, 2] > 240:
-                    _i_x1 = split_x + _x; break
-            for _x in range(ir - il - split_x - 1, 0, -1):
-                if _irow[_x, 0] > 240 and _irow[_x, 1] > 240 and _irow[_x, 2] > 240:
-                    _i_x2 = split_x + _x; break
-            input_x = int(mon["left"] + (il + (_i_x1 + _i_x2) // 2) / sx)
-            input_y = int(mon["top"] + (it + (_input_y1 + th - 1) // 2) / sy)
-            _tg_log(f"分隔線: {split_x}/{tw}, 對話區: {chat_region}, 輸入框: ({input_x},{input_y})")
-            _tg_log(f"監控啟動 → {end_str}")
-
-            while _tg_auto_reply_running and datetime.datetime.now().strftime("%H:%M") < end_str:
-                time.sleep(8)
-                try:
-                    with mss_module.mss() as sct:
-                        img = sct.grab(sct.monitors[2])
-                        pil = Image.frombytes("RGB", img.size, img.rgb)
-                    conv = pil.crop(chat_region)
-
-                    p = os.path.join(TMPDIR, "tg_auto.png")
-                    conv.save(p)
-                    with open(p, "rb") as f:
-                        d = base64.b64encode(f.read()).decode()
-
-                    resp = _client.messages.create(model="claude-sonnet-4-6", max_tokens=200, system=PERSONA,
-                        messages=[{"role":"user","content":[
-                        {"type":"image","source":{"type":"base64","media_type":"image/png","data":d}},
-                        {"type":"text","text":"""這是 Telegram 對話截圖，請依照以下步驟分析：
-
-1. 辨識對話結構：
-   - 綠色氣泡（靠右）= 我（小牛馬）發的
-   - 白色氣泡（靠左）= 對方發的
-
-2. 分析上下文：從上到下讀完整段對話，理解主題和情緒
-
-3. 判斷是否回覆：
-   - 最底部是白色氣泡 → 需要回覆
-   - 最底部是綠色氣泡 → 只回一個字「等」
-
-4. 如果需要回覆：根據整段上下文回應，不是只看最後一條。對方問問題就回答，嗆人就幽默化解，聊天就接話。如果對方連發多條，整體理解後一次回覆。
-
-只回覆要發送的文字，不要加任何格式或解釋。"""}
-                    ]}])
-                    reply = resp.content[0].text.strip()
-
-                    if reply and reply != "等" and len(reply) > 2 and reply != last_reply:
-                        _tg_log(f"回覆: {reply}")
-                        pyautogui.click(input_x, input_y)
-                        time.sleep(0.3)
-                        pyperclip.copy(reply)
-                        pyautogui.hotkey("ctrl", "v")
-                        time.sleep(0.3)
-                        pyautogui.press("enter")
-                        time.sleep(1)
-                        last_reply = reply
-                        # 10 秒冷卻
-                        time.sleep(10)
-                    else:
-                        _tg_log("跳過")
-
-                except Exception as e:
-                    _tg_log(f"ERROR: {e}")
-                    time.sleep(5)
-
-        except Exception as e:
-            _tg_log(f"FATAL: {e}")
-
-        _tg_auto_reply_running = False
-        _tg_log("監控結束")
-
-    _tg_auto_reply_thread = threading.Thread(target=run_monitor, daemon=True)
-    _tg_auto_reply_thread.start()
-    if stop_time:
-        return f"自動回覆已開啟，監控到 {stop_time}"
-    return f"自動回覆已開啟，監控 {duration_minutes} 分鐘"
+    # 啟動 subprocess
+    try:
+        _tg_auto_reply_proc = subprocess.Popen(
+            [sys.executable, _TG_AUTO_SCRIPT, contact_name, end_str],
+            cwd="C:/Users/blue_/claude-telegram-bot",
+            stdout=open(_TG_AUTO_LOG, "a", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+        _tg_log(f"啟動自動回覆：好友={contact_name} 到={end_str} PID={_tg_auto_reply_proc.pid}")
+        return f"自動回覆已開啟：對象 {contact_name}，監控到 {end_str}"
+    except Exception as e:
+        _tg_log(f"啟動失敗：{e}")
+        return f"自動回覆啟動失敗：{e}"
 
 
 def execute_screen_vision(question: str = "請描述這個畫面上有什麼，以及目前電腦在做什麼事。") -> tuple:
@@ -18188,7 +18062,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 action = tool_use.input.get("action", "start")
                 duration = tool_use.input.get("duration_minutes", 30)
                 st = tool_use.input.get("stop_time", "")
-                result_text = execute_tg_auto_reply(action, duration, st)
+                cn = tool_use.input.get("contact_name", "")
+                result_text = execute_tg_auto_reply(action, duration, st, cn)
                 save_message(chat_id, "assistant", result_text)
                 await _fr(result_text)
                 return
