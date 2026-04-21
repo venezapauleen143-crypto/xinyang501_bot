@@ -750,10 +750,14 @@ def monitor_and_reply(regions, stop_time, monitor=2):
     while datetime.now().strftime("%H:%M") < stop_time:
         if should_stop():
             break
-        time.sleep(POLL_INTERVAL)
-        try:
+        # 輪詢等待（每秒檢查停止信號，不再一次 sleep 6 秒）
+        for _ in range(POLL_INTERVAL):
             if should_stop():
                 break
+            time.sleep(1)
+        if should_stop():
+            break
+        try:
             if time.time() < cooldown_until:
                 continue
 
@@ -876,6 +880,13 @@ def monitor_and_reply(regions, stop_time, monitor=2):
 def main(contact_name, stop_time, monitor=2):
     import threading
 
+    # 啟動時清掉殘留的停止旗標（避免上次異常退出留下的旗標導致立即停止）
+    if os.path.exists(STOP_FILE):
+        try:
+            os.remove(STOP_FILE)
+        except OSError:
+            pass
+
     print("=" * 50, flush=True)
     print(f"Telegram 自動回覆", flush=True)
     print(f"好友：{contact_name}", flush=True)
@@ -896,14 +907,20 @@ def main(contact_name, stop_time, monitor=2):
     # Step 1: 定位
     print("\n[Step 1] 定位 Telegram UI...", flush=True)
     regions = locate_all(monitor)
+    if should_stop():
+        return False
 
     # Step 2: 搜尋好友
     print(f"\n[Step 2] 搜尋好友：{contact_name}", flush=True)
     search_contact(regions, contact_name, monitor)
+    if should_stop():
+        return False
 
     # Step 3: 點選好友
     print(f"\n[Step 3] 點選好友...", flush=True)
     click_contact(regions, contact_name, monitor)
+    if should_stop():
+        return False
 
     # Step 4: 確認好友名稱（用 Step 1 的 regions，不重新定位）
     print(f"\n[Step 4] 確認好友名稱...", flush=True)
@@ -912,8 +929,14 @@ def main(contact_name, stop_time, monitor=2):
         print("[ERROR] 好友名稱不符，中止", flush=True)
         return False
 
-    # 等 OCR 預載完成（如果還沒好的話）
-    ocr_thread.join(timeout=15)
+    # 等 OCR 預載完成（每秒檢查停止信號）
+    for _ in range(15):
+        if should_stop():
+            print("\n[STOP] 啟動階段收到停止信號，中止", flush=True)
+            return False
+        if not ocr_thread.is_alive():
+            break
+        time.sleep(1)
 
     # Step 5-7: 監控 + 回覆
     print(f"\n[Step 5] 開始監控對話...", flush=True)
