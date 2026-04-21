@@ -19746,44 +19746,58 @@ async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
     loop = asyncio.get_running_loop()
 
     # 抓今日世界重要新聞
-    def fetch_world_news():
+    def fetch_all_news():
         try:
             import feedparser
-            feeds = [
-                "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FucG9HZVFCQVAB?hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
-                "https://feeds.bbci.co.uk/news/world/rss.xml",
-            ]
-            headlines = []
-            for url in feeds:
-                try:
-                    feed = feedparser.parse(url)
-                    for entry in feed.entries[:5]:
-                        headlines.append(entry.get("title", ""))
-                except Exception:
-                    pass
-            return "\n".join(headlines[:10]) if headlines else "無法取得新聞"
         except ImportError:
-            # feedparser 不可用，用 requests + BeautifulSoup
-            try:
-                from bs4 import BeautifulSoup
-                res = requests.get("https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FucG9HZVFCQVAB?hl=zh-TW&gl=TW&ceid=TW:zh-Hant", timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-                soup = BeautifulSoup(res.text, "html.parser")
-                headlines = [a.get_text(strip=True) for a in soup.select("article h3 a, article h4 a")[:10]]
-                return "\n".join(headlines) if headlines else "無法取得新聞"
-            except Exception as e:
-                return f"新聞抓取失敗：{e}"
+            return "國際新聞：無法取得\n台灣新聞：無法取得"
 
-    news_raw = await loop.run_in_executor(None, fetch_world_news)
+        # 國際新聞
+        world_feeds = [
+            "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FucG9HZVFCQVAB?hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+            "https://feeds.bbci.co.uk/news/world/rss.xml",
+        ]
+        world_headlines = []
+        for url in world_feeds:
+            try:
+                feed = feedparser.parse(url)
+                for entry in feed.entries[:5]:
+                    world_headlines.append(entry.get("title", ""))
+            except Exception:
+                pass
+
+        # 台灣新聞（綜合、財經、生活）
+        tw_feeds = [
+            "https://news.ltn.com.tw/rss/all.xml",
+            "https://news.ltn.com.tw/rss/business.xml",
+            "https://news.ltn.com.tw/rss/life.xml",
+            "https://feeds.feedburner.com/ettoday/focus",
+        ]
+        tw_headlines = []
+        for url in tw_feeds:
+            try:
+                feed = feedparser.parse(url)
+                for entry in feed.entries[:5]:
+                    tw_headlines.append(entry.get("title", ""))
+            except Exception:
+                pass
+
+        world_text = "\n".join(world_headlines[:10]) if world_headlines else "無法取得"
+        tw_text = "\n".join(tw_headlines[:15]) if tw_headlines else "無法取得"
+        return f"【國際新聞標題】\n{world_text}\n\n【台灣新聞標題】\n{tw_text}"
+
+    news_raw = await loop.run_in_executor(None, fetch_all_news)
 
     def generate_goodmorning():
         response = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=800,
+            max_tokens=1200,
             system=(
-                "你是小牛馬，語氣像周杰倫那樣低調自然，帶一點溫暖。現在是早上11點，用繁體中文生成早安訊息給員工看，包含兩部分：\n"
+                "你是小牛馬，語氣像周杰倫那樣低調自然，帶一點溫暖。現在是早上11點，用繁體中文生成早安訊息給員工看，包含三部分：\n"
                 "1. 一段溫馨勵志的早安問候（30-60字），讓人看了有動力開始一天，但不要太正式或說教，用自然的台灣口語說出來。\n"
-                "2. 今日世界重要事件摘要：從提供的新聞標題中挑出 3～5 則最重要的，用一句話簡述每則，輕鬆帶過。\n"
-                "整體風格溫馨但不做作，像一個可靠的夥伴跟大家說早安。"
+                "2. 今日國際重要新聞：從【國際新聞標題】中挑出 3～5 則最重要的，用一句話簡述每則。\n"
+                "3. 今日台灣重要新聞：從【台灣新聞標題】中挑出 3～5 則最重要的（涵蓋生活、財經、天氣等不同面向），用一句話簡述每則。\n"
+                "整體風格溫馨但不做作，像一個可靠的夥伴跟大家說早安。每則新聞完整寫完，不要被截斷。"
             ),
             messages=[{"role": "user", "content": f"生成今天的早安訊息。\n\n今日新聞標題：\n{news_raw}"}]
         )
