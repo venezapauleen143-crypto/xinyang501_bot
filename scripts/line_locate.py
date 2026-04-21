@@ -39,7 +39,14 @@ import json
 import time
 import base64
 import types
+import ctypes
 import numpy as np
+
+# DPI 縮放設定（必須在所有 GUI 操作之前）
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(0)
+except Exception:
+    pass
 
 if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -234,7 +241,43 @@ def find_separator_by_pixel(line_crop, sidebar_width):
 
 
 # ============================================================
-# 第一層：Vision 定位框架 + sidebar 按鈕
+# 第一層-A：像素分析定位 sidebar 按鈕（不靠 Vision）
+# ============================================================
+# 從 line4.png 參考圖精確量測的比例常數
+# sidebar 背景色 ≈ RGB(42,51,74)，圖示比背景亮
+# 按鈕間距約 50-55px（在 ~984px 高的視窗中）
+SIDEBAR_BUTTONS = {
+    # y_ratio = 按鈕中心 y / 視窗高度（從像素分析精確量測）
+    "btn_friend":       {"y_ratio": 0.053, "label": "好友"},       # y≈52
+    "btn_chat":         {"y_ratio": 0.107, "label": "聊天"},       # y≈105
+    "btn_add_friend":   {"y_ratio": 0.165, "label": "加好友"},     # y≈162
+    "btn_timeline":     {"y_ratio": 0.219, "label": "動態消息"},   # y≈215
+    "btn_call":         {"y_ratio": 0.271, "label": "通話"},       # y≈267
+    "btn_keep":         {"y_ratio": 0.335, "label": "Keep"},       # y≈330
+    "btn_line_official":{"y_ratio": 0.376, "label": "LINE官方"},   # y≈370
+    "btn_more":         {"y_ratio": 0.965, "label": "更多"},       # y≈950
+}
+
+
+def calc_sidebar_icons(sidebar_width, line_height, il, it, mon, full_img_size):
+    """用模板比例算出 sidebar 每個按鈕的螢幕絕對座標"""
+    sx_ratio = mon["width"] / full_img_size[0]
+    sy_ratio = mon["height"] / full_img_size[1]
+
+    x_center = sidebar_width // 2  # 按鈕 x 中心 = sidebar 寬度的一半
+
+    icons = {}
+    for btn_name, btn_info in SIDEBAR_BUTTONS.items():
+        local_y = int(line_height * btn_info["y_ratio"])
+        abs_x = int(mon["left"] + (il + x_center) * sx_ratio)
+        abs_y = int(mon["top"] + (it + local_y) * sy_ratio)
+        icons[btn_name] = {"center": (abs_x, abs_y), "label": btn_info["label"]}
+
+    return icons
+
+
+# ============================================================
+# 第一層-B：Vision 定位框架（不含 sidebar 按鈕）
 # ============================================================
 def find_framework_by_vision(line_crop):
     """Claude Vision 定位框架結構 + sidebar 每個按鈕 + 判斷當前頁面"""
@@ -249,35 +292,20 @@ def find_framework_by_vision(line_crop):
 
     prompt = (
         f"Image size: {lw}x{lh} pixels. This is LINE Desktop app.\n\n"
-        "Find EXACT pixel coordinates for ALL of the following.\n\n"
-        "=== SIDEBAR ICONS (narrow vertical bar, far left) ===\n"
-        "Find CENTER POINT (x, y) of each icon:\n"
-        "- btn_friend: Friends icon (person silhouette, 1st from top)\n"
-        "- btn_chat: Chat icon (speech bubble, 2nd from top)\n"
-        "- btn_add_friend: Add Friend icon (person+, 3rd from top)\n"
-        "- btn_timeline: Timeline icon (4th)\n"
-        "- btn_call: Call icon (phone, 5th)\n"
-        "- btn_keep: Keep/Bookmark icon\n"
-        "- btn_line_official: LINE logo icon (near bottom)\n"
-        "- btn_more: More options (three dots, very bottom)\n\n"
+        "Find EXACT pixel coordinates for these regions. DO NOT locate sidebar icons.\n\n"
         "=== MAIN UI REGIONS (bounding boxes l,t,r,b) ===\n"
-        "1. sidebar: Entire sidebar bar area\n"
-        "2. search_bar: Search input field text area\n"
-        "3. left_panel: Panel between sidebar and chat (friend/chat/add-friend list)\n"
-        "4. chat_title: Name text at top of chat area\n"
-        "5. chat_area: Message area with conversation\n"
-        "6. input_box: Text input field at bottom right\n\n"
+        "1. search_bar: Search input field in the left panel area. Only the text input.\n"
+        "2. left_panel: Panel between the narrow icon sidebar and chat area.\n"
+        "3. chat_title: Name text at top of chat area (right side). Just the name.\n"
+        "4. chat_area: Message area with conversation bubbles.\n"
+        "5. input_box: Text input field at bottom right. Only the text area.\n\n"
         "=== CURRENT PAGE ===\n"
-        '"friend" if left panel shows categorized lists (社群/群組/好友)\n'
-        '"chat" if showing conversation list with tabs (全部/群組/社群)\n'
-        '"add_friend" if showing 搜尋好友/建立群組/建立社群\n\n'
+        "Look at the LEFT PANEL content (NOT the sidebar icons):\n"
+        '"friend" if it shows categorized lists with headers like 社群/群組/好友\n'
+        '"chat" if it shows a conversation list with tabs 全部/群組/社群 at top\n'
+        '"add_friend" if it shows buttons like 搜尋好友/建立群組/建立社群\n\n'
         "Return RAW JSON only:\n"
-        '{"sidebar":{"l":0,"t":0,"r":0,"b":0},'
-        '"btn_friend":{"x":0,"y":0},"btn_chat":{"x":0,"y":0},'
-        '"btn_add_friend":{"x":0,"y":0},"btn_timeline":{"x":0,"y":0},'
-        '"btn_call":{"x":0,"y":0},"btn_keep":{"x":0,"y":0},'
-        '"btn_line_official":{"x":0,"y":0},"btn_more":{"x":0,"y":0},'
-        '"search_bar":{"l":0,"t":0,"r":0,"b":0},'
+        '{"search_bar":{"l":0,"t":0,"r":0,"b":0},'
         '"left_panel":{"l":0,"t":0,"r":0,"b":0},'
         '"chat_title":{"l":0,"t":0,"r":0,"b":0},'
         '"chat_area":{"l":0,"t":0,"r":0,"b":0},'
@@ -671,7 +699,8 @@ def locate_line_regions(monitor=2):
         return {"center": (sx_abs, sy_abs)}
 
     # 組合框架結果
-    sidebar = to_screen_region(vision["sidebar"])
+    sidebar_raw = {"l": 0, "t": 0, "r": sidebar_w, "b": lh}
+    sidebar = to_screen_region(sidebar_raw)
     search_bar = to_screen_region(vision["search_bar"])
     left_panel = to_screen_region(vision["left_panel"])
     chat_title = to_screen_region(vision["chat_title"])
@@ -683,15 +712,8 @@ def locate_line_regions(monitor=2):
     }
     chat_area = to_screen_region(chat_area_raw)
 
-    # sidebar 按鈕
-    btn_names = ["btn_friend", "btn_chat", "btn_add_friend", "btn_timeline",
-                 "btn_call", "btn_keep", "btn_line_official", "btn_more"]
-    sidebar_icons = {}
-    for btn in btn_names:
-        if btn in vision and "x" in vision[btn]:
-            sidebar_icons[btn] = to_screen_point(vision[btn])
-        else:
-            sidebar_icons[btn] = {"center": (0, 0)}
+    # sidebar 按鈕（用像素分析 + 模板比例，不靠 Vision）
+    sidebar_icons = calc_sidebar_icons(sidebar_w, lh, il, it, mon, full_img.size)
 
     # Step 4: 掃描當前頁面內容（PaddleOCR 主力）
     _print(f"[line_locate] 掃描 {current_page} 頁面內容...")
