@@ -261,9 +261,10 @@ def click_contact(regions, contact_name, monitor=2):
 # ============================================================
 # Step 4: 確認好友名稱
 # ============================================================
-def verify_friend(target_name, monitor=2):
-    """重新定位，確認好友名稱框裡的名字是不是目標好友"""
-    regions = locate_all(monitor)
+def verify_friend(target_name, monitor=2, regions=None):
+    """確認好友名稱框裡的名字是不是目標好友（用傳入的 regions，不重新定位）"""
+    if regions is None:
+        regions = locate_all(monitor)
     fn = regions["friend_name"]
 
     with mss.mss() as sct:
@@ -304,10 +305,10 @@ def verify_friend(target_name, monitor=2):
 
     if target_name in detected_name or detected_name in target_name:
         print(f"[Step 4] ✅ 確認正確：{detected_name} == {target_name}", flush=True)
-        return regions, True
+        return True
     else:
         print(f"[Step 4] ❌ 名稱不符：{detected_name} != {target_name}", flush=True)
-        return regions, False
+        return False
 
 
 # ============================================================
@@ -873,11 +874,24 @@ def monitor_and_reply(regions, stop_time, monitor=2):
 # 主流程
 # ============================================================
 def main(contact_name, stop_time, monitor=2):
+    import threading
+
     print("=" * 50, flush=True)
     print(f"Telegram 自動回覆", flush=True)
     print(f"好友：{contact_name}", flush=True)
     print(f"監控到：{stop_time}", flush=True)
     print("=" * 50, flush=True)
+
+    # 背景預載 PaddleOCR（跟 Step 1-4 並行，省 ~5 秒）
+    def _preload_ocr():
+        try:
+            _get_ocr_engine()
+            print("[Preload] PaddleOCR GPU 模型已載入", flush=True)
+        except Exception as e:
+            print(f"[Preload] PaddleOCR 載入失敗：{e}", flush=True)
+
+    ocr_thread = threading.Thread(target=_preload_ocr, daemon=True)
+    ocr_thread.start()
 
     # Step 1: 定位
     print("\n[Step 1] 定位 Telegram UI...", flush=True)
@@ -891,12 +905,15 @@ def main(contact_name, stop_time, monitor=2):
     print(f"\n[Step 3] 點選好友...", flush=True)
     click_contact(regions, contact_name, monitor)
 
-    # Step 4: 確認好友名稱
+    # Step 4: 確認好友名稱（用 Step 1 的 regions，不重新定位）
     print(f"\n[Step 4] 確認好友名稱...", flush=True)
-    regions, confirmed = verify_friend(contact_name, monitor)
+    confirmed = verify_friend(contact_name, monitor, regions=regions)
     if not confirmed:
         print("[ERROR] 好友名稱不符，中止", flush=True)
         return False
+
+    # 等 OCR 預載完成（如果還沒好的話）
+    ocr_thread.join(timeout=15)
 
     # Step 5-7: 監控 + 回覆
     print(f"\n[Step 5] 開始監控對話...", flush=True)
