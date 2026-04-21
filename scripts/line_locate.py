@@ -1,47 +1,34 @@
 """
-LINE 電腦版 UI 定位模組 — 每次運行都用 Claude Vision 精確找到所有區域
-不使用固定座標，每次都重新偵測
+LINE 電腦版 UI 定位模組（方案 E：模板比例 + PaddleOCR + Vision 三層架構）
 
-LINE 有三個主要左側面板模式（依 sidebar 圖示切換）：
-- 好友頁（friend）：用戶名稱 + 社群/群組/好友分類列表
-- 聊天頁（chat）：最近對話列表（全部/群組/社群分頁）
-- 加好友頁（add_friend）：搜尋好友/建立群組/建立社群/官方推薦/你可能認識的人
+這是所有 LINE 自動化腳本的基礎，負責：
+1. 精確定位 LINE 視窗所有 UI 區域
+2. 辨識目前在哪個頁面（好友/聊天/加好友）
+3. 掃描該頁面的完整內容物和座標
+4. 切換頁面後重新掃描新頁面的內容
 
-定位區域：
-1. sidebar          — 最左側功能列整體區域
-2. sidebar_icons    — sidebar 每個圖示按鈕的個別座標（用於切換頁面）
-   - btn_friend       好友頁按鈕（人形圖示）
-   - btn_chat         聊天頁按鈕（對話框圖示）
-   - btn_add_friend   加好友頁按鈕（人形+加號圖示）
-   - btn_timeline     動態消息按鈕（時鐘/圓形圖示）
-   - btn_call         通話按鈕（電話圖示）
-   - btn_keep         Keep 按鈕（書籤圖示）
-   - btn_more         更多按鈕（三點圖示）
-3. search_bar       — 搜尋輸入框
-4. left_panel       — 左側面板（內容依頁面切換）
-5. chat_title       — 聊天標題（群組名/好友名）
-6. chat_area        — 對話內容區
-7. input_box        — 輸入框
-8. current_page     — 目前在哪個頁面
+三層定位架構：
+- 第一層（模板比例）：固定元素用預算的相對比例定位（0 秒）
+- 第二層（PaddleOCR）：動態文字內容用 GPU OCR 提取（0.4 秒）
+- 第三層（Claude Vision）：複雜判斷或 OCR 失敗時的備援（2-4 秒）
 
 使用方式：
-    from line_locate import locate_line_regions, switch_page
+    from line_locate import locate_line_regions, switch_page, scan_page_content
+
+    # 定位 + 掃描當前頁面
     regions = locate_line_regions(monitor=2)
 
-    # 取得任何區域的座標
-    regions["search_bar"]["center"]       → 搜尋欄中心座標
-    regions["input_box"]["center"]        → 輸入框中心座標
-    regions["chat_area"]                  → 對話區完整座標
+    # 框架座標
+    regions["sidebar_icons"]["btn_chat"]["center"]  → 聊天頁按鈕
+    regions["input_box"]["center"]                  → 輸入框
+    regions["chat_area"]                            → 對話區
 
-    # 取得 sidebar 按鈕座標（用於切換頁面）
-    regions["sidebar_icons"]["btn_friend"]["center"]      → 好友頁按鈕
-    regions["sidebar_icons"]["btn_chat"]["center"]        → 聊天頁按鈕
-    regions["sidebar_icons"]["btn_add_friend"]["center"]  → 加好友頁按鈕
+    # 當前頁面內容
+    regions["page_content"]                         → 該頁面的所有項目和座標
 
-    # 切換頁面
-    switch_page(regions, "chat")        → 切到聊天頁
-    switch_page(regions, "friend")      → 切到好友頁
-    switch_page(regions, "add_friend")  → 切到加好友頁
+    # 切換頁面（自動重新掃描）
+    regions = switch_page(regions, "chat", monitor=2)
+    regions["page_content"]                         → 聊天頁的所有對話列表
 """
 
 import sys
@@ -51,6 +38,7 @@ import re
 import json
 import time
 import base64
+import types
 import numpy as np
 
 if __name__ == "__main__":
@@ -80,24 +68,106 @@ load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
 TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
 
 
+# ============================================================
+# 模板比例常數（從三張參考截圖分析得出）
+# 所有數值都是相對於 left_panel 寬度/高度的比例
+# ============================================================
+
+# 好友頁（line1.png）— left_panel 內的固定元素相對位置
+FRIEND_PAGE_TEMPLATE = {
+    # 搜尋欄（相對 left_panel）
+    "search_bar": {"y_ratio": 0.04, "h_ratio": 0.03},
+    # 用戶個人資料區（搜尋欄下方）
+    "user_profile": {"y_ratio": 0.07, "h_ratio": 0.07},
+    # 社群區塊標題
+    "section_community": {"y_ratio": 0.16, "label": "社群"},
+    # 群組區塊標題
+    "section_group": {"y_ratio": 0.25, "label": "群組"},
+    # 好友區塊標題
+    "section_friend": {"y_ratio": 0.36, "label": "好友"},
+    # 每個列表項目的行高比例
+    "item_height_ratio": 0.065,
+}
+
+# 聊天頁（line2.png）— left_panel 內的固定元素相對位置
+CHAT_PAGE_TEMPLATE = {
+    # 分頁標籤列（全部/群組/社群/篩選）
+    "tab_bar": {"y_ratio": 0.0, "h_ratio": 0.025},
+    # 分頁標籤的 x 比例位置（相對 left_panel 寬度）
+    "tab_all": {"x_ratio": 0.12, "label": "全部"},
+    "tab_group": {"x_ratio": 0.32, "label": "群組"},
+    "tab_community": {"x_ratio": 0.52, "label": "社群"},
+    "tab_filter": {"x_ratio": 0.72, "label": "篩選"},
+    # 搜尋欄
+    "search_bar": {"y_ratio": 0.04, "h_ratio": 0.03},
+    # 聊天列表起始位置
+    "list_start_y_ratio": 0.08,
+    # 每個對話的行高比例
+    "item_height_ratio": 0.075,
+}
+
+# 加好友頁（line3.png）— left_panel 內的固定元素相對位置
+ADD_FRIEND_PAGE_TEMPLATE = {
+    # 三個功能按鈕（相對 left_panel）
+    "btn_search_friend": {"y_ratio": 0.04, "h_ratio": 0.045, "label": "搜尋好友"},
+    "btn_create_group": {"y_ratio": 0.09, "h_ratio": 0.045, "label": "建立群組"},
+    "btn_create_community": {"y_ratio": 0.14, "h_ratio": 0.045, "label": "建立社群"},
+    # 官方推薦區塊
+    "section_official": {"y_ratio": 0.20, "label": "官方推薦"},
+    # 你可能認識的人區塊
+    "section_maybe_know": {"y_ratio": 0.35, "label": "您可能認識的人"},
+    # 每個推薦項目的行高比例
+    "item_height_ratio": 0.06,
+}
+
+
+# ============================================================
+# PaddleOCR GPU 全域引擎（只載入一次）
+# ============================================================
+_ocr_engine = None
+
+
+def _get_ocr_engine():
+    """取得全域 PaddleOCR 引擎"""
+    global _ocr_engine
+    if _ocr_engine is None:
+        if "modelscope" not in sys.modules:
+            fake = types.ModuleType("modelscope")
+            fake.__version__ = "0.0.0"
+            sys.modules["modelscope"] = fake
+            sys.modules["modelscope.utils"] = types.ModuleType("modelscope.utils")
+            sys.modules["modelscope.utils.import_utils"] = types.ModuleType("modelscope.utils.import_utils")
+        os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+        from paddleocr import PaddleOCR
+        _ocr_engine = PaddleOCR(
+            lang="chinese_cht",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+        )
+    return _ocr_engine
+
+
+# ============================================================
+# 視窗偵測
+# ============================================================
 def find_line_window():
     """用 win32gui 找到 LINE 主視窗"""
     results = []
     def callback(hwnd, _):
         if win32gui.IsWindowVisible(hwnd):
             title = win32gui.GetWindowText(hwnd)
-            cls = win32gui.GetClassName(hwnd)
-            if "LINE" in title and win32gui.IsWindowVisible(hwnd):
+            if "LINE" in title:
                 rect = win32gui.GetWindowRect(hwnd)
                 w = rect[2] - rect[0]
                 h = rect[3] - rect[1]
                 if w > 300 and h > 300:
+                    cls = win32gui.GetClassName(hwnd)
                     results.append((hwnd, title, cls, rect))
     win32gui.EnumWindows(callback, results)
     if not results:
         return None
-    main = max(results, key=lambda x: (x[3][2] - x[3][0]) * (x[3][3] - x[3][1]))
-    return main
+    return max(results, key=lambda x: (x[3][2] - x[3][0]) * (x[3][3] - x[3][1]))
 
 
 def screenshot_line(monitor=2):
@@ -130,17 +200,17 @@ def screenshot_line(monitor=2):
     return pil, line_crop, (il, it, ir, ib), mon
 
 
+# ============================================================
+# 像素分析
+# ============================================================
 def find_sidebar_by_pixel(line_crop):
     """像素分析找最左側功能列的寬度"""
     arr = np.array(line_crop)
     h, w, _ = arr.shape
-
     for x in range(30, min(80, w)):
         col = arr[h // 4: h * 3 // 4, x, :]
-        avg_brightness = np.mean(col)
         prev_col = arr[h // 4: h * 3 // 4, x - 1, :]
-        prev_brightness = np.mean(prev_col)
-        if avg_brightness - prev_brightness > 30:
+        if np.mean(col) - np.mean(prev_col) > 30:
             return x
     return 50
 
@@ -149,26 +219,25 @@ def find_separator_by_pixel(line_crop, sidebar_width):
     """像素分析找左側面板和對話區的分隔線"""
     arr = np.array(line_crop)
     h, w, _ = arr.shape
-
     candidates = []
     for check_y in range(int(h * 0.3), int(h * 0.7), int(h * 0.05)):
         row = arr[check_y, :, :]
         for x in range(sidebar_width + 50, w * 2 // 3):
-            r, g, b = int(row[x, 0]), int(row[x, 1]), int(row[x, 2])
-            prev_r, prev_g, prev_b = int(row[x - 1, 0]), int(row[x - 1, 1]), int(row[x - 1, 2])
-            brightness = (r + g + b) / 3
-            prev_brightness = (prev_r + prev_g + prev_b) / 3
+            brightness = (int(row[x, 0]) + int(row[x, 1]) + int(row[x, 2])) / 3
+            prev_brightness = (int(row[x - 1, 0]) + int(row[x - 1, 1]) + int(row[x - 1, 2])) / 3
             if abs(brightness - prev_brightness) > 20 and 180 < brightness < 220:
                 candidates.append(x)
                 break
-
     if candidates:
         return sorted(candidates)[len(candidates) // 2]
     return w // 3
 
 
-def find_regions_by_vision(line_crop):
-    """Claude Vision 精確定位所有 LINE UI 元素 + sidebar 每個圖示按鈕"""
+# ============================================================
+# 第一層：Vision 定位框架 + sidebar 按鈕
+# ============================================================
+def find_framework_by_vision(line_crop):
+    """Claude Vision 定位框架結構 + sidebar 每個按鈕 + 判斷當前頁面"""
     import anthropic
     client = anthropic.Anthropic()
 
@@ -180,45 +249,34 @@ def find_regions_by_vision(line_crop):
 
     prompt = (
         f"Image size: {lw}x{lh} pixels. This is LINE Desktop app.\n\n"
-        "Find EXACT pixel coordinates for ALL of the following. BE EXTREMELY PRECISE.\n\n"
-        "=== SIDEBAR ICONS (the narrow vertical bar on the far left) ===\n"
-        "The sidebar contains clickable icon buttons arranged vertically. "
-        "Find the CENTER POINT (x, y) of each icon button:\n\n"
-        "- btn_friend: Friends icon (person silhouette, usually 1st from top)\n"
-        "- btn_chat: Chat icon (speech bubble, usually 2nd from top)\n"
-        "- btn_add_friend: Add Friend icon (person with + sign, usually 3rd from top)\n"
-        "- btn_timeline: Timeline/News Feed icon (usually 4th)\n"
-        "- btn_call: Call icon (phone shape, usually 5th)\n"
-        "- btn_keep: Keep/Bookmark icon (flag or bookmark shape)\n"
-        "- btn_line_official: LINE official icon (LINE logo, usually near bottom)\n"
-        "- btn_more: More options (three dots '...' at very bottom)\n\n"
-        "=== MAIN UI REGIONS (bounding boxes) ===\n\n"
-        "1. sidebar: The entire sidebar bar area (left=0 to its right edge)\n\n"
-        "2. search_bar: The search input field in the left panel. "
-        "Only the text input area where user types.\n\n"
-        "3. left_panel: The panel between sidebar and chat area. "
-        "Contains friend list, chat list, or add-friend options.\n\n"
-        "4. chat_title: The name/title text at top of chat area (right side). "
-        "Just the name text, not entire header.\n\n"
-        "5. chat_area: Main message area with conversation. "
-        "Between chat title and input box.\n\n"
-        "6. input_box: Text input field at bottom right. "
-        "Only the white text area.\n\n"
+        "Find EXACT pixel coordinates for ALL of the following.\n\n"
+        "=== SIDEBAR ICONS (narrow vertical bar, far left) ===\n"
+        "Find CENTER POINT (x, y) of each icon:\n"
+        "- btn_friend: Friends icon (person silhouette, 1st from top)\n"
+        "- btn_chat: Chat icon (speech bubble, 2nd from top)\n"
+        "- btn_add_friend: Add Friend icon (person+, 3rd from top)\n"
+        "- btn_timeline: Timeline icon (4th)\n"
+        "- btn_call: Call icon (phone, 5th)\n"
+        "- btn_keep: Keep/Bookmark icon\n"
+        "- btn_line_official: LINE logo icon (near bottom)\n"
+        "- btn_more: More options (three dots, very bottom)\n\n"
+        "=== MAIN UI REGIONS (bounding boxes l,t,r,b) ===\n"
+        "1. sidebar: Entire sidebar bar area\n"
+        "2. search_bar: Search input field text area\n"
+        "3. left_panel: Panel between sidebar and chat (friend/chat/add-friend list)\n"
+        "4. chat_title: Name text at top of chat area\n"
+        "5. chat_area: Message area with conversation\n"
+        "6. input_box: Text input field at bottom right\n\n"
         "=== CURRENT PAGE ===\n"
-        "Which page is the left panel showing?\n"
-        '- "friend" if showing categorized lists (社群/群組/好友)\n'
-        '- "chat" if showing recent conversation list with tabs (全部/群組/社群)\n'
-        '- "add_friend" if showing search friend/create group/recommendations\n\n'
-        "Return RAW JSON only. No markdown. No explanation:\n"
+        '"friend" if left panel shows categorized lists (社群/群組/好友)\n'
+        '"chat" if showing conversation list with tabs (全部/群組/社群)\n'
+        '"add_friend" if showing 搜尋好友/建立群組/建立社群\n\n'
+        "Return RAW JSON only:\n"
         '{"sidebar":{"l":0,"t":0,"r":0,"b":0},'
-        '"btn_friend":{"x":0,"y":0},'
-        '"btn_chat":{"x":0,"y":0},'
-        '"btn_add_friend":{"x":0,"y":0},'
-        '"btn_timeline":{"x":0,"y":0},'
-        '"btn_call":{"x":0,"y":0},'
-        '"btn_keep":{"x":0,"y":0},'
-        '"btn_line_official":{"x":0,"y":0},'
-        '"btn_more":{"x":0,"y":0},'
+        '"btn_friend":{"x":0,"y":0},"btn_chat":{"x":0,"y":0},'
+        '"btn_add_friend":{"x":0,"y":0},"btn_timeline":{"x":0,"y":0},'
+        '"btn_call":{"x":0,"y":0},"btn_keep":{"x":0,"y":0},'
+        '"btn_line_official":{"x":0,"y":0},"btn_more":{"x":0,"y":0},'
         '"search_bar":{"l":0,"t":0,"r":0,"b":0},'
         '"left_panel":{"l":0,"t":0,"r":0,"b":0},'
         '"chat_title":{"l":0,"t":0,"r":0,"b":0},'
@@ -228,8 +286,7 @@ def find_regions_by_vision(line_crop):
     )
 
     r = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=800,
+        model="claude-sonnet-4-6", max_tokens=800,
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
             {"type": "text", "text": prompt},
@@ -242,40 +299,343 @@ def find_regions_by_vision(line_crop):
     return json.loads(resp)
 
 
+# ============================================================
+# 第二層：PaddleOCR 掃描頁面內容
+# ============================================================
+def ocr_scan_panel(panel_img):
+    """
+    用 PaddleOCR 掃描 left_panel 區域，提取所有文字和座標。
+    回傳: [{"text": "...", "x": int, "y": int, "w": int, "h": int, "conf": float}]
+    """
+    arr = np.array(panel_img)
+    ocr = _get_ocr_engine()
+    results = ocr.predict(arr)
+
+    items = []
+    if not results:
+        return items
+
+    for item in results:
+        texts = item.get("rec_texts", [])
+        scores = item.get("rec_scores", [])
+        boxes = item.get("dt_polys", [])
+
+        for i, (text, conf) in enumerate(zip(texts, scores)):
+            t = text.strip()
+            if not t or conf < 0.3:
+                continue
+            box = boxes[i] if i < len(boxes) else [[0, 0], [0, 0], [0, 0], [0, 0]]
+            x = int(box[0][0])
+            y = int(box[0][1])
+            w = int(box[1][0] - box[0][0])
+            h = int(box[2][1] - box[0][1])
+            items.append({"text": t, "x": x, "y": y, "w": w, "h": h, "conf": conf})
+
+    # 依 y 座標排序
+    items.sort(key=lambda it: it["y"])
+    return items
+
+
+# ============================================================
+# 第二層 + 第一層混合：掃描各頁面的完整內容
+# ============================================================
+def scan_friend_page(panel_img, panel_rect, mon, full_img_size, il, it):
+    """掃描好友頁的完整內容"""
+    pw, ph = panel_img.size
+    sx_ratio = mon["width"] / full_img_size[0]
+    sy_ratio = mon["height"] / full_img_size[1]
+
+    def to_abs(local_x, local_y):
+        ax = int(mon["left"] + (il + panel_rect["l"] + local_x) * sx_ratio)
+        ay = int(mon["top"] + (it + panel_rect["t"] + local_y) * sy_ratio)
+        return (ax, ay)
+
+    # OCR 掃描
+    ocr_items = ocr_scan_panel(panel_img)
+
+    # 用模板比例算出固定元素的大致位置
+    template = FRIEND_PAGE_TEMPLATE
+    section_y = {
+        "community": int(ph * template["section_community"]["y_ratio"]),
+        "group": int(ph * template["section_group"]["y_ratio"]),
+        "friend": int(ph * template["section_friend"]["y_ratio"]),
+    }
+
+    # 分類 OCR 結果到各區塊
+    communities = []
+    groups = []
+    friends = []
+    user_name = ""
+
+    for item in ocr_items:
+        y = item["y"]
+        text = item["text"]
+
+        # 用戶名稱（最上方）
+        if y < section_y["community"] and not user_name and len(text) > 1:
+            if "搜尋" not in text and "Keep" not in text and "姓名" not in text:
+                user_name = text
+
+        # 社群區塊的項目
+        elif section_y["community"] <= y < section_y["group"]:
+            if "社群" not in text and len(text) > 1:
+                communities.append({"name": text, "center": to_abs(pw // 2, y + 15)})
+
+        # 群組區塊的項目
+        elif section_y["group"] <= y < section_y["friend"]:
+            if "群組" not in text and len(text) > 1:
+                groups.append({"name": text, "center": to_abs(pw // 2, y + 15)})
+
+        # 好友區塊的項目
+        elif y >= section_y["friend"]:
+            if "好友" not in text and len(text) > 1:
+                friends.append({"name": text, "center": to_abs(pw // 2, y + 15)})
+
+    return {
+        "page": "friend",
+        "user_name": user_name,
+        "communities": communities,
+        "groups": groups,
+        "friends": friends,
+        "fixed_elements": {
+            "search_bar": {"center": to_abs(pw // 2, int(ph * template["search_bar"]["y_ratio"]))},
+            "user_profile": {"center": to_abs(pw // 2, int(ph * template["user_profile"]["y_ratio"]))},
+            "section_community_header": {"center": to_abs(pw // 4, section_y["community"])},
+            "section_group_header": {"center": to_abs(pw // 4, section_y["group"])},
+            "section_friend_header": {"center": to_abs(pw // 4, section_y["friend"])},
+        },
+        "all_ocr_items": ocr_items,
+    }
+
+
+def scan_chat_page(panel_img, panel_rect, mon, full_img_size, il, it):
+    """掃描聊天頁的完整內容"""
+    pw, ph = panel_img.size
+    sx_ratio = mon["width"] / full_img_size[0]
+    sy_ratio = mon["height"] / full_img_size[1]
+
+    def to_abs(local_x, local_y):
+        ax = int(mon["left"] + (il + panel_rect["l"] + local_x) * sx_ratio)
+        ay = int(mon["top"] + (it + panel_rect["t"] + local_y) * sy_ratio)
+        return (ax, ay)
+
+    template = CHAT_PAGE_TEMPLATE
+
+    # OCR 掃描
+    ocr_items = ocr_scan_panel(panel_img)
+
+    # 分頁標籤的絕對座標（用模板比例算）
+    tabs = {
+        "tab_all": {"label": "全部", "center": to_abs(int(pw * template["tab_all"]["x_ratio"]), int(ph * template["tab_bar"]["y_ratio"] + 12))},
+        "tab_group": {"label": "群組", "center": to_abs(int(pw * template["tab_group"]["x_ratio"]), int(ph * template["tab_bar"]["y_ratio"] + 12))},
+        "tab_community": {"label": "社群", "center": to_abs(int(pw * template["tab_community"]["x_ratio"]), int(ph * template["tab_bar"]["y_ratio"] + 12))},
+        "tab_filter": {"label": "篩選", "center": to_abs(int(pw * template["tab_filter"]["x_ratio"]), int(ph * template["tab_bar"]["y_ratio"] + 12))},
+    }
+
+    # 聊天列表（OCR 讀到的對話項目）
+    list_start_y = int(ph * template["list_start_y_ratio"])
+    conversations = []
+    skip_keywords = ["全部", "群組", "社群", "篩選", "搜尋", "聊天", "訊息", "Keep"]
+
+    for item in ocr_items:
+        if item["y"] < list_start_y:
+            continue
+        text = item["text"]
+        if any(kw in text for kw in skip_keywords) or len(text) < 2:
+            continue
+
+        # 解析未讀數（數字在名稱旁邊）
+        unread = 0
+        name = text
+        # 匹配 "名稱 (數字)" 格式
+        m = re.match(r"(.+?)\s*\((\d+)\)\s*$", text)
+        if m:
+            name = m.group(1)
+
+        # 檢查是否有獨立的數字（未讀數）
+        for other in ocr_items:
+            if abs(other["y"] - item["y"]) < 15 and other["text"].isdigit():
+                unread = int(other["text"])
+
+        conversations.append({
+            "name": name,
+            "unread": unread,
+            "center": to_abs(pw // 2, item["y"] + 15),
+            "y": item["y"],
+        })
+
+    # 去重（名稱相同的只保留第一個）
+    seen = set()
+    unique_convs = []
+    for c in conversations:
+        if c["name"] not in seen:
+            seen.add(c["name"])
+            unique_convs.append(c)
+
+    return {
+        "page": "chat",
+        "tabs": tabs,
+        "conversations": unique_convs,
+        "fixed_elements": {
+            "search_bar": {"center": to_abs(pw // 2, int(ph * template["search_bar"]["y_ratio"]))},
+        },
+        "all_ocr_items": ocr_items,
+    }
+
+
+def scan_add_friend_page(panel_img, panel_rect, mon, full_img_size, il, it):
+    """掃描加好友頁的完整內容"""
+    pw, ph = panel_img.size
+    sx_ratio = mon["width"] / full_img_size[0]
+    sy_ratio = mon["height"] / full_img_size[1]
+
+    def to_abs(local_x, local_y):
+        ax = int(mon["left"] + (il + panel_rect["l"] + local_x) * sx_ratio)
+        ay = int(mon["top"] + (it + panel_rect["t"] + local_y) * sy_ratio)
+        return (ax, ay)
+
+    template = ADD_FRIEND_PAGE_TEMPLATE
+
+    # OCR 掃描
+    ocr_items = ocr_scan_panel(panel_img)
+
+    # 固定按鈕（用模板比例）
+    buttons = {
+        "btn_search_friend": {
+            "label": "搜尋好友",
+            "center": to_abs(pw // 2, int(ph * template["btn_search_friend"]["y_ratio"] + ph * template["btn_search_friend"]["h_ratio"] / 2)),
+        },
+        "btn_create_group": {
+            "label": "建立群組",
+            "center": to_abs(pw // 2, int(ph * template["btn_create_group"]["y_ratio"] + ph * template["btn_create_group"]["h_ratio"] / 2)),
+        },
+        "btn_create_community": {
+            "label": "建立社群",
+            "center": to_abs(pw // 2, int(ph * template["btn_create_community"]["y_ratio"] + ph * template["btn_create_community"]["h_ratio"] / 2)),
+        },
+    }
+
+    # 用 OCR 修正按鈕位置（如果 OCR 找到了文字）
+    for item in ocr_items:
+        for btn_key, btn in buttons.items():
+            if btn["label"] in item["text"]:
+                buttons[btn_key]["center"] = to_abs(pw // 2, item["y"] + 10)
+
+    # 官方推薦列表
+    official_y = int(ph * template["section_official"]["y_ratio"])
+    maybe_know_y = int(ph * template["section_maybe_know"]["y_ratio"])
+
+    official_accounts = []
+    maybe_know_people = []
+    skip_keywords = ["搜尋", "建立", "好友", "群組", "社群", "官方推薦", "您可能認識"]
+
+    for item in ocr_items:
+        text = item["text"]
+        if any(kw in text for kw in skip_keywords) or len(text) < 2:
+            continue
+
+        if official_y <= item["y"] < maybe_know_y:
+            official_accounts.append({
+                "name": text,
+                "center": to_abs(pw // 2, item["y"] + 10),
+            })
+        elif item["y"] >= maybe_know_y:
+            maybe_know_people.append({
+                "name": text,
+                "center": to_abs(pw // 2, item["y"] + 10),
+            })
+
+    return {
+        "page": "add_friend",
+        "buttons": buttons,
+        "official_accounts": official_accounts,
+        "maybe_know_people": maybe_know_people,
+        "all_ocr_items": ocr_items,
+    }
+
+
+# ============================================================
+# 第三層：Vision 備援（OCR 失敗時使用）
+# ============================================================
+def vision_scan_panel(panel_img, current_page):
+    """OCR 失敗時用 Claude Vision 掃描頁面內容"""
+    import anthropic
+    client = anthropic.Anthropic()
+
+    pw, ph = panel_img.size
+    tmp = os.path.join(TMPDIR, "line_panel_scan.png")
+    panel_img.save(tmp, quality=95)
+    with open(tmp, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+
+    if current_page == "chat":
+        detail = (
+            "List ALL conversations visible. For each: name, unread count (0 if none), "
+            "and center Y coordinate in pixels."
+        )
+    elif current_page == "friend":
+        detail = (
+            "List the user's name at top, then all items under 社群/群組/好友 sections. "
+            "For each item: name, which section it belongs to, and center Y coordinate."
+        )
+    else:
+        detail = (
+            "List all buttons (搜尋好友/建立群組/建立社群) and their Y coordinates. "
+            "List all recommended accounts and people you may know with their Y coordinates."
+        )
+
+    prompt = (
+        f"Image size: {pw}x{ph}. This is LINE's left panel showing '{current_page}' page.\n"
+        f"{detail}\n"
+        "Return RAW JSON array of items: "
+        '[{"name":"...","type":"conversation/community/group/friend/button/official/maybe_know",'
+        '"y":0,"unread":0}]'
+    )
+
+    r = client.messages.create(
+        model="claude-sonnet-4-6", max_tokens=600,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
+            {"type": "text", "text": prompt},
+        ]}],
+    )
+    resp = r.content[0].text.strip()
+    if resp.startswith("```"):
+        resp = re.sub(r"^```(?:json)?\s*", "", resp)
+        resp = re.sub(r"\s*```$", "", resp)
+    try:
+        return json.loads(resp)
+    except Exception:
+        return []
+
+
+# ============================================================
+# 主函數
+# ============================================================
 def locate_line_regions(monitor=2):
     """
-    主函數：找到 LINE 所有 UI 區域的精確座標
-
-    流程：
-    1. 截圖 + 找到 LINE 視窗
-    2. 像素分析找 sidebar 寬度和分隔線
-    3. Claude Vision 找所有元素 + sidebar 每個按鈕的精確位置
-    4. 交叉驗證 + 用已確認的邊界修正
+    主函數：定位 LINE 所有 UI 區域 + 掃描當前頁面完整內容
 
     返回：
     {
+        # 框架座標（螢幕絕對座標）
         "sidebar":        {"left", "top", "right", "bottom", "center"},
-        "sidebar_icons":  {
-            "btn_friend":       {"center": (x, y)},
-            "btn_chat":         {"center": (x, y)},
-            "btn_add_friend":   {"center": (x, y)},
-            "btn_timeline":     {"center": (x, y)},
-            "btn_call":         {"center": (x, y)},
-            "btn_keep":         {"center": (x, y)},
-            "btn_line_official": {"center": (x, y)},
-            "btn_more":         {"center": (x, y)},
-        },
+        "sidebar_icons":  {"btn_friend": {"center"}, "btn_chat": {"center"}, ...},
         "search_bar":     {"left", "top", "right", "bottom", "center"},
         "left_panel":     {"left", "top", "right", "bottom", "center"},
         "chat_title":     {"left", "top", "right", "bottom", "center"},
         "chat_area":      {"left", "top", "right", "bottom", "center"},
         "input_box":      {"left", "top", "right", "bottom", "center"},
+
+        # 頁面資訊
         "current_page":   "friend" | "chat" | "add_friend",
+        "page_content":   { ... 該頁面的完整內容和座標 ... },
+
+        # 輔助資訊
         "separator_x":    int,
         "sidebar_width":  int,
         "line_window":    {"left", "top", "right", "bottom"},
     }
-    所有座標都是螢幕絕對座標（可以直接用 pyautogui.click）
     """
     _print("[line_locate] 開始定位...")
 
@@ -287,56 +647,45 @@ def locate_line_regions(monitor=2):
     # Step 2: 像素分析
     sidebar_w = find_sidebar_by_pixel(line_crop)
     sep_x = find_separator_by_pixel(line_crop, sidebar_w)
-    _print(f"[line_locate] sidebar 寬度: {sidebar_w}, 分隔線: x={sep_x}")
+    _print(f"[line_locate] sidebar: {sidebar_w}px, 分隔線: x={sep_x}")
 
-    # Step 3: Claude Vision 定位
-    vision = find_regions_by_vision(line_crop)
+    # Step 3: Vision 定位框架 + sidebar 按鈕
+    vision = find_framework_by_vision(line_crop)
     current_page = vision.get("current_page", "unknown")
-    _print(f"[line_locate] Vision: {json.dumps(vision, ensure_ascii=False)}")
     _print(f"[line_locate] 當前頁面: {current_page}")
 
-    # Step 4: 組合結果
-    # 螢幕座標轉換
+    # 座標轉換函數
     sx_ratio = mon["width"] / full_img.size[0]
     sy_ratio = mon["height"] / full_img.size[1]
 
     def to_screen_region(v):
-        """bounding box → 螢幕絕對座標"""
         sl = int(mon["left"] + (il + v["l"]) * sx_ratio)
         st = int(mon["top"] + (it + v["t"]) * sy_ratio)
         sr = int(mon["left"] + (il + v["r"]) * sx_ratio)
         sb = int(mon["top"] + (it + v["b"]) * sy_ratio)
-        cx = (sl + sr) // 2
-        cy = (st + sb) // 2
-        return {"left": sl, "top": st, "right": sr, "bottom": sb, "center": (cx, cy)}
+        return {"left": sl, "top": st, "right": sr, "bottom": sb, "center": ((sl + sr) // 2, (st + sb) // 2)}
 
     def to_screen_point(v):
-        """center point → 螢幕絕對座標"""
         sx_abs = int(mon["left"] + (il + v["x"]) * sx_ratio)
         sy_abs = int(mon["top"] + (it + v["y"]) * sy_ratio)
         return {"center": (sx_abs, sy_abs)}
 
-    # 主要區域
+    # 組合框架結果
     sidebar = to_screen_region(vision["sidebar"])
     search_bar = to_screen_region(vision["search_bar"])
     left_panel = to_screen_region(vision["left_panel"])
     chat_title = to_screen_region(vision["chat_title"])
     input_box = to_screen_region(vision["input_box"])
 
-    # 對話區用確認的邊界修正
     chat_area_raw = {
-        "l": sep_x,
-        "t": vision["chat_title"]["b"],
-        "r": lw,
-        "b": vision["input_box"]["t"],
+        "l": sep_x, "t": vision["chat_title"]["b"],
+        "r": lw, "b": vision["input_box"]["t"],
     }
     chat_area = to_screen_region(chat_area_raw)
 
-    # Sidebar 每個按鈕的座標
-    btn_names = [
-        "btn_friend", "btn_chat", "btn_add_friend", "btn_timeline",
-        "btn_call", "btn_keep", "btn_line_official", "btn_more"
-    ]
+    # sidebar 按鈕
+    btn_names = ["btn_friend", "btn_chat", "btn_add_friend", "btn_timeline",
+                 "btn_call", "btn_keep", "btn_line_official", "btn_more"]
     sidebar_icons = {}
     for btn in btn_names:
         if btn in vision and "x" in vision[btn]:
@@ -344,6 +693,32 @@ def locate_line_regions(monitor=2):
         else:
             sidebar_icons[btn] = {"center": (0, 0)}
 
+    # Step 4: 掃描當前頁面內容（PaddleOCR 主力）
+    _print(f"[line_locate] 掃描 {current_page} 頁面內容...")
+    panel_rect = vision["left_panel"]
+    panel_crop = line_crop.crop((panel_rect["l"], panel_rect["t"], panel_rect["r"], panel_rect["b"]))
+
+    page_content = {}
+    try:
+        if current_page == "friend":
+            page_content = scan_friend_page(panel_crop, panel_rect, mon, full_img.size, il, it)
+        elif current_page == "chat":
+            page_content = scan_chat_page(panel_crop, panel_rect, mon, full_img.size, il, it)
+        elif current_page == "add_friend":
+            page_content = scan_add_friend_page(panel_crop, panel_rect, mon, full_img.size, il, it)
+
+        # 檢查 OCR 結果是否足夠（太少項目就啟動 Vision 備援）
+        ocr_count = len(page_content.get("all_ocr_items", []))
+        if ocr_count < 3:
+            _print(f"[line_locate] OCR 只找到 {ocr_count} 項，啟動 Vision 備援...")
+            vision_items = vision_scan_panel(panel_crop, current_page)
+            page_content["vision_fallback"] = vision_items
+    except Exception as e:
+        _print(f"[line_locate] 頁面掃描失敗：{e}，啟動 Vision 備援...")
+        vision_items = vision_scan_panel(panel_crop, current_page)
+        page_content = {"page": current_page, "vision_fallback": vision_items}
+
+    # 組合最終結果
     result = {
         "sidebar": sidebar,
         "sidebar_icons": sidebar_icons,
@@ -353,11 +728,13 @@ def locate_line_regions(monitor=2):
         "chat_area": chat_area,
         "input_box": input_box,
         "current_page": current_page,
+        "page_content": page_content,
         "separator_x": sep_x,
         "sidebar_width": sidebar_w,
         "line_window": {"left": il, "top": it, "right": ir, "bottom": ib},
     }
 
+    # 輸出結果
     _print("[line_locate] 定位完成")
     for name in ["sidebar", "search_bar", "left_panel", "chat_title", "chat_area", "input_box"]:
         r = result[name]
@@ -367,20 +744,35 @@ def locate_line_regions(monitor=2):
     for btn, info in sidebar_icons.items():
         _print(f"    {btn}: {info['center']}")
 
+    # 輸出頁面內容摘要
+    if current_page == "friend":
+        _print(f"  page_content: user={page_content.get('user_name','')}, "
+               f"communities={len(page_content.get('communities',[]))}, "
+               f"groups={len(page_content.get('groups',[]))}, "
+               f"friends={len(page_content.get('friends',[]))}")
+    elif current_page == "chat":
+        convs = page_content.get("conversations", [])
+        _print(f"  page_content: {len(convs)} conversations")
+        for c in convs[:5]:
+            _print(f"    - {c['name']} (unread={c.get('unread',0)})")
+    elif current_page == "add_friend":
+        _print(f"  page_content: buttons={list(page_content.get('buttons',{}).keys())}, "
+               f"official={len(page_content.get('official_accounts',[]))}, "
+               f"maybe_know={len(page_content.get('maybe_know_people',[]))}")
+
     return result
 
 
 def switch_page(regions, target_page, monitor=2):
     """
-    切換 LINE 左側面板到指定頁面
+    切換 LINE 左側面板到指定頁面，自動重新定位 + 掃描新頁面內容
 
     參數：
         regions: locate_line_regions() 的返回值
         target_page: "friend" | "chat" | "add_friend"
         monitor: 螢幕編號
 
-    返回：
-        更新後的 regions（重新定位）
+    返回：更新後的 regions（含新頁面的完整內容）
     """
     page_to_btn = {
         "friend": "btn_friend",
@@ -391,30 +783,93 @@ def switch_page(regions, target_page, monitor=2):
     if target_page not in page_to_btn:
         raise ValueError(f"未知頁面: {target_page}，支援: friend, chat, add_friend")
 
-    # 如果已經在目標頁面，不需要切換
     if regions.get("current_page") == target_page:
-        _print(f"[line_locate] 已經在 {target_page} 頁面，不需切換")
+        _print(f"[line_locate] 已經在 {target_page} 頁面")
         return regions
 
     btn_name = page_to_btn[target_page]
     btn = regions["sidebar_icons"].get(btn_name)
-
     if not btn or btn["center"] == (0, 0):
-        raise RuntimeError(f"找不到 {btn_name} 按鈕座標，無法切換")
+        raise RuntimeError(f"找不到 {btn_name} 按鈕座標")
 
     cx, cy = btn["center"]
     _print(f"[line_locate] 切換到 {target_page}，點擊 {btn_name} at ({cx}, {cy})")
     pyautogui.click(cx, cy)
     time.sleep(1.0)
 
-    # 重新定位（頁面已切換，左側面板內容不同）
+    # 重新定位 + 掃描新頁面
     new_regions = locate_line_regions(monitor)
-    _print(f"[line_locate] 切換完成，當前頁面: {new_regions['current_page']}")
+
+    if new_regions["current_page"] != target_page:
+        _print(f"[line_locate] 警告：切換後偵測到 {new_regions['current_page']}，預期 {target_page}")
+
     return new_regions
+
+
+def find_conversation(regions, name):
+    """
+    在聊天列表中找到指定名稱的對話，回傳其座標
+
+    參數：
+        regions: locate_line_regions() 的返回值（必須在 chat 頁面）
+        name: 要找的對話名稱（模糊匹配）
+
+    返回：
+        {"name": "...", "center": (x, y)} 或 None
+    """
+    if regions.get("current_page") != "chat":
+        _print(f"[line_locate] 不在聊天頁，無法搜尋對話")
+        return None
+
+    conversations = regions.get("page_content", {}).get("conversations", [])
+    for conv in conversations:
+        if name in conv["name"] or conv["name"] in name:
+            return conv
+
+    return None
+
+
+def find_friend(regions, name):
+    """
+    在好友列表中找到指定名稱的好友，回傳其座標
+
+    參數：
+        regions: locate_line_regions() 的返回值（必須在 friend 頁面）
+        name: 要找的好友名稱（模糊匹配）
+
+    返回：
+        {"name": "...", "center": (x, y)} 或 None
+    """
+    if regions.get("current_page") != "friend":
+        _print(f"[line_locate] 不在好友頁，無法搜尋好友")
+        return None
+
+    pc = regions.get("page_content", {})
+    for section in ["friends", "communities", "groups"]:
+        for item in pc.get(section, []):
+            if name in item["name"] or item["name"] in name:
+                return item
+
+    return None
 
 
 # === 直接執行時測試 ===
 if __name__ == "__main__":
     regions = locate_line_regions(monitor=2)
     print("\n=== 完整結果 ===")
-    _print(json.dumps(regions, ensure_ascii=False, indent=2, default=str))
+    # 只印重點，不印全部 OCR 原始資料
+    summary = {k: v for k, v in regions.items() if k != "page_content"}
+    _print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+
+    pc = regions.get("page_content", {})
+    print(f"\n=== {pc.get('page', '?')} 頁面內容 ===")
+    if pc.get("page") == "chat":
+        for c in pc.get("conversations", []):
+            _print(f"  {c['name']} (unread={c.get('unread',0)}) at {c['center']}")
+    elif pc.get("page") == "friend":
+        _print(f"  用戶: {pc.get('user_name', '?')}")
+        for s in ["communities", "groups", "friends"]:
+            _print(f"  {s}: {[i['name'] for i in pc.get(s, [])]}")
+    elif pc.get("page") == "add_friend":
+        for k, v in pc.get("buttons", {}).items():
+            _print(f"  {v['label']} at {v['center']}")
