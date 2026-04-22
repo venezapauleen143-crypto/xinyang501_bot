@@ -596,6 +596,19 @@ WAIT_COMPLETE = 2
 WAIT_COMPLETE_ROUNDS = 2
 
 
+def time_to_minutes(t_str):
+    """把 HH:MM 轉成分鐘數，用於數值比較（解決跨午夜問題）"""
+    h, m = map(int, t_str.split(":"))
+    return h * 60 + m
+
+
+def is_before_stop_time(stop_time):
+    """判斷現在是否還沒到停止時間"""
+    now_min = time_to_minutes(datetime.now().strftime("%H:%M"))
+    stop_min = time_to_minutes(stop_time)
+    return now_min < stop_min
+
+
 def monitor_and_reply(regions, stop_time, system_prompt, monitor=2):
     """監控對話區，偵測新訊息後自動回覆"""
 
@@ -611,7 +624,7 @@ def monitor_and_reply(regions, stop_time, system_prompt, monitor=2):
     print(f"[Monitor] 初始訊息數：{len(previous_messages)}", flush=True)
     print(f"[Monitor] 停止方式：touch {STOP_FILE}", flush=True)
 
-    while datetime.now().strftime("%H:%M") < stop_time:
+    while is_before_stop_time(stop_time):
         if should_stop():
             break
 
@@ -752,6 +765,35 @@ def main(contact_name, stop_time, sop_path=DEFAULT_SOP, monitor=2):
         if not ocr_thread.is_alive():
             break
         time.sleep(1)
+
+    # 發送 SOP 歡迎詞（主動開場）
+    print(f"\n[Init] 發送 SOP 歡迎詞...", flush=True)
+    welcome_step = None
+    ask_area_step = None
+    for step in sop["steps"]:
+        if step["id"] == "welcome":
+            welcome_step = step
+        elif step["id"] == "ask_area":
+            ask_area_step = step
+
+    if welcome_step:
+        for reply in welcome_step.get("replies", []):
+            if reply.startswith("{") and reply.endswith("}"):
+                # 佔位符（如 {send_image}）— 後續版本再實作圖片發送
+                print(f"[Init] 跳過佔位符: {reply}", flush=True)
+                continue
+            send_reply(reply, regions)
+            print(f"[Init] → {reply[:60]}", flush=True)
+            time.sleep(1)
+
+    if ask_area_step:
+        for reply in ask_area_step.get("replies", []):
+            send_reply(reply, regions)
+            print(f"[Init] → {reply[:60]}", flush=True)
+            time.sleep(1)
+
+    print(f"[Init] 歡迎詞已發送，等待客戶回覆...", flush=True)
+    time.sleep(2)
 
     # 開始監控
     print(f"\n[Monitor] 開始自動回覆...", flush=True)
