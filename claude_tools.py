@@ -16256,6 +16256,30 @@ def tg_auto_reply_tool(action="start", contact="", stop_time="", duration="30"):
 
 # ── LINE 工具 ──────────────────────────────────────────────────────────
 
+def execute_line_send_msg(contact_name: str, message: str) -> str:
+    """LINE 搜尋好友並發送訊息（subprocess 呼叫 line_send_msg.py）"""
+    if not contact_name or not message:
+        return "請提供好友名稱和訊息內容"
+    try:
+        script = "C:/Users/blue_/claude-telegram-bot/scripts/line_send_msg.py"
+        proc = subprocess.Popen(
+            [sys.executable, script, contact_name, message],
+            cwd="C:/Users/blue_/claude-telegram-bot",
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            encoding="utf-8", errors="replace",
+        )
+        output, _ = proc.communicate(timeout=120)
+        if proc.returncode == 0:
+            return f"LINE 訊息已發送給 {contact_name}：{message}"
+        else:
+            return f"LINE 發送失敗：{output[-500:]}"
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return "LINE 發送超時（120秒）"
+    except Exception as e:
+        return f"LINE 發送失敗：{e}"
+
+
 def line_send_msg_tool(contact="", message=""):
     """LINE 搜尋好友並發送訊息。用法：line_send_msg <好友名稱> <訊息>"""
     if not contact or not message:
