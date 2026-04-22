@@ -96,6 +96,59 @@ client = anthropic.Anthropic()
 TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
 
 # ============================================================
+# GPU 記憶體清理（atexit + 信號處理）
+# ============================================================
+import atexit
+import gc
+
+
+def _cleanup_gpu():
+    """退出時釋放 GPU 記憶體"""
+    global _ocr_engine
+    try:
+        _ocr_engine = None
+        gc.collect()
+        import paddle
+        paddle.device.cuda.empty_cache()
+        print("[Cleanup] GPU 記憶體已釋放", flush=True)
+    except Exception:
+        pass
+
+
+atexit.register(_cleanup_gpu)
+
+
+# ============================================================
+# 啟動前清理殘留 GPU 進程
+# ============================================================
+def _kill_stale_gpu_processes():
+    """殺掉殘留的同名 Python 腳本進程（防止 VRAM 雙倍佔用）"""
+    import subprocess as _sp
+    my_pid = os.getpid()
+    script_name = "tg_auto_chat.py"
+    try:
+        # 只找 python 進程，排除 bash/wmic/其他
+        result = _sp.run(
+            ["wmic", "process", "where",
+             f"name like 'python%' and commandline like '%{script_name}%' and processid!='{my_pid}'",
+             "get", "processid"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.strip().split("\n"):
+            line = line.strip()
+            if line.isdigit():
+                pid = int(line)
+                if pid != my_pid:
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                        print(f"[Cleanup] 殺掉殘留進程 PID={pid}", flush=True)
+                    except (OSError, ProcessLookupError):
+                        pass
+    except Exception:
+        pass
+
+
+# ============================================================
 # 優雅停止機制（方案 A + C）
 # ============================================================
 STOP_FILE = "C:/Users/blue_/Desktop/測試檔案/.stop_auto_reply"
@@ -103,10 +156,11 @@ _should_stop = False
 
 
 def _signal_handler(signum, frame):
-    """SIGBREAK / SIGINT handler — 設定停止旗標"""
+    """SIGBREAK / SIGINT handler — 設定停止旗標 + 清理 GPU"""
     global _should_stop
     _should_stop = True
     print(f"\n[STOP] 收到信號 {signum}，準備停止...", flush=True)
+    _cleanup_gpu()
 
 
 # 註冊信號（Windows: SIGBREAK + SIGINT）
@@ -349,11 +403,12 @@ def chat_hash(chat_img):
 # OCR 文字追蹤 + 像素顏色判斷 + Vision 保險
 # ============================================================
 # PaddleOCR GPU 全域初始化（只載入一次，之後每次 0.5 秒）
+# GPU 記憶體保護：限制 VRAM 用量，防止多進程同時跑導致 OOM 當機
 # ============================================================
 _ocr_engine = None
 
 def _get_ocr_engine():
-    """取得全域 PaddleOCR 引擎（GPU 加速），第一次呼叫載入模型，之後即時"""
+    """取得全域 PaddleOCR 引擎（GPU 加速 + VRAM 限制），第一次呼叫載入模型，之後即時"""
     global _ocr_engine
     if _ocr_engine is None:
         # 處理 modelscope 和 torch CPU 版的衝突
@@ -365,14 +420,20 @@ def _get_ocr_engine():
             sys.modules["modelscope.utils"] = types.ModuleType("modelscope.utils")
             sys.modules["modelscope.utils.import_utils"] = types.ModuleType("modelscope.utils.import_utils")
 
+        # GPU 記憶體限制（RTX 3060 6GB，限制在 ~900MB 以內）
+        os.environ["FLAGS_fraction_of_gpu_memory_to_use"] = "0.15"
+        os.environ["FLAGS_initial_gpu_memory_in_mb"] = "512"
         os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
         from paddleocr import PaddleOCR
         _ocr_engine = PaddleOCR(
             lang="chinese_cht",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            # gpu_mem 由環境變數 FLAGS_fraction_of_gpu_memory_to_use 控制
         )
+        print("[tg_auto_chat] PaddleOCR GPU 已載入（VRAM 限制 15% ≈ 900MB）", flush=True)
     return _ocr_engine
 
 
@@ -879,6 +940,9 @@ def monitor_and_reply(regions, stop_time, monitor=2):
 # ============================================================
 def main(contact_name, stop_time, monitor=2):
     import threading
+
+    # 啟動前殺殘留進程（防 VRAM 雙倍佔用）
+    _kill_stale_gpu_processes()
 
     # 啟動時清掉殘留的停止旗標（避免上次異常退出留下的旗標導致立即停止）
     if os.path.exists(STOP_FILE):

@@ -8968,6 +8968,40 @@ def execute_system_tools(action, **kwargs):
     except Exception as e: return f"❌ 失敗：{e}"
 
 
+# ============================================================
+# GPU OCR 腳本互斥鎖（防止同時跑兩個 GPU 腳本導致 VRAM 爆炸）
+# ============================================================
+_gpu_script_lock = __import__("threading").Lock()
+_gpu_script_active = None
+
+
+def _check_gpu_available(script_name):
+    """檢查 GPU 是否被其他腳本佔用"""
+    global _gpu_script_active, _tg_auto_reply_proc
+    with _gpu_script_lock:
+        if _gpu_script_active == "tg_auto_reply" and _tg_auto_reply_proc is not None:
+            try:
+                if _tg_auto_reply_proc.poll() is None:
+                    return False, f"GPU 被 Telegram 自動回覆佔用中，請先停止後再執行 {script_name}"
+            except Exception:
+                pass
+            _gpu_script_active = None
+        return True, ""
+
+
+def _set_gpu_active(script_name):
+    global _gpu_script_active
+    with _gpu_script_lock:
+        _gpu_script_active = script_name
+
+
+def _release_gpu(script_name):
+    global _gpu_script_active
+    with _gpu_script_lock:
+        if _gpu_script_active == script_name:
+            _gpu_script_active = None
+
+
 _tg_auto_reply_proc = None
 _TG_AUTO_STOP_FILE = "C:/Users/blue_/Desktop/測試檔案/.stop_auto_reply"
 _TG_AUTO_SCRIPT = "C:/Users/blue_/claude-telegram-bot/scripts/tg_auto_chat.py"
@@ -8984,6 +9018,7 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, s
         except Exception:
             pass
         _tg_auto_reply_proc = None
+        _release_gpu("tg_auto_reply")
         return "自動回覆已停止"
 
     if _tg_auto_reply_proc is not None:
@@ -9003,11 +9038,17 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, s
     if not contact_name:
         return "請提供要自動回覆的好友名稱（contact_name 參數）"
 
+    # GPU 互斥檢查
+    available, reason = _check_gpu_available("tg_auto_reply")
+    if not available:
+        return reason
+
     try:
         _tg_auto_reply_proc = subprocess.Popen(
             [sys.executable, _TG_AUTO_SCRIPT, contact_name, end_str],
             cwd="C:/Users/blue_/claude-telegram-bot",
         )
+        _set_gpu_active("tg_auto_reply")
         return f"自動回覆已開啟：對象 {contact_name}，監控到 {end_str}"
     except Exception as e:
         return f"自動回覆啟動失敗：{e}"
@@ -16260,7 +16301,14 @@ def execute_line_send_msg(contact_name: str, message: str) -> str:
     """LINE 搜尋好友並發送訊息（subprocess 呼叫 line_send_msg.py）"""
     if not contact_name or not message:
         return "請提供好友名稱和訊息內容"
+
+    # GPU 互斥檢查
+    available, reason = _check_gpu_available("line_send_msg")
+    if not available:
+        return reason
+
     try:
+        _set_gpu_active("line_send_msg")
         script = "C:/Users/blue_/claude-telegram-bot/scripts/line_send_msg.py"
         proc = subprocess.Popen(
             [sys.executable, script, contact_name, message],
@@ -16278,6 +16326,8 @@ def execute_line_send_msg(contact_name: str, message: str) -> str:
         return "LINE 發送超時（120秒）"
     except Exception as e:
         return f"LINE 發送失敗：{e}"
+    finally:
+        _release_gpu("line_send_msg")
 
 
 def line_send_msg_tool(contact="", message=""):

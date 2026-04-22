@@ -128,14 +128,30 @@ ADD_FRIEND_PAGE_TEMPLATE = {
 }
 
 
+# 搜尋結果頁（line7.png）— 搜尋好友後的 left_panel 佈局
+SEARCH_RESULT_TEMPLATE = {
+    # 搜尋欄底部（此 y 以上的 OCR 結果是搜尋欄裡打的字，必須跳過）
+    "search_bar_bottom_ratio": 0.068,
+    # 分類標題（「好友 1」）
+    "section_header_ratio": 0.092,
+    # 第一個搜尋結果項目起始 y
+    "first_item_top_ratio": 0.102,
+    # 第一個搜尋結果項目中心 y（點擊這裡）
+    "first_item_center_ratio": 0.129,
+    # 每個搜尋結果項目的高度
+    "item_height_ratio": 0.053,
+}
+
+
 # ============================================================
 # PaddleOCR GPU 全域引擎（只載入一次）
+# GPU 記憶體保護：限制 VRAM 用量，防止多進程同時跑導致 OOM 當機
 # ============================================================
 _ocr_engine = None
 
 
 def _get_ocr_engine():
-    """取得全域 PaddleOCR 引擎"""
+    """取得全域 PaddleOCR 引擎（singleton，限制 GPU 記憶體）"""
     global _ocr_engine
     if _ocr_engine is None:
         if "modelscope" not in sys.modules:
@@ -144,14 +160,21 @@ def _get_ocr_engine():
             sys.modules["modelscope"] = fake
             sys.modules["modelscope.utils"] = types.ModuleType("modelscope.utils")
             sys.modules["modelscope.utils.import_utils"] = types.ModuleType("modelscope.utils.import_utils")
+
+        # GPU 記憶體限制（RTX 3060 6GB，限制在 ~900MB 以內）
+        os.environ["FLAGS_fraction_of_gpu_memory_to_use"] = "0.15"
+        os.environ["FLAGS_initial_gpu_memory_in_mb"] = "512"
         os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+
         from paddleocr import PaddleOCR
         _ocr_engine = PaddleOCR(
             lang="chinese_cht",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
+            # gpu_mem 由環境變數 FLAGS_fraction_of_gpu_memory_to_use 控制
         )
+        _print("[line_locate] PaddleOCR GPU 已載入（VRAM 限制 15% ≈ 900MB）")
     return _ocr_engine
 
 
@@ -776,18 +799,33 @@ def locate_line_regions(monitor=2):
         return {"center": (sx_abs, sy_abs)}
 
     # 組合框架結果
+    # sidebar、search_bar、left_panel 用 Vision
+    # chat_area、input_box 用像素比例（不靠 Vision，避免定位錯誤）
     sidebar_raw = {"l": 0, "t": 0, "r": sidebar_w, "b": lh}
     sidebar = to_screen_region(sidebar_raw)
     search_bar = to_screen_region(vision["search_bar"])
     left_panel = to_screen_region(vision["left_panel"])
     chat_title = to_screen_region(vision["chat_title"])
-    input_box = to_screen_region(vision["input_box"])
 
+    # chat_area 和 input_box：用固定比例算（不用 Vision、不用 separator_x）
+    # sidebar(62) + left_panel(185) = 247px, 247/742 ≈ 0.333
+    # 這個比例不受搜尋頁面/聊天頁面影響，永遠固定
+    chat_left = int(lw * 0.333)
     chat_area_raw = {
-        "l": sep_x, "t": vision["chat_title"]["b"],
-        "r": lw, "b": vision["input_box"]["t"],
+        "l": chat_left,
+        "t": int(lh * 0.04),   # 標題列下方（視窗高度 4%）
+        "r": lw,
+        "b": int(lh * 0.92),   # 輸入框上方（視窗高度 92%）
     }
     chat_area = to_screen_region(chat_area_raw)
+
+    input_box_raw = {
+        "l": chat_left,
+        "t": int(lh * 0.92),   # 對話區下方
+        "r": lw,
+        "b": int(lh * 0.98),   # 視窗底部附近
+    }
+    input_box = to_screen_region(input_box_raw)
 
     # sidebar 按鈕（用像素分析 + 模板比例，不靠 Vision）
     sidebar_icons = calc_sidebar_icons(sidebar_w, lh, il, it, mon, full_img.size)
@@ -963,6 +1001,277 @@ def find_friend(regions, name):
             if name in item["name"] or item["name"] in name:
                 return item
 
+    return None
+
+
+# ============================================================
+# 對話區截圖 + OCR（純像素定位，不用 Vision）
+# ============================================================
+def screenshot_chat_area(regions, monitor=2):
+    """
+    截取 LINE 對話區圖片。
+    用 regions 裡的 chat_area 座標（像素比例算出，不是 Vision）。
+
+    參數：
+        regions: locate_line_regions() 的返回值
+        monitor: 螢幕編號
+
+    返回：
+        PIL Image（對話區截圖）
+    """
+    full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+    lw, lh = line_crop.size
+
+    ca = regions["chat_area"]
+    sx_ratio = full_img.size[0] / mon["width"]
+    sy_ratio = full_img.size[1] / mon["height"]
+
+    ca_il = max(0, int((ca["left"] - mon["left"]) * sx_ratio) - il)
+    ca_it = max(0, int((ca["top"] - mon["top"]) * sy_ratio) - it)
+    ca_ir = min(lw, int((ca["right"] - mon["left"]) * sx_ratio) - il)
+    ca_ib = min(lh, int((ca["bottom"] - mon["top"]) * sy_ratio) - it)
+
+    # 安全檢查
+    if ca_ir <= ca_il or ca_ib <= ca_it:
+        sep = regions.get("separator_x", lw // 3)
+        ca_il = sep
+        ca_it = int(lh * 0.04)
+        ca_ir = lw
+        ca_ib = int(lh * 0.92)
+
+    return line_crop.crop((ca_il, ca_it, ca_ir, ca_ib))
+
+
+def ocr_scan_chat(chat_img):
+    """
+    PaddleOCR 掃描對話區，提取所有訊息文字 + 用氣泡顏色判斷 sender。
+    LINE 綠色氣泡 = 我方（me），白色氣泡 = 對方（them）。
+
+    參數：
+        chat_img: screenshot_chat_area() 的返回值
+
+    返回：
+        [{"text": "...", "sender": "them/me/unknown", "y": int, "conf": float}]
+    """
+    arr = np.array(chat_img)
+    ch, cw = arr.shape[:2]
+
+    ocr = _get_ocr_engine()
+    results = ocr.predict(arr)
+
+    raw_items = []
+    if not results:
+        return []
+
+    for item in results:
+        texts = item.get("rec_texts", [])
+        scores = item.get("rec_scores", [])
+        boxes = item.get("dt_polys", [])
+
+        for i, (text, conf) in enumerate(zip(texts, scores)):
+            t = text.strip()
+            if not t or conf < 0.3:
+                continue
+
+            box = boxes[i] if i < len(boxes) else [[0, 0], [0, 0], [0, 0], [0, 0]]
+            x = int(box[0][0])
+            x_right = int(box[1][0])
+            y = int(box[0][1])
+            y_center = int((box[0][1] + box[2][1]) / 2)
+
+            # 過濾時間戳和系統訊息
+            if len(t) < 12 and (":" in t or "上午" in t or "下午" in t):
+                continue
+            if "已讀" in t or "已误" in t or "收回" in t:
+                continue
+            if "輸入訊息" in t:
+                continue
+
+            # 用氣泡顏色判斷 sender：掃描該行所有像素，數綠色像素數量
+            # LINE 綠色氣泡 RGB ≈ (195,246,157)，從實際截圖取得
+            scan_y = min(ch - 1, y_center)
+            row = arr[scan_y, :, :]
+            green_count = 0
+            for px in range(cw):
+                rv, gv, bv = int(row[px, 0]), int(row[px, 1]), int(row[px, 2])
+                if 150 < rv < 210 and gv > 220 and 130 < bv < 180:
+                    green_count += 1
+
+            if green_count > 30:
+                sender = "me"      # 該行有綠色氣泡 = 我方
+            else:
+                sender = "them"    # 該行沒有綠色 = 對方
+
+            raw_items.append({"text": t, "sender": sender, "x": x, "y": y, "conf": conf})
+
+    # 合併相鄰同 sender 文字（y 差距 < 40px）
+    if not raw_items:
+        return []
+
+    messages = []
+    current = {"text": raw_items[0]["text"], "sender": raw_items[0]["sender"],
+               "y": raw_items[0]["y"], "conf": raw_items[0]["conf"]}
+
+    for item in raw_items[1:]:
+        same_sender = item["sender"] == current["sender"]
+        close_y = abs(item["y"] - current["y"]) < 40
+        if same_sender and close_y:
+            current["text"] += " " + item["text"]
+            current["conf"] = min(current["conf"], item["conf"])
+        else:
+            messages.append(current)
+            current = {"text": item["text"], "sender": item["sender"],
+                       "y": item["y"], "conf": item["conf"]}
+    messages.append(current)
+
+    return messages
+
+
+# ============================================================
+# 搜尋好友 + 掃描搜尋結果（line7.png 流程）
+# ============================================================
+def search_friend_and_scan(regions, friend_name, monitor=2):
+    """
+    在搜尋欄輸入好友名稱，掃描搜尋結果，回傳好友項目的螢幕座標。
+
+    流程（對應 line7.png）：
+    1. 點搜尋欄 → 輸入好友名稱
+    2. OCR 掃描 left_panel（跳過搜尋欄文字）
+    3. 在搜尋結果中找到好友 → 回傳座標
+
+    參數：
+        regions: locate_line_regions() 的返回值
+        friend_name: 要搜尋的好友名稱
+        monitor: 螢幕編號
+
+    返回：
+        {"name": "...", "center": (x, y)} 或 None
+    """
+    import pyautogui
+    import pyperclip
+    from difflib import SequenceMatcher
+
+    # Step 1: 點搜尋欄 → 輸入好友名稱
+    sx, sy = regions["search_bar"]["center"]
+    pyautogui.click(sx, sy)
+    time.sleep(0.5)
+    pyautogui.hotkey("ctrl", "a")
+    time.sleep(0.1)
+    pyautogui.press("delete")
+    time.sleep(0.1)
+    pyperclip.copy(friend_name)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(1.5)
+    _print(f"[line_locate] 搜尋: {friend_name}")
+
+    # Step 2: 截圖 + OCR 掃描 left_panel
+    full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+    lw_px, lh_px = line_crop.size
+
+    lp = regions["left_panel"]
+    sx_ratio = full_img.size[0] / mon["width"]
+    sy_ratio = full_img.size[1] / mon["height"]
+    lp_il = max(0, int((lp["left"] - mon["left"]) * sx_ratio) - il)
+    lp_it = max(0, int((lp["top"] - mon["top"]) * sy_ratio) - it)
+    lp_ir = min(lw_px, int((lp["right"] - mon["left"]) * sx_ratio) - il)
+    lp_ib = min(lh_px, int((lp["bottom"] - mon["top"]) * sy_ratio) - it)
+
+    panel_crop = line_crop.crop((lp_il, lp_it, lp_ir, lp_ib))
+    pw, ph = panel_crop.size
+
+    # Step 3: OCR 掃描，跳過搜尋欄區域（line7.png 的關鍵）
+    # 搜尋欄底部 y = 視窗高度 * search_bar_bottom_ratio
+    skip_y = int(lh_px * SEARCH_RESULT_TEMPLATE["search_bar_bottom_ratio"])
+    # 轉換成 panel_crop 內的 y（減去 panel 的 top offset）
+    skip_y_in_panel = max(skip_y - lp_it, 30)
+    _print(f"[line_locate] 搜尋結果：跳過 y < {skip_y_in_panel} 的 OCR 結果（搜尋欄文字）")
+
+    ocr_items = ocr_scan_panel(panel_crop)
+
+    # Step 4: 從搜尋欄下方找好友名（line7.png 黑框項目）
+    for item in ocr_items:
+        if item["y"] < skip_y_in_panel:
+            continue  # 跳過搜尋欄裡的文字
+        if "好友" in item["text"] and len(item["text"]) < 6:
+            continue  # 跳過「好友 1」分類標題
+        ratio = SequenceMatcher(None, friend_name, item["text"]).ratio()
+        if friend_name in item["text"] or item["text"] in friend_name or ratio > 0.6:
+            # 計算螢幕絕對座標（點擊 panel 中間 x，好友項目 y + 偏移）
+            abs_x = int(mon["left"] + (il + lp_il + pw // 2) * (mon["width"] / full_img.size[0]))
+            abs_y = int(mon["top"] + (it + lp_it + item["y"] + 25) * (mon["height"] / full_img.size[1]))
+            _print(f"[line_locate] 搜尋結果找到: {item['text']} (y={item['y']}), 螢幕座標=({abs_x}, {abs_y})")
+            return {"name": item["text"], "center": (abs_x, abs_y)}
+
+    _print(f"[line_locate] OCR 找不到 {friend_name}")
+    return None
+
+
+def enter_chat_from_search(friend_pos, regions, monitor=2):
+    """
+    點擊搜尋結果中的好友項目（line7.png 黑框），進入聊天視窗。
+    自動判斷：有聊天記錄 → 直接進入；沒有 → 點綠色聊天按鈕。
+
+    參數：
+        friend_pos: search_friend_and_scan() 的返回值 {"name", "center"}
+        regions: 當前的 regions
+        monitor: 螢幕編號
+
+    返回：
+        更新後的 regions（已進入聊天），或 None（失敗）
+    """
+    import pyautogui
+
+    click_x, click_y = friend_pos["center"]
+
+    for attempt in range(3):
+        _print(f"[line_locate] 第 {attempt+1} 次點擊好友: ({click_x}, {click_y})")
+        pyautogui.click(click_x, click_y)
+        time.sleep(0.8)
+        pyautogui.click(click_x, click_y)
+        time.sleep(1.0)
+
+        # 截圖判斷右側：有沒有 input_box / 綠色聊天按鈕
+        full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+        arr = np.array(line_crop)
+        lh2, lw2, _ = arr.shape
+        sep = regions.get("separator_x", lw2 // 3)
+
+        # 偵測綠色聊天按鈕（沒聊過天的新好友）
+        green_points = []
+        for y in range(lh2 // 4, lh2 * 3 // 4):
+            for x in range(sep, lw2, 3):
+                rv, gv, bv = int(arr[y, x, 0]), int(arr[y, x, 1]), int(arr[y, x, 2])
+                if gv > 150 and gv > rv + 50 and gv > bv + 30 and rv < 100:
+                    green_points.append((x, y))
+
+        if len(green_points) > 20:
+            # 沒聊過天 → 點綠色聊天按鈕
+            avg_x = sum(p[0] for p in green_points) // len(green_points)
+            avg_y = sum(p[1] for p in green_points) // len(green_points)
+            sx_r = mon["width"] / full_img.size[0]
+            sy_r = mon["height"] / full_img.size[1]
+            btn_x = int(mon["left"] + (il + avg_x) * sx_r)
+            btn_y = int(mon["top"] + (it + avg_y) * sy_r)
+            _print(f"[line_locate] 新好友，點綠色聊天按鈕 ({btn_x}, {btn_y})")
+            pyautogui.click(btn_x, btn_y)
+            time.sleep(1.5)
+
+        # 重新定位，驗證 chat_area
+        new_regions = locate_line_regions(monitor)
+        ca = new_regions["chat_area"]
+        ca_height = ca["bottom"] - ca["top"]
+
+        if ca_height >= 50:
+            _print(f"[line_locate] 已進入聊天（chat_area 高度={ca_height}）")
+            return new_regions
+        else:
+            _print(f"[line_locate] 尚未進入聊天（chat_area 高度={ca_height}），重試...")
+            if attempt == 1:
+                # 第三次嘗試：雙擊
+                pyautogui.doubleClick(click_x, click_y)
+                time.sleep(1.0)
+
+    _print(f"[line_locate] 3 次嘗試都無法進入聊天")
     return None
 
 

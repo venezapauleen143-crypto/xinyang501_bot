@@ -10409,6 +10409,43 @@ def execute_send_email(to, subject, body):
         s.send_message(msg)
     return f"Email 已寄出到 {to}"
 
+# ============================================================
+# GPU OCR 腳本互斥鎖（防止同時跑兩個 GPU 腳本導致 VRAM 爆炸）
+# ============================================================
+_gpu_script_lock = __import__("threading").Lock()
+_gpu_script_active = None  # 記錄當前佔用 GPU 的腳本名稱
+
+
+def _check_gpu_available(script_name):
+    """檢查 GPU 是否被其他腳本佔用"""
+    global _gpu_script_active, _tg_auto_reply_proc
+    with _gpu_script_lock:
+        # 檢查 TG auto reply 是否還在跑
+        if _gpu_script_active == "tg_auto_reply" and _tg_auto_reply_proc is not None:
+            try:
+                if _tg_auto_reply_proc.poll() is None:
+                    return False, f"GPU 被 Telegram 自動回覆佔用中，請先停止後再執行 {script_name}"
+            except Exception:
+                pass
+            _gpu_script_active = None
+        return True, ""
+
+
+def _set_gpu_active(script_name):
+    """標記 GPU 正在被使用"""
+    global _gpu_script_active
+    with _gpu_script_lock:
+        _gpu_script_active = script_name
+
+
+def _release_gpu(script_name):
+    """釋放 GPU 佔用標記"""
+    global _gpu_script_active
+    with _gpu_script_lock:
+        if _gpu_script_active == script_name:
+            _gpu_script_active = None
+
+
 _LINE_SEND_SCRIPT = "C:/Users/blue_/claude-telegram-bot/scripts/line_send_msg.py"
 
 
@@ -10416,7 +10453,14 @@ def execute_line_send_msg(contact_name: str, message: str) -> str:
     """LINE 搜尋好友並發送訊息（subprocess 呼叫 line_send_msg.py）"""
     if not contact_name or not message:
         return "請提供好友名稱和訊息內容"
+
+    # GPU 互斥檢查
+    available, reason = _check_gpu_available("line_send_msg")
+    if not available:
+        return reason
+
     try:
+        _set_gpu_active("line_send_msg")
         proc = subprocess.Popen(
             [sys.executable, _LINE_SEND_SCRIPT, contact_name, message],
             cwd="C:/Users/blue_/claude-telegram-bot",
@@ -10433,6 +10477,8 @@ def execute_line_send_msg(contact_name: str, message: str) -> str:
         return "LINE 發送超時（120秒）"
     except Exception as e:
         return f"LINE 發送失敗：{e}"
+    finally:
+        _release_gpu("line_send_msg")
 
 
 _tg_auto_reply_proc = None
@@ -10463,7 +10509,8 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, s
         except Exception as e:
             _tg_log(f"停止失敗：{e}")
         _tg_auto_reply_proc = None
-        return "自動回覆已停止"
+        _release_gpu("tg_auto_reply")
+        return "��動回覆已停止"
 
     # 檢查是否已在運行
     if _tg_auto_reply_proc is not None:
@@ -10485,6 +10532,11 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, s
     if not contact_name:
         return "請提供要自動回覆的好友名稱（contact_name 參數）"
 
+    # GPU 互斥檢查（防止跟 LINE 腳本同時跑）
+    available, reason = _check_gpu_available("tg_auto_reply")
+    if not available:
+        return reason
+
     # 啟動 subprocess
     try:
         _tg_auto_reply_proc = subprocess.Popen(
@@ -10493,6 +10545,7 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, s
             stdout=open(_TG_AUTO_LOG, "a", encoding="utf-8"),
             stderr=subprocess.STDOUT,
         )
+        _set_gpu_active("tg_auto_reply")
         _tg_log(f"啟動自動回覆：好友={contact_name} 到={end_str} PID={_tg_auto_reply_proc.pid}")
         return f"自動回覆已開啟：對象 {contact_name}，監控到 {end_str}"
     except Exception as e:
