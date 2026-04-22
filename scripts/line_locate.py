@@ -813,7 +813,7 @@ def locate_line_regions(monitor=2):
     chat_left = int(lw * 0.333)
     chat_area_raw = {
         "l": chat_left,
-        "t": int(lh * 0.04),   # 標題列下方（視窗高度 4%）
+        "t": int(lh * 0.06),   # 標題列下方（視窗高度 6%，跳過「仁輝 JAMES」標題）
         "r": lw,
         "b": int(lh * 0.92),   # 輸入框上方（視窗高度 92%）
     }
@@ -1042,6 +1042,27 @@ def screenshot_chat_area(regions, monitor=2):
     return line_crop.crop((ca_il, ca_it, ca_ir, ca_ib))
 
 
+def _fix_ocr_spacing(text):
+    """修復 OCR 吃掉空格的問題：中文和數字之間自動加空格，超長數字自動拆分"""
+    # 中文後面接數字 → 加空格
+    text = re.sub(r'([\u4e00-\u9fff])(\d)', r'\1 \2', text)
+    # 數字後面接中文 → 加空格
+    text = re.sub(r'(\d)([\u4e00-\u9fff])', r'\1 \2', text)
+
+    # 連續超過 10 碼數字 → 嘗試拆分（前4碼生日 + 後10碼電話）
+    def _split_long_digits(m):
+        digits = m.group()
+        if len(digits) >= 14:
+            # 前4碼可能是生日（MMDD），後面是電話
+            mm = digits[:2]
+            if mm in ['01','02','03','04','05','06','07','08','09','10','11','12']:
+                return digits[:4] + ' ' + digits[4:]
+        return digits
+
+    text = re.sub(r'\d{14,}', _split_long_digits, text)
+    return text
+
+
 def ocr_scan_chat(chat_img):
     """
     PaddleOCR 掃描對話區，提取所有訊息文字 + 用氣泡顏色判斷 sender。
@@ -1072,6 +1093,9 @@ def ocr_scan_chat(chat_img):
             t = text.strip()
             if not t or conf < 0.3:
                 continue
+
+            # OCR 後處理：修復空格問題
+            t = _fix_ocr_spacing(t)
 
             box = boxes[i] if i < len(boxes) else [[0, 0], [0, 0], [0, 0], [0, 0]]
             x = int(box[0][0])
