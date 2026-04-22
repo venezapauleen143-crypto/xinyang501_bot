@@ -467,11 +467,15 @@ def enter_conversation(contact_name, monitor=2):
         for item in ocr_items:
             ratio = SequenceMatcher(None, contact_name, item["text"]).ratio()
             if contact_name in item["text"] or item["text"] in contact_name or ratio > 0.6:
+                # 點擊好友項目的中心（名字下方約 25px 才是項目中心，包含頭像和狀態）
                 click_x = int(mon["left"] + (il + lp_il + sw // 2) * (mon["width"] / full_img.size[0]))
-                click_y = int(mon["top"] + (it + lp_it + item["y"] + 15) * (mon["height"] / full_img.size[1]))
+                click_y = int(mon["top"] + (it + lp_it + item["y"] + 25) * (mon["height"] / full_img.size[1]))
+                pyautogui.click(click_x, click_y)
+                time.sleep(0.5)
+                # 再點一次確保進入對話（LINE 需要點擊好友項目才能開啟對話）
                 pyautogui.click(click_x, click_y)
                 time.sleep(1.0)
-                print(f"[Setup] 找到 {item['text']}，已點擊", flush=True)
+                print(f"[Setup] 找到 {item['text']}，已點擊進入對話", flush=True)
                 found = True
                 break
     except Exception as e:
@@ -535,6 +539,50 @@ def enter_conversation(contact_name, monitor=2):
 
     # 重新定位（進入對話後）
     regions = locate_line_regions(monitor)
+
+    # 驗證 chat_area 和 input_box 座標是否合理
+    ca = regions["chat_area"]
+    ib = regions["input_box"]
+    ca_height = ca["bottom"] - ca["top"]
+    ib_height = ib["bottom"] - ib["top"]
+
+    if ca_height < 50 or ib_height < 10:
+        # Vision 沒正確找到對話區，用像素分析的分隔線 + 視窗邊界重新計算
+        print(f"[Setup] 對話區座標異常（h={ca_height}），用備援方式定位...", flush=True)
+        lw_info = regions["line_window"]
+        sep = regions.get("separator_x", 200)
+
+        from line_locate import find_line_window, screenshot_line
+        _, line_crop, (il, it, ir, ib_img), mon = screenshot_line(monitor)
+        lw_px, lh_px = line_crop.size
+        sx_r = mon["width"] / (ir - il + lw_px) * (lw_px / (ir - il)) if ir > il else 1
+        sy_r = mon["height"] / (ib_img - it + lh_px) * (lh_px / (ib_img - it)) if ib_img > it else 1
+
+        # chat_area: 從分隔線到右邊界，上方 15% 到下方 85%
+        regions["chat_area"] = {
+            "left": int(mon["left"] + (il + sep) * (mon["width"] / (ir - il + 1 if ir > il else lw_px))),
+            "top": int(mon["top"] + (it + int(lh_px * 0.15)) * (mon["height"] / (ib_img - it + 1 if ib_img > it else lh_px))),
+            "right": int(mon["left"] + ir * (mon["width"] / (ir - il + 1 if ir > il else lw_px))),
+            "bottom": int(mon["top"] + (it + int(lh_px * 0.88)) * (mon["height"] / (ib_img - it + 1 if ib_img > it else lh_px))),
+            "center": (0, 0),
+        }
+        ca = regions["chat_area"]
+        ca["center"] = ((ca["left"] + ca["right"]) // 2, (ca["top"] + ca["bottom"]) // 2)
+
+        # input_box: 對話區下方
+        regions["input_box"] = {
+            "left": ca["left"],
+            "top": ca["bottom"],
+            "right": ca["right"],
+            "bottom": int(mon["top"] + (it + int(lh_px * 0.95)) * (mon["height"] / (ib_img - it + 1 if ib_img > it else lh_px))),
+            "center": (0, 0),
+        }
+        ib = regions["input_box"]
+        ib["center"] = ((ib["left"] + ib["right"]) // 2, (ib["top"] + ib["bottom"]) // 2)
+
+        print(f"[Setup] 備援 chat_area: {ca['left']},{ca['top']} → {ca['right']},{ca['bottom']}", flush=True)
+        print(f"[Setup] 備援 input_box center: {ib['center']}", flush=True)
+
     print(f"[Setup] 已進入對話視窗", flush=True)
     return regions
 
