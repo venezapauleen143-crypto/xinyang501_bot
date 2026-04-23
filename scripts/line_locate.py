@@ -80,12 +80,14 @@ TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
 # 所有數值都是相對於 left_panel 寬度/高度的比例
 # ============================================================
 
-# 好友頁（line1.png）— left_panel 內的固定元素相對位置
+# 好友頁（line1.png + line8.png）— left_panel 內的固定元素相對位置
 FRIEND_PAGE_TEMPLATE = {
     # 搜尋欄（相對 left_panel）
     "search_bar": {"y_ratio": 0.04, "h_ratio": 0.03},
     # 用戶個人資料區（搜尋欄下方）
     "user_profile": {"y_ratio": 0.07, "h_ratio": 0.07},
+    # 我的最愛區塊（line8.png，在 user_profile 和 community 之間）
+    "section_favorite": {"y_ratio": 0.12, "label": "我的最愛"},
     # 社群區塊標題
     "section_community": {"y_ratio": 0.16, "label": "社群"},
     # 群組區塊標題
@@ -481,50 +483,61 @@ def scan_friend_page(panel_img, panel_rect, mon, full_img_size, il, it):
     # 用模板比例算出固定元素的大致位置
     template = FRIEND_PAGE_TEMPLATE
     section_y = {
+        "favorite": int(ph * template["section_favorite"]["y_ratio"]),
         "community": int(ph * template["section_community"]["y_ratio"]),
         "group": int(ph * template["section_group"]["y_ratio"]),
         "friend": int(ph * template["section_friend"]["y_ratio"]),
     }
 
     # 分類 OCR 結果到各區塊
+    favorites = []
     communities = []
     groups = []
     friends = []
     user_name = ""
+
+    skip_keywords = ["搜尋", "Keep", "姓名", "我的最愛", "社群", "群組", "好友"]
 
     for item in ocr_items:
         y = item["y"]
         text = item["text"]
 
         # 用戶名稱（最上方）
-        if y < section_y["community"] and not user_name and len(text) > 1:
-            if "搜尋" not in text and "Keep" not in text and "姓名" not in text:
+        if y < section_y["favorite"] and not user_name and len(text) > 1:
+            if not any(kw in text for kw in skip_keywords):
                 user_name = text
+
+        # 我的最愛區塊（line8.png）
+        elif section_y["favorite"] <= y < section_y["community"]:
+            if len(text) > 1 and not any(kw in text for kw in skip_keywords):
+                favorites.append({"name": text, "center": to_abs(pw // 2, y + 15)})
 
         # 社群區塊的項目
         elif section_y["community"] <= y < section_y["group"]:
-            if "社群" not in text and len(text) > 1:
+            if len(text) > 1 and not any(kw in text for kw in skip_keywords):
                 communities.append({"name": text, "center": to_abs(pw // 2, y + 15)})
 
         # 群組區塊的項目
         elif section_y["group"] <= y < section_y["friend"]:
-            if "群組" not in text and len(text) > 1:
+            if len(text) > 1 and not any(kw in text for kw in skip_keywords):
                 groups.append({"name": text, "center": to_abs(pw // 2, y + 15)})
 
         # 好友區塊的項目
         elif y >= section_y["friend"]:
-            if "好友" not in text and len(text) > 1:
+            if len(text) > 1 and not any(kw in text for kw in skip_keywords):
                 friends.append({"name": text, "center": to_abs(pw // 2, y + 15)})
 
     return {
         "page": "friend",
         "user_name": user_name,
+        "favorites": favorites,
         "communities": communities,
         "groups": groups,
         "friends": friends,
         "fixed_elements": {
             "search_bar": {"center": to_abs(pw // 2, int(ph * template["search_bar"]["y_ratio"]))},
             "user_profile": {"center": to_abs(pw // 2, int(ph * template["user_profile"]["y_ratio"]))},
+            "section_favorite_header": {"center": to_abs(pw // 4, section_y["favorite"])},
             "section_community_header": {"center": to_abs(pw // 4, section_y["community"])},
             "section_group_header": {"center": to_abs(pw // 4, section_y["group"])},
             "section_friend_header": {"center": to_abs(pw // 4, section_y["friend"])},
@@ -982,7 +995,7 @@ def find_conversation(regions, name):
 
 def find_friend(regions, name):
     """
-    在好友列表中找到指定名稱的好友，回傳其座標
+    在好友列表中找到指定名稱的好友，回傳其座標（支援繁簡體模糊匹配）
 
     參數：
         regions: locate_line_regions() 的返回值（必須在 friend 頁面）
@@ -991,17 +1004,181 @@ def find_friend(regions, name):
     返回：
         {"name": "...", "center": (x, y)} 或 None
     """
+    from difflib import SequenceMatcher
+
     if regions.get("current_page") != "friend":
         _print(f"[line_locate] 不在好友頁，無法搜尋好友")
         return None
 
     pc = regions.get("page_content", {})
-    for section in ["friends", "communities", "groups"]:
+    for section in ["favorites", "friends", "communities", "groups"]:
         for item in pc.get(section, []):
+            # 完全匹配或包含
             if name in item["name"] or item["name"] in name:
+                return item
+            # 模糊匹配（處理繁簡體差異、OCR 微小辨識差異）
+            ratio = SequenceMatcher(None, name, item["name"]).ratio()
+            if ratio > 0.5:
                 return item
 
     return None
+
+
+# ============================================================
+# 分享好友資訊（line8.png + line9.png + line10.png 流程）
+# ============================================================
+# 「選擇傳送對象」面板位置（line9.png 黃色框）
+# 面板出現在 LINE 視窗的【左邊外側】，不在 LINE 視窗裡面
+# 從 click_positions_v2 于晏哥標記的正確位置反算：
+# 面板右邊界 = LINE 左邊界 - 129px（不是緊貼 LINE）
+# 面板 top = LINE top + 298px（不是從 LINE 頂部開始）
+SHARE_PANEL_POSITION = {
+    "width": 353,                    # 面板寬度（固定像素）
+    "height": 555,                   # 面板高度（固定像素）
+    "right_offset": 129,             # 面板右邊界距 LINE 左邊界的距離
+    "top_offset": 298,               # 面板 top 距 LINE top 的距離
+}
+
+# 面板內部元素比例（line10 + line11 交叉驗證）
+SHARE_DIALOG_TEMPLATE = {
+    "search_bar_x_ratio": 0.500,     # 搜尋欄 x（面板中間）
+    "search_bar_y_ratio": 0.195,     # 搜尋欄 y（line10 黑色框，往下修正）
+    "circle_x_ratio": 0.932,         # 圓圈 x（line11 綠色框實測）
+    "circle_y_ratio": 0.335,         # 圓圈 y（line11 綠色框實測）
+    "share_btn_x_ratio": 0.301,      # 分享按鈕 x（line10）
+    "share_btn_y_ratio": 0.955,      # 分享按鈕 y（line10）
+}
+
+
+def share_contact_card(regions, share_who, share_to, monitor=2):
+    """
+    分享好友資訊卡給指定的人（line8 → line9 → line10 流程）。
+
+    流程：
+    1. 切到好友頁 → 搜尋 share_who → 找到並右鍵點擊（line8）
+    2. 右鍵選單 → OCR 找「分享好友資訊」→ 點擊
+    3. 「選擇傳送對象」面板出現在 LINE 視窗左邊外側（line9 黃色框）
+    4. 在外側面板搜尋 share_to（line9 黑色框）
+    5. 點圓圈（line9 紅色框）
+    6. 點「分享」（line10 黃色框）
+
+    參數：
+        regions: locate_line_regions() 的返回值
+        share_who: 要分享的好友名稱（如「溫妮」）
+        share_to: 分享給誰（如「仁輝 JAMES」）
+        monitor: 螢幕編號
+
+    返回：
+        True（成功）或 False（失敗）
+    """
+    import pyautogui
+    import pyperclip
+
+    # === Step 1: 切到好友頁 → 搜尋 share_who → 找到 ===
+    _print(f"[share] 搜尋好友: {share_who}")
+    if regions.get("current_page") != "friend":
+        regions = switch_page(regions, "friend", monitor)
+
+    # 用搜尋功能找 share_who
+    friend_pos = search_friend_and_scan(regions, share_who, monitor)
+    if friend_pos is None:
+        _print(f"[share] 搜尋找不到 {share_who}")
+        return False
+
+    # === Step 2: 右鍵點擊 → OCR 找「分享好友資訊」→ 點擊（line8）===
+    fx, fy = friend_pos["center"]
+    _print(f"[share] 右鍵點擊 {share_who} at ({fx}, {fy})")
+    pyautogui.rightClick(fx, fy)
+    time.sleep(0.8)
+
+    # 截圖 OCR 找「分享好友資訊」
+    full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+    sx_r = mon["width"] / full_img.size[0]
+    sy_r = mon["height"] / full_img.size[1]
+
+    menu_items = ocr_scan_panel(line_crop)
+    menu_target = None
+    for item in menu_items:
+        if "分享" in item["text"] and "好友" in item["text"]:
+            menu_target = item
+            break
+        if "分享好友" in item["text"]:
+            menu_target = item
+            break
+
+    if menu_target is None:
+        _print(f"[share] OCR 找不到「分享好友資訊」選項")
+        pyautogui.press("escape")
+        time.sleep(0.3)
+        return False
+
+    menu_x = int(mon["left"] + (il + menu_target["x"] + 50) * sx_r)
+    menu_y = int(mon["top"] + (it + menu_target["y"] + 10) * sy_r)
+    _print(f"[share] 點擊「分享好友資訊」at ({menu_x}, {menu_y})")
+    pyautogui.click(menu_x, menu_y)
+    time.sleep(1.0)
+
+    # === Step 3-6: 「選擇傳送對象」面板是獨立的 LINE 子視窗（line9 黃色框）===
+    # 用 win32gui 直接找到面板視窗的螢幕座標，不用算
+    time.sleep(0.5)
+    panel_hwnd = None
+    panel_rect = None
+    all_line = []
+    def _find_share_panel(hwnd, _):
+        if win32gui.IsWindowVisible(hwnd):
+            title = win32gui.GetWindowText(hwnd)
+            if "LINE" in title:
+                rect = win32gui.GetWindowRect(hwnd)
+                w = rect[2] - rect[0]
+                h = rect[3] - rect[1]
+                all_line.append((hwnd, rect, w, h))
+    win32gui.EnumWindows(_find_share_panel, None)
+
+    # 面板是較小的那個 LINE 視窗（約 350x550）
+    for hwnd, rect, w, h in all_line:
+        if 300 < w < 400 and 500 < h < 600:
+            panel_hwnd = hwnd
+            panel_rect = rect
+            break
+
+    if panel_rect is None:
+        _print(f"[share] 找不到「選擇傳送對象」面板視窗")
+        return False
+
+    panel_left = panel_rect[0]
+    panel_top = panel_rect[1]
+    panel_w = panel_rect[2] - panel_rect[0]
+    panel_h = panel_rect[3] - panel_rect[1]
+    panel_cx = (panel_left + panel_rect[2]) // 2
+
+    _print(f"[share] 外側面板: ({panel_left},{panel_top}) 寬={panel_w} 高={panel_h}")
+
+    # Step 4: 點搜尋欄（line9 黑色框 / line10 黑色框）
+    search_x = int(panel_left + panel_w * SHARE_DIALOG_TEMPLATE["search_bar_x_ratio"])
+    search_y = int(panel_top + panel_h * SHARE_DIALOG_TEMPLATE["search_bar_y_ratio"])
+    _print(f"[share] 點搜尋欄 at ({search_x}, {search_y})")
+    pyautogui.click(search_x, search_y)
+    time.sleep(0.3)
+    pyperclip.copy(share_to)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(1.5)
+
+    # Step 5: 點圓圈（line11 綠色框）
+    circle_x = int(panel_left + panel_w * SHARE_DIALOG_TEMPLATE["circle_x_ratio"])
+    circle_y = int(panel_top + panel_h * SHARE_DIALOG_TEMPLATE["circle_y_ratio"])
+    _print(f"[share] 點擊圓圈 at ({circle_x}, {circle_y})")
+    pyautogui.click(circle_x, circle_y)
+    time.sleep(0.5)
+
+    # Step 6: 點「分享」按鈕（line10 黃色框）
+    share_btn_x = int(panel_left + panel_w * SHARE_DIALOG_TEMPLATE["share_btn_x_ratio"])
+    share_btn_y = int(panel_top + panel_h * SHARE_DIALOG_TEMPLATE["share_btn_y_ratio"])
+    _print(f"[share] 點擊「分享」at ({share_btn_x}, {share_btn_y})")
+    pyautogui.click(share_btn_x, share_btn_y)
+    time.sleep(1.0)
+
+    _print(f"[share] 已分享 {share_who} 的好友資訊給 {share_to}")
+    return True
 
 
 # ============================================================
