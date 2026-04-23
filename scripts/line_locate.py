@@ -113,6 +113,18 @@ CHAT_PAGE_TEMPLATE = {
     "list_start_y_ratio": 0.08,
     # 每個對話的行高比例
     "item_height_ratio": 0.075,
+    # 未讀徽章 x 位置（line16.png，綠色圓形徽章在項目右側）
+    "unread_badge_x_ratio": 0.92,
+}
+
+# 未讀訊息偵測（line16.png）
+UNREAD_BADGE = {
+    # sidebar 聊天按鈕的紅色通知徽章（總未讀數）
+    # 紅色徽章 RGB ≈ (230+, <80, <80)，在 sidebar 聊天按鈕右上角
+    "sidebar_badge_color": {"r_min": 200, "g_max": 80, "b_max": 80},
+    # 聊天列表每個對話的綠色未讀徽章
+    # 綠色徽章 RGB ≈ LINE 品牌綠，在項目右側
+    "chat_badge_color": {"r_max": 100, "g_min": 150, "b_max": 100},
 }
 
 # 加好友頁（line3.png）— left_panel 內的固定元素相對位置
@@ -991,6 +1003,34 @@ def find_conversation(regions, name):
             return conv
 
     return None
+
+
+def screenshot_line_window(monitor=2):
+    """
+    截取 LINE 視窗的完整截圖（只裁 LINE 視窗，跟 line16.png 一樣的方式）。
+    用 win32gui 找視窗位置，裁切出 LINE 視窗部分。
+
+    回傳：
+        PIL Image（LINE 視窗截圖，約 742x1032）
+    """
+    full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+    return line_crop
+
+
+def detect_unread(monitor=2):
+    """
+    截取 LINE 視窗截圖（line16.png 方式），存檔供讀取判斷。
+    用 screenshot_line_window 裁切完整 LINE 視窗（742x1032），
+    截圖清晰，可直接看到所有未讀徽章數字。
+
+    回傳：
+        截圖檔案路徑
+    """
+    line_img = screenshot_line_window(monitor)
+    save_path = os.path.join(TMPDIR, "line_unread_check.png")
+    line_img.save(save_path, quality=95)
+    _print(f"[line_locate] LINE 視窗截圖已存: {save_path} ({line_img.size[0]}x{line_img.size[1]})")
+    return save_path
 
 
 def find_friend(regions, name):
