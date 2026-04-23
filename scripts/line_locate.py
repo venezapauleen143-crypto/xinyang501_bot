@@ -1170,7 +1170,28 @@ def share_contact_card(regions, share_who, share_to, monitor=2):
     pyautogui.click(circle_x, circle_y)
     time.sleep(0.5)
 
-    # Step 6: 點「分享」按鈕（line10 黃色框）
+    # Step 6: 點「分享」按鈕（line12 紅色框）
+    # 點完圓圈後面板會變高（多了選中好友的黑色框），重新抓面板尺寸
+    all_line2 = []
+    def _find_panel2(hwnd, _):
+        if win32gui.IsWindowVisible(hwnd):
+            title = win32gui.GetWindowText(hwnd)
+            if "LINE" in title:
+                rect = win32gui.GetWindowRect(hwnd)
+                w = rect[2] - rect[0]
+                h = rect[3] - rect[1]
+                all_line2.append((hwnd, rect, w, h))
+    win32gui.EnumWindows(_find_panel2, None)
+
+    for hwnd, rect, w, h in all_line2:
+        if 300 < w < 400 and 500 < h < 700:
+            panel_left = rect[0]
+            panel_top = rect[1]
+            panel_w = rect[2] - rect[0]
+            panel_h = rect[3] - rect[1]
+            _print(f"[share] 面板更新: 寬={panel_w} 高={panel_h}")
+            break
+
     share_btn_x = int(panel_left + panel_w * SHARE_DIALOG_TEMPLATE["share_btn_x_ratio"])
     share_btn_y = int(panel_top + panel_h * SHARE_DIALOG_TEMPLATE["share_btn_y_ratio"])
     _print(f"[share] 點擊「分享」at ({share_btn_x}, {share_btn_y})")
