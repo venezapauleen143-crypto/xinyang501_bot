@@ -243,7 +243,10 @@ def build_system_prompt(sop):
         f"6. 數字可能黏在一起（如09200936523698），自己拆：前4碼=生日0920，後10碼=電話0936523698\n"
         f"7. 解析有疑慮就自己判斷，判斷錯了也比問客戶好，絕對不能暴露你在猜\n\n"
         f"回覆格式：只回覆要發送的文字，不要加任何格式、解釋、或標記。\n"
-        f"如果需要分多條訊息發送，用 ||| 分隔，例如：第一條訊息|||第二條訊息|||第三條訊息\n"
+        f"如果需要分多條訊息發送，用 ||| 分隔，例如：第一條訊息|||第二條訊息|||第三條訊息\n\n"
+        f"====== 對話結束規則 ======\n"
+        f"SOP 走到 done 步驟後（已給編號、已說祝您課程體驗愉快），如果客戶只是道謝或道別（謝謝、好的、掰掰等），只回覆 [END] 兩個字，不要回其他任何內容。\n"
+        f"[END] 代表這個對話已經完成，不需要再回覆。\n"
     )
     return prompt
 
@@ -346,6 +349,76 @@ def generate_reply(system_prompt, conversation_history, new_messages_text):
         messages=[{"role": "user", "content": user_content}]
     )
     return r.content[0].text.strip()
+
+
+# ============================================================
+# AI 回覆過濾（移除分析內容，防止暴露 AI 身份）
+# ============================================================
+def filter_reply(reply):
+    """過濾 AI 回覆中的分析內容，只保留客服話術"""
+    import re
+
+    lines = reply.split("\n")
+    filtered_lines = []
+    for line in lines:
+        line_stripped = line.strip()
+        # 跳過包含分析關鍵字的整行
+        if any(kw in line_stripped for kw in [
+            "客戶說", "尚未確認", "需要等", "讓我解析", "讓我判斷",
+            "看起来", "看起來", "不完整", "資料：", "资料：",
+            "姓名=", "生日=", "電話=", "編號=", "电话=",
+            "姓名＝", "生日＝", "電話＝", "編號＝",
+            "解析一下", "解析：", "判斷：", "分析：",
+            "缺少", "不完整", "有問題", "不對",
+            "-[", "- [",  # AI 列點分析格式
+        ]):
+            continue
+        filtered_lines.append(line)
+
+    result = "\n".join(filtered_lines).strip()
+
+    # 如果過濾完是空的，不回覆
+    if not result or len(result) < 2:
+        return ""
+
+    return result
+
+
+# ============================================================
+# 發送圖片（複製到剪貼簿 → 貼上 → Enter）
+# ============================================================
+def send_image(image_path, regions):
+    """發送圖片到 LINE 對話（剪貼簿方式）"""
+    import win32clipboard
+    from PIL import Image
+
+    abs_path = os.path.abspath(image_path)
+    if not os.path.exists(abs_path):
+        print(f"[Image] 圖片不存在: {abs_path}", flush=True)
+        return False
+
+    # 讀圖片轉 BMP 放到剪貼簿
+    img = Image.open(abs_path)
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, "BMP")
+    data = buf.getvalue()[14:]  # 去掉 BMP header
+
+    win32clipboard.OpenClipboard()
+    win32clipboard.EmptyClipboard()
+    win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+    win32clipboard.CloseClipboard()
+
+    # 點輸入框 → 貼上 → 發送
+    ix, iy = regions["input_box"]["center"]
+    pyautogui.click(ix, iy)
+    time.sleep(0.3)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(1.0)
+    pyautogui.press("enter")
+    time.sleep(1.5)
+
+    print(f"[Image] 已發送圖片: {os.path.basename(abs_path)}", flush=True)
+    return True
 
 
 # ============================================================
@@ -455,7 +528,7 @@ def is_before_stop_time(stop_time):
     return now_min < stop_min
 
 
-def monitor_and_reply(regions, stop_time, system_prompt, conversation_history, monitor=2):
+def monitor_and_reply(regions, stop_time, system_prompt, conversation_history, contact_name="", monitor=2):
     """監控對話區，偵測新訊息後自動回覆。
     conversation_history 是完整的對話記錄（包含歡迎詞），會在這裡持續累加。
     """
@@ -532,6 +605,18 @@ def monitor_and_reply(regions, stop_time, system_prompt, conversation_history, m
             reply = generate_reply(system_prompt, conversation_history, new_them_msgs)
 
             if reply and len(reply) > 1:
+                # 偵測 [END] 標記 → SOP 結束，停止監控
+                if "[END]" in reply:
+                    print(f"[{t}] SOP 結束（AI 回覆 [END]），停止監控", flush=True)
+                    break
+
+                # 過濾 AI 回覆中的分析內容
+                reply = filter_reply(reply)
+                if not reply:
+                    print(f"[{t}] 過濾後為空，跳過", flush=True)
+                    last_hash = latest_hash
+                    continue
+
                 print(f"[{t}] AI 回覆：{reply[:100]}", flush=True)
 
                 # 發送回覆
@@ -542,6 +627,12 @@ def monitor_and_reply(regions, stop_time, system_prompt, conversation_history, m
                     part = part.strip()
                     if part and not (part.startswith("{") and part.endswith("}")):
                         conversation_history.append({"text": part, "sender": "me", "y": 0})
+
+                # 偵測到回覆包含「編號」→ 自動分享溫妮好友資訊給客戶
+                if "編號" in reply and contact_name:
+                    print(f"[{t}] 偵測到編號，分享溫妮好友資訊給 {contact_name}", flush=True)
+                    from line_locate import share_contact_card
+                    share_contact_card(regions, "溫妮", contact_name, monitor)
 
                 cooldown_until = time.time() + COOLDOWN_SECONDS
                 print(f"[{t}] 冷卻 {COOLDOWN_SECONDS} 秒", flush=True)
@@ -653,6 +744,12 @@ def main(contact_name, stop_time, sop_path=DEFAULT_SOP, monitor=2):
 
         if welcome_step:
             for reply in welcome_step.get("replies", []):
+                if reply == "{send_image}":
+                    # 發送 SOP 設定的課程圖片
+                    img_path = sop.get("course_info", {}).get("image", "")
+                    if img_path:
+                        send_image(img_path, regions)
+                    continue
                 if reply.startswith("{") and reply.endswith("}"):
                     print(f"[Init] 跳過佔位符: {reply}", flush=True)
                     continue
@@ -673,7 +770,7 @@ def main(contact_name, stop_time, sop_path=DEFAULT_SOP, monitor=2):
 
     # 開始監控（傳入 conversation_history）
     print(f"\n[Monitor] 開始自動回覆...", flush=True)
-    monitor_and_reply(regions, stop_time, system_prompt, conversation_history, monitor)
+    monitor_and_reply(regions, stop_time, system_prompt, conversation_history, contact_name, monitor)
 
     print("\n完成", flush=True)
     return True

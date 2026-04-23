@@ -1039,14 +1039,14 @@ SHARE_PANEL_POSITION = {
     "top_offset": 298,               # 面板 top 距 LINE top 的距離
 }
 
-# 面板內部元素比例（line10 + line11 交叉驗證）
-SHARE_DIALOG_TEMPLATE = {
-    "search_bar_x_ratio": 0.500,     # 搜尋欄 x（面板中間）
-    "search_bar_y_ratio": 0.195,     # 搜尋欄 y（line10 黑色框，往下修正）
-    "circle_x_ratio": 0.932,         # 圓圈 x（line11 綠色框實測）
-    "circle_y_ratio": 0.335,         # 圓圈 y（line11 綠色框實測）
-    "share_btn_x_ratio": 0.301,      # 分享按鈕 x（line10）
-    "share_btn_y_ratio": 0.955,      # 分享按鈕 y（line10）
+# 面板內部元素偏移量（相對面板左上角的固定像素偏移，從參考圖實測，不用比例）
+SHARE_DIALOG_OFFSETS = {
+    "search_bar_x": 176,             # 搜尋欄 x（line10 黑色框）
+    "search_bar_y": 108,             # 搜尋欄 y（line10 黑色框）
+    "circle_x": 326,                 # 圓圈 x（line14 紅點）
+    "circle_y": 188,                 # 圓圈 y（line14 紅點）
+    "share_btn_x": 120,              # 分享按鈕 x（line12 紅色框）
+    "share_btn_y": 563,              # 分享按鈕 y（line12 紅色框）
 }
 
 
@@ -1153,9 +1153,9 @@ def share_contact_card(regions, share_who, share_to, monitor=2):
 
     _print(f"[share] 外側面板: ({panel_left},{panel_top}) 寬={panel_w} 高={panel_h}")
 
-    # Step 4: 點搜尋欄（line9 黑色框 / line10 黑色框）
-    search_x = int(panel_left + panel_w * SHARE_DIALOG_TEMPLATE["search_bar_x_ratio"])
-    search_y = int(panel_top + panel_h * SHARE_DIALOG_TEMPLATE["search_bar_y_ratio"])
+    # Step 4: 點搜尋欄（line10 黑色框）
+    search_x = panel_left + SHARE_DIALOG_OFFSETS["search_bar_x"]
+    search_y = panel_top + SHARE_DIALOG_OFFSETS["search_bar_y"]
     _print(f"[share] 點搜尋欄 at ({search_x}, {search_y})")
     pyautogui.click(search_x, search_y)
     time.sleep(0.3)
@@ -1163,37 +1163,16 @@ def share_contact_card(regions, share_who, share_to, monitor=2):
     pyautogui.hotkey("ctrl", "v")
     time.sleep(1.5)
 
-    # Step 5: 點圓圈（line11 綠色框）
-    circle_x = int(panel_left + panel_w * SHARE_DIALOG_TEMPLATE["circle_x_ratio"])
-    circle_y = int(panel_top + panel_h * SHARE_DIALOG_TEMPLATE["circle_y_ratio"])
+    # Step 5: 點圓圈（line14 紅點）
+    circle_x = panel_left + SHARE_DIALOG_OFFSETS["circle_x"]
+    circle_y = panel_top + SHARE_DIALOG_OFFSETS["circle_y"]
     _print(f"[share] 點擊圓圈 at ({circle_x}, {circle_y})")
     pyautogui.click(circle_x, circle_y)
     time.sleep(0.5)
 
     # Step 6: 點「分享」按鈕（line12 紅色框）
-    # 點完圓圈後面板會變高（多了選中好友的黑色框），重新抓面板尺寸
-    all_line2 = []
-    def _find_panel2(hwnd, _):
-        if win32gui.IsWindowVisible(hwnd):
-            title = win32gui.GetWindowText(hwnd)
-            if "LINE" in title:
-                rect = win32gui.GetWindowRect(hwnd)
-                w = rect[2] - rect[0]
-                h = rect[3] - rect[1]
-                all_line2.append((hwnd, rect, w, h))
-    win32gui.EnumWindows(_find_panel2, None)
-
-    for hwnd, rect, w, h in all_line2:
-        if 300 < w < 400 and 500 < h < 700:
-            panel_left = rect[0]
-            panel_top = rect[1]
-            panel_w = rect[2] - rect[0]
-            panel_h = rect[3] - rect[1]
-            _print(f"[share] 面板更新: 寬={panel_w} 高={panel_h}")
-            break
-
-    share_btn_x = int(panel_left + panel_w * SHARE_DIALOG_TEMPLATE["share_btn_x_ratio"])
-    share_btn_y = int(panel_top + panel_h * SHARE_DIALOG_TEMPLATE["share_btn_y_ratio"])
+    share_btn_x = panel_left + SHARE_DIALOG_OFFSETS["share_btn_x"]
+    share_btn_y = panel_top + SHARE_DIALOG_OFFSETS["share_btn_y"]
     _print(f"[share] 點擊「分享」at ({share_btn_x}, {share_btn_y})")
     pyautogui.click(share_btn_x, share_btn_y)
     time.sleep(1.0)
