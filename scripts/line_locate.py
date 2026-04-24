@@ -1017,6 +1017,61 @@ def screenshot_line_window(monitor=2):
     return line_crop
 
 
+def find_unread_badges(monitor=2):
+    """
+    用 LINE16 的固定位置逐行檢查像素顏色，找出有綠色未讀徽章的對話（line16.png 方式）。
+    screenshot_line_window 截圖 → 在徽章固定 x 位置逐行檢查綠色 → 回傳有未讀的座標。
+
+    LINE16 實測數據：
+    - 徽章 x 位置：視窗寬度 * 0.455
+    - 第一個徽章 y：視窗高度 * 0.151
+    - 每個項目間隔：視窗高度 * 0.069
+
+    參數：
+        monitor: 螢幕編號
+
+    回傳：
+        [{"y": int, "center": (screen_x, screen_y)}]
+    """
+    full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+    arr = np.array(line_crop)
+    lh, lw, _ = arr.shape
+    sx_r = mon["width"] / full_img.size[0]
+    sy_r = mon["height"] / full_img.size[1]
+
+    # LINE16 實測的徽章位置
+    badge_x = int(lw * 0.455)           # 徽章 x 位置
+    first_badge_y = int(lh * 0.151)     # 第一個徽章 y
+    item_interval = int(lh * 0.069)     # 每個項目間隔
+    color = UNREAD_BADGE["chat_badge_color"]
+
+    result = []
+    y = first_badge_y
+
+    while y < lh - 50:
+        # 檢查這個位置的像素是不是綠色
+        # 掃描徽章 x 附近幾個像素，增加可靠性
+        green_count = 0
+        for dx in range(-8, 9):
+            for dy in range(-5, 6):
+                sx = min(lw - 1, max(0, badge_x + dx))
+                sy = min(lh - 1, max(0, y + dy))
+                r, g, b = int(arr[sy, sx, 0]), int(arr[sy, sx, 1]), int(arr[sy, sx, 2])
+                if r < color["r_max"] and g > color["g_min"] and b < color["b_max"]:
+                    green_count += 1
+
+        if green_count > 15:
+            # 有綠色徽章，記錄點擊座標（點在項目中間偏左，名字的位置）
+            click_x = int(mon["left"] + (il + int(lw * 0.25)) * sx_r)
+            click_y = int(mon["top"] + (it + y) * sy_r)
+            result.append({"y": y, "center": (click_x, click_y)})
+
+        y += item_interval
+
+    _print(f"[line_locate] 綠色未讀徽章（LINE16 方式）: {len(result)} 個")
+    return result
+
+
 def detect_unread(monitor=2):
     """
     截取 LINE 視窗截圖（line16.png 方式），存檔供讀取判斷。
