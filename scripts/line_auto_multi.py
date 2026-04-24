@@ -359,9 +359,8 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=2):
                 if should_stop():
                     break
 
-                # 回到聊天列表
-                from line_locate import switch_page
-                regions = switch_page(regions, "chat", monitor)
+                # 按 Esc 退出聊天室（不標已讀，對方再回覆會重新出現綠色徽章）
+                pyautogui.press("escape")
                 time.sleep(1)
 
             # 全部處理完，等待新的未讀
