@@ -1145,6 +1145,204 @@ SHARE_DIALOG_OFFSETS = {
 }
 
 
+# 個人資料小卡片 LINE17 偏移量（從 line19 放大圖實測，相對面板左上角）
+# line19 面板尺寸 287x508
+PROFILE_CARD_OFFSETS = {
+    "close_x": 259,                  # X關閉按鈕 x（line19 綠框）
+    "close_y": 22,                   # X關閉按鈕 y（line19 綠框）
+    "name_x": 146,                   # 名字文字 x（line19 紅框，水平置中）
+    "name_y": 322,                   # 名字文字 y（line19 紅框，頭像下方）
+}
+
+# 個人資料編輯畫面 LINE18 偏移量（從 line20 放大圖實測，相對面板左上角）
+# line20 面板尺寸 283x509
+PROFILE_EDIT_OFFSETS = {
+    "name_x": 140,                   # 名字文字 x（line20 紅框，水平置中）
+    "name_y": 325,                   # 名字文字 y（line20 紅框，頭像下方）
+    "save_x": 105,                   # 儲存按鈕 x（line20 黃框，綠色按鈕）
+    "save_y": 474,                   # 儲存按鈕 y（line20 黃框）
+    "cancel_x": 177,                 # 取消按鈕 x（白色按鈕，儲存右邊）
+    "cancel_y": 473,                 # 取消按鈕 y
+}
+
+
+def rename_friend(regions, new_name, monitor=2):
+    """
+    把當前聊天對象的好友名稱改成 new_name（LINE17 → LINE18 流程）。
+
+    LINE17/LINE18 是同一個獨立視窗（288x512, class=Qt663QWindowIcon），內容切換。
+    偏移量從 line19（小卡片放大圖）和 line20（編輯畫面放大圖）實測。
+
+    流程：
+    1. 點擊 chat_title（LINE17 黃框）→ 個人資料小卡片彈出
+    2. win32gui 找到小卡片視窗（Qt663QWindowIcon）
+    3. 點擊名字（line19 紅框偏移）→ 視窗切換為編輯畫面
+    4. win32gui 重新抓視窗座標
+    5. 三次點擊名字（line20 紅框偏移）→ 全選
+    6. 輸入 new_name → 覆蓋原名
+    7. 點擊儲存（line20 黃框偏移）→ 視窗切回小卡片
+    8. 點 X 關閉（line19 綠框偏移）
+
+    參數：
+        regions: locate_line_regions() 的返回值（需要 chat_title）
+        new_name: 要改成的新名稱（通常是編號 = 電話後五碼）
+        monitor: 螢幕編號
+    """
+    import pyautogui
+    import pyperclip
+
+    _print(f"[rename] 開始改名: {new_name}")
+
+    # Step 1: 點擊 chat_title 開啟個人資料小卡片
+    ct = regions.get("chat_title", {})
+    ct_cx, ct_cy = ct.get("center", (0, 0))
+    if ct_cx == 0:
+        _print("[rename] 錯誤: 找不到 chat_title")
+        return False
+
+    _print(f"[rename] Step1: 點擊 chat_title ({ct_cx}, {ct_cy})")
+    pyautogui.click(ct_cx, ct_cy)
+    time.sleep(1.5)
+
+    # Step 2: 用 win32gui 找到個人資料小卡片（LINE17 獨立子視窗）
+    profile_card = _find_line_popup("profile_card")
+    if not profile_card:
+        _print("[rename] 錯誤: 找不到個人資料小卡片視窗")
+        pyautogui.press("escape")
+        return False
+
+    card_hwnd, card_left, card_top, card_right, card_bottom = profile_card
+    _print(f"[rename] Step2: 找到小卡片 hwnd={card_hwnd} ({card_left},{card_top})-({card_right},{card_bottom})")
+
+    # Step 3: 點擊小卡片的名字（LINE17 紅框）→ 開啟編輯畫面
+    name_x = card_left + PROFILE_CARD_OFFSETS["name_x"]
+    name_y = card_top + PROFILE_CARD_OFFSETS["name_y"]
+    _print(f"[rename] Step3: 點擊名字 ({name_x}, {name_y})")
+    pyautogui.click(name_x, name_y)
+    time.sleep(1.5)
+
+    # Step 4: LINE18 是同一個視窗（內容切換），重新抓座標
+    edit_popup = _find_line_popup("profile_edit")
+    if not edit_popup:
+        _print("[rename] 錯誤: 找不到編輯畫面視窗")
+        pyautogui.press("escape")
+        return False
+
+    edit_hwnd, edit_left, edit_top, edit_right, edit_bottom = edit_popup
+    _print(f"[rename] Step4: 編輯畫面 hwnd={edit_hwnd} ({edit_left},{edit_top})-({edit_right},{edit_bottom})")
+
+    # Step 5: 三次點擊名字（LINE18 紅框）→ 全選
+    edit_name_x = edit_left + PROFILE_EDIT_OFFSETS["name_x"]
+    edit_name_y = edit_top + PROFILE_EDIT_OFFSETS["name_y"]
+    _print(f"[rename] Step5: 三次點擊名字 ({edit_name_x}, {edit_name_y})")
+    pyautogui.click(edit_name_x, edit_name_y, clicks=3)
+    time.sleep(0.5)
+
+    # Step 6: 輸入新名稱（用剪貼簿貼上，避免中文輸入問題）
+    _print(f"[rename] Step6: 輸入新名稱 '{new_name}'")
+    pyperclip.copy(new_name)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(0.5)
+
+    # Step 7: 點擊儲存（LINE18 黃框 = 綠色儲存按鈕）
+    save_x = edit_left + PROFILE_EDIT_OFFSETS["save_x"]
+    save_y = edit_top + PROFILE_EDIT_OFFSETS["save_y"]
+    _print(f"[rename] Step7: 點擊儲存 ({save_x}, {save_y})")
+    pyautogui.click(save_x, save_y)
+    time.sleep(1.5)
+
+    # Step 8: 儲存後回到小卡片（同一個視窗切回 LINE17）→ 點 X 關閉（LINE19 綠框）
+    profile_card2 = _find_line_popup("profile_card")
+    if profile_card2:
+        _, card2_left, card2_top, _, _ = profile_card2
+        close_x = card2_left + PROFILE_CARD_OFFSETS["close_x"]
+        close_y = card2_top + PROFILE_CARD_OFFSETS["close_y"]
+        _print(f"[rename] Step8: 點擊 X 關閉 ({close_x}, {close_y})")
+        pyautogui.click(close_x, close_y)
+    else:
+        _print("[rename] 小卡片已關閉，按 Esc")
+        pyautogui.press("escape")
+    time.sleep(0.5)
+
+    _print(f"[rename] 改名完成: {new_name}")
+    return True
+
+
+def _find_line_popup(popup_type="profile_card"):
+    """
+    用 win32gui 找 LINE 的獨立彈窗視窗。
+
+    popup_type:
+        "profile_card" — LINE17 個人資料小卡片（288x512，class=Qt663QWindowIcon）
+        "profile_edit" — LINE18 個人資料編輯畫面（同一個視窗，內容切換）
+        "share_dialog" — LINE9 選擇傳送對象面板
+
+    回傳：(hwnd, left, top, right, bottom) 或 None
+    """
+    import win32gui
+
+    # 找 LINE 主視窗的 hwnd，用來排除
+    line = find_line_window()
+    line_hwnd = line[0] if line else None
+
+    results = []
+
+    def _enum_callback(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd):
+            return
+        if hwnd == line_hwnd:
+            return
+        try:
+            cls = win32gui.GetClassName(hwnd)
+        except Exception:
+            return
+
+        # LINE 彈窗 class：Qt663QWindowIcon 或 EVA_Window
+        if "Qt6" not in cls and "EVA_Window" not in cls:
+            return
+
+        # 排除 Note/Glow/shadow（通知氣泡）
+        if "Note" in cls or "Glow" in cls or "shadow" in cls:
+            return
+
+        rect = win32gui.GetWindowRect(hwnd)
+        left, top, right, bottom = rect
+        w = right - left
+        h = bottom - top
+
+        # 排除太大的（主視窗）和太小的
+        if w > 600 or h > 800:
+            return
+        if w < 50 or h < 50:
+            return
+
+        results.append((hwnd, left, top, right, bottom, w, h))
+
+    win32gui.EnumWindows(_enum_callback, None)
+
+    if not results:
+        return None
+
+    # 根據 popup_type 篩選
+    for hwnd, left, top, right, bottom, w, h in results:
+        if popup_type in ("profile_card", "profile_edit"):
+            # LINE17/LINE18：同一個視窗 288x512（實測），class=Qt663QWindowIcon
+            if 200 < w < 400 and 400 < h < 600:
+                return (hwnd, left, top, right, bottom)
+        elif popup_type == "share_dialog":
+            # LINE9 分享面板：寬約 300-400，高約 500-650
+            if 250 < w < 450 and 450 < h < 700:
+                return (hwnd, left, top, right, bottom)
+
+    # fallback: 回傳最小的那個
+    results.sort(key=lambda x: x[5] * x[6])
+    if results:
+        r = results[0]
+        return (r[0], r[1], r[2], r[3], r[4])
+
+    return None
+
+
 def share_contact_card(regions, share_who, share_to, monitor=2):
     """
     分享好友資訊卡給指定的人（line8 → line9 → line10 流程）。

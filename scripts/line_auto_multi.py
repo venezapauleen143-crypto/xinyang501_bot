@@ -262,42 +262,16 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
             if part and not (part.startswith("{") and part.endswith("}")):
                 history.append({"text": part, "sender": "me", "y": 0})
 
-        # 偵測到編號 → 分享溫妮好友資訊 → 轉發報名資訊到友資群
+        # 偵測到編號 → 提取資料 → 改名 → 分享溫妮 → 轉發友資群
         if "編號" in reply:
-            print(f"[Customer] 偵測到編號，分享溫妮好友資訊給 {name}", flush=True)
-            from line_locate import share_contact_card, switch_page, locate_line_regions, CHAT_PAGE_TEMPLATE
-            share_contact_card(regions, "溫妮", name, monitor)
+            from line_locate import share_contact_card, switch_page, locate_line_regions, rename_friend, CHAT_PAGE_TEMPLATE
 
-            # === 轉發報名資訊到友資群 ===
-            print(f"[Customer] 轉發報名資訊到友資群...", flush=True)
-
-            # Step 1: 切到聊天頁（分享溫妮後停在好友頁）
-            regions = locate_line_regions(monitor)
-            if regions["current_page"] != "chat":
-                regions = switch_page(regions, "chat", monitor)
-            print(f"[Customer] Step1: 已切到聊天頁", flush=True)
-
-            # Step 2: 按 Esc 清空旁邊的聊天框
-            pyautogui.press("escape")
-            time.sleep(1)
-            print(f"[Customer] Step2: 已清空聊天框", flush=True)
-
-            # Step 3: 點第一個對話（友資群置頂，永遠在第一個）
-            regions = locate_line_regions(monitor)
-            lp = regions["left_panel"]
-            lp_h = lp["bottom"] - lp["top"]
-            first_item_y = int(lp["top"] + lp_h * CHAT_PAGE_TEMPLATE["list_start_y_ratio"] + lp_h * CHAT_PAGE_TEMPLATE["item_height_ratio"] * 0.5)
-            first_item_x = (lp["left"] + lp["right"]) // 2
-            pyautogui.click(first_item_x, first_item_y)
-            time.sleep(1.5)
-            regions = locate_line_regions(monitor)
-            print(f"[Customer] Step3: 已進入友資群（置頂第一個）", flush=True)
-
-            # Step 4: 發送報名資訊（用 Claude API 從對話歷史提取結構化資料）
+            # === Step A: Claude API 提取報名資料（先提取，拿到電話後五碼當編號）===
             chat_text = "\n".join(
                 f"{'客戶' if m['sender']=='them' else '小編'}: {m['text']}"
                 for m in history[-20:]
             )
+            customer_id = None
             try:
                 extract_r = client.messages.create(
                     model="claude-sonnet-4-6",
@@ -325,18 +299,66 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                     resp_text = _re.sub(r"\s*```$", "", resp_text)
                 data = _json.loads(resp_text)
 
+                # 編號 = 電話後五碼
+                phone = data.get("phone", "")
+                customer_id = phone[-5:] if len(phone) >= 5 else data.get("id", "")
+
                 info = (
                     f"【新報名】\n"
                     f"✏ 姓名：{data.get('name', '')}\n"
                     f"✏ 出生月/日：{data.get('birthday', '')}\n"
-                    f"✏ 聯絡電話：{data.get('phone', '')}\n"
+                    f"✏ 聯絡電話：{phone}\n"
                     f"✏ 想參加的地點：{data.get('area', '')}\n"
-                    f"✏ 編號：{data.get('id', '')}"
+                    f"✏ 編號：{customer_id}"
                 )
             except Exception as e:
                 print(f"[Customer] 資料提取失敗: {e}，使用簡易格式", flush=True)
                 info = f"【新報名】{name}\n{reply}"
+                customer_id = None
 
+            print(f"[Customer] StepA: 提取完成，編號={customer_id}", flush=True)
+
+            # === Step B: 改名（把客戶 LINE 名稱改成編號）===
+            if customer_id:
+                regions = locate_line_regions(monitor)
+                rename_friend(regions, customer_id, monitor)
+                print(f"[Customer] StepB: 已改名為 {customer_id}", flush=True)
+                time.sleep(1)
+
+            # 改名後用編號搜尋，取代原本不穩定的 name
+            search_name = customer_id if customer_id else name
+
+            # === Step C: 分享溫妮好友資訊給客戶 ===
+            print(f"[Customer] StepC: 分享溫妮好友資訊給 {search_name}", flush=True)
+            regions = locate_line_regions(monitor)
+            share_contact_card(regions, "溫妮", search_name, monitor)
+
+            # === 轉發報名資訊到友資群 ===
+            print(f"[Customer] 轉發報名資訊到友資群...", flush=True)
+
+            # Step 1: 切到聊天頁（分享溫妮後停在好友頁）
+            regions = locate_line_regions(monitor)
+            if regions["current_page"] != "chat":
+                regions = switch_page(regions, "chat", monitor)
+            print(f"[Customer] Step1: 已切到聊天頁", flush=True)
+
+            # Step 2: 按 Esc 清空旁邊的聊天框
+            pyautogui.press("escape")
+            time.sleep(1)
+            print(f"[Customer] Step2: 已清空聊天框", flush=True)
+
+            # Step 3: 點第一個對話（友資群置頂，永遠在第一個）
+            regions = locate_line_regions(monitor)
+            lp = regions["left_panel"]
+            lp_h = lp["bottom"] - lp["top"]
+            first_item_y = int(lp["top"] + lp_h * CHAT_PAGE_TEMPLATE["list_start_y_ratio"] + lp_h * CHAT_PAGE_TEMPLATE["item_height_ratio"] * 0.5)
+            first_item_x = (lp["left"] + lp["right"]) // 2
+            pyautogui.click(first_item_x, first_item_y)
+            time.sleep(1.5)
+            regions = locate_line_regions(monitor)
+            print(f"[Customer] Step3: 已進入友資群（置頂第一個）", flush=True)
+
+            # Step 4: 發送報名資訊到友資群
             send_reply(info, regions)
             print(f"[Customer] Step4: 已發送報名資訊到友資群", flush=True)
             time.sleep(1)
@@ -345,9 +367,9 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
             regions = switch_page(regions, "friend", monitor)
             print(f"[Customer] Step5: 已切到好友頁", flush=True)
 
-            # Step 6: 搜尋客戶 → 分享客戶好友資訊給友資群
-            share_contact_card(regions, name, "友資群", monitor)
-            print(f"[Customer] Step6: 已分享 {name} 的好友資訊到友資群", flush=True)
+            # Step 6: 搜尋客戶 → 分享客戶好友資訊給友資群（用編號搜尋）
+            share_contact_card(regions, search_name, "友資群", monitor)
+            print(f"[Customer] Step6: 已分享 {search_name} 的好友資訊到友資群", flush=True)
 
             # Step 7: 回到聊天頁
             regions = locate_line_regions(monitor)
