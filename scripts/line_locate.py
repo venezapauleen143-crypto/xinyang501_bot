@@ -817,9 +817,7 @@ def locate_line_regions(monitor=2):
     # Step 3: 像素偵測當前頁面（0 秒）
     current_page = detect_current_page_by_pixel(line_crop, sidebar_w)
 
-    # Step 4: Vision 定位框架區域（不判斷頁面，只定位區域）
-    vision = find_framework_by_vision(line_crop)
-    # 忽略 Vision 的 current_page 判斷，用像素偵測的結果
+    # Step 4: 所有框架區域改用固定座標（不再呼叫 Vision API）
     _print(f"[line_locate] 當前頁面: {current_page}")
 
     # 座標轉換函數
@@ -846,7 +844,9 @@ def locate_line_regions(monitor=2):
     # search_bar：固定位置（從 line1_new.png 綠框比對，741x1031 圖片）
     search_bar_raw = {"l": 78, "t": 66, "r": 310, "b": 96}
     search_bar = to_screen_region(search_bar_raw)
-    left_panel = to_screen_region(vision["left_panel"])
+    # left_panel：固定位置（從 line1_new.png 藍框比對，741x1031 圖片）
+    left_panel_raw = {"l": 64, "t": 111, "r": 357, "b": 948}
+    left_panel = to_screen_region(left_panel_raw)
     # chat_title：固定位置（從 line1_new.png 黃框實測，741x1031 圖片）
     # 黃框 x=[366-412] y=[63-94] center=(389,78)
     # 永遠點這個固定位置，不管客戶名字是什麼
