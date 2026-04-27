@@ -256,77 +256,89 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
         # 發送回覆
         send_multi_reply(reply, regions)
 
+        # 如果是歡迎詞（包含課程介紹），發送課程圖片
+        if "編織" in reply or "歡迎" in reply:
+            img_path = sop.get("course_info", {}).get("image", "")
+            if img_path:
+                send_image(img_path, regions)
+                print(f"[Customer] 已發送課程圖片: {img_path}", flush=True)
+
         # 回覆加入歷史
         for part in reply.split("|||"):
             part = part.strip()
             if part and not (part.startswith("{") and part.endswith("}")):
                 history.append({"text": part, "sender": "me", "y": 0})
 
-        # 偵測到編號 → 提取資料 → 改名 → 分享溫妮 → 轉發友資群
+        # 偵測到編號 → 從回覆抓編號 → 強制改名 → 提取資料 → 分享溫妮 → 轉發友資群
         if "編號" in reply:
             from line_locate import share_contact_card, switch_page, locate_line_regions, rename_friend, CHAT_PAGE_TEMPLATE
 
-            # === Step A: Claude API 提取報名資料（先提取，拿到電話後五碼當編號）===
+            # === Step A: 從回覆文字直接抓編號（一定抓得到，因為是自己打的）===
+            id_match = re.search(r"編號[：:]\s*\*{0,2}(\d{5})\*{0,2}", reply)
+            customer_id = id_match.group(1) if id_match else None
+            print(f"[Customer] StepA: 從回覆抓到編號={customer_id}", flush=True)
+
+            # === Step B: Claude API 提取報名資料（在改名之前，避免 API 呼叫干擾）===
             chat_text = "\n".join(
                 f"{'客戶' if m['sender']=='them' else '小編'}: {m['text']}"
                 for m in history[-20:]
             )
-            customer_id = None
-            try:
-                extract_r = client.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=200,
-                    messages=[{"role": "user", "content": (
-                        f"從以下對話中提取客戶的報名資料。\n\n"
-                        f"拆分規則：\n"
-                        f"- 中文 = 姓名\n"
-                        f"- 4碼數字 = 生日月日（如0910 = 09/10）\n"
-                        f"- 09開頭10碼 = 手機號碼\n"
-                        f"- 數字可能黏在一起，自己拆分\n\n"
-                        f"範例1：王小明09220912345678 → name:王小明, birthday:09/22, phone:0912345678\n"
-                        f"範例2：陳美玲 0520 0987654321 → name:陳美玲, birthday:05/20, phone:0987654321\n"
-                        f"範例3：李大華08150933456789 → name:李大華, birthday:08/15, phone:0933456789\n\n"
-                        f"回傳純 JSON，不要 markdown：\n"
-                        f'{{\"name\": \"姓名\", \"birthday\": \"生日月日\", \"phone\": \"電話\", \"area\": \"地區\", \"id\": \"編號\"}}\n\n'
-                        f"對話：\n{chat_text}"
-                    )}]
-                )
-                import json as _json
-                resp_text = extract_r.content[0].text.strip()
-                if resp_text.startswith("```"):
-                    import re as _re
-                    resp_text = _re.sub(r"^```(?:json)?\s*", "", resp_text)
-                    resp_text = _re.sub(r"\s*```$", "", resp_text)
-                data = _json.loads(resp_text)
+            info = None
+            for attempt in range(3):
+                try:
+                    extract_r = client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=200,
+                        messages=[{"role": "user", "content": (
+                            f"從以下對話中提取客戶的報名資料。\n\n"
+                            f"拆分規則：\n"
+                            f"- 中文 = 姓名\n"
+                            f"- 4碼數字 = 生日月日（如0910 = 09/10）\n"
+                            f"- 09開頭10碼 = 手機號碼\n"
+                            f"- 數字可能黏在一起，自己拆分\n\n"
+                            f"範例1：王小明09220912345678 → name:王小明, birthday:09/22, phone:0912345678\n"
+                            f"範例2：陳美玲 0520 0987654321 → name:陳美玲, birthday:05/20, phone:0987654321\n"
+                            f"範例3：李大華08150933456789 → name:李大華, birthday:08/15, phone:0933456789\n\n"
+                            f"回傳純 JSON，不要 markdown：\n"
+                            f'{{\"name\": \"姓名\", \"birthday\": \"生日月日\", \"phone\": \"電話\", \"area\": \"地區\", \"id\": \"編號\"}}\n\n'
+                            f"對話：\n{chat_text}"
+                        )}]
+                    )
+                    import json as _json
+                    resp_text = extract_r.content[0].text.strip()
+                    if resp_text.startswith("```"):
+                        import re as _re
+                        resp_text = _re.sub(r"^```(?:json)?\s*", "", resp_text)
+                        resp_text = _re.sub(r"\s*```$", "", resp_text)
+                    data = _json.loads(resp_text)
 
-                # 編號 = 電話後五碼
-                phone = data.get("phone", "")
-                customer_id = phone[-5:] if len(phone) >= 5 else data.get("id", "")
+                    info = (
+                        f"【新報名】\n"
+                        f"✏ 姓名：{data.get('name', '')}\n"
+                        f"✏ 出生月/日：{data.get('birthday', '')}\n"
+                        f"✏ 聯絡電話：{data.get('phone', '')}\n"
+                        f"✏ 想參加的地點：{data.get('area', '')}\n"
+                        f"✏ 編號：{customer_id}"
+                    )
+                    print(f"[Customer] StepB: 資料提取成功（第{attempt+1}次）", flush=True)
+                    break
+                except Exception as e:
+                    print(f"[Customer] StepB: 資料提取失敗（第{attempt+1}次）: {e}", flush=True)
+                    if attempt < 2:
+                        time.sleep(2)
 
-                info = (
-                    f"【新報名】\n"
-                    f"✏ 姓名：{data.get('name', '')}\n"
-                    f"✏ 出生月/日：{data.get('birthday', '')}\n"
-                    f"✏ 聯絡電話：{phone}\n"
-                    f"✏ 想參加的地點：{data.get('area', '')}\n"
-                    f"✏ 編號：{customer_id}"
-                )
-            except Exception as e:
-                print(f"[Customer] 資料提取失敗: {e}，使用簡易格式", flush=True)
-                info = f"【新報名】{name}\n{reply}"
-                customer_id = None
+            if not info:
+                info = f"【新報名】{name}\n編號：{customer_id}"
+                print(f"[Customer] StepB: 3次都失敗，使用簡易格式", flush=True)
 
-            print(f"[Customer] StepA: 提取完成，編號={customer_id}", flush=True)
+            # === Step C: 強制改名（把客戶 LINE 名稱改成編號）===
+            regions = locate_line_regions(monitor)
+            rename_friend(regions, customer_id, monitor)
+            print(f"[Customer] StepC: 已改名為 {customer_id}", flush=True)
+            time.sleep(1)
 
-            # === Step B: 改名（把客戶 LINE 名稱改成編號）===
-            if customer_id:
-                regions = locate_line_regions(monitor)
-                rename_friend(regions, customer_id, monitor)
-                print(f"[Customer] StepB: 已改名為 {customer_id}", flush=True)
-                time.sleep(1)
-
-            # 改名後用編號搜尋，取代原本不穩定的 name
-            search_name = customer_id if customer_id else name
+            # 改名後用編號搜尋
+            search_name = customer_id
 
             # === Step C: 分享溫妮好友資訊給客戶 ===
             print(f"[Customer] StepC: 分享溫妮好友資訊給 {search_name}", flush=True)

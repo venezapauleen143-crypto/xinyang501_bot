@@ -80,6 +80,13 @@ TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
 # 所有數值都是相對於 left_panel 寬度/高度的比例
 # ============================================================
 
+# chat_title 固定點擊位置（從 line1.png 黃框實測，相對 LINE 視窗）
+# 不管名字多長，點擊位置固定不變，不依賴 Vision API
+CHAT_TITLE_CLICK = {
+    "x_ratio": 0.5417,               # line1 黃框 center x（相對 LINE 視窗寬度）
+    "y_ratio": 0.0567,               # line1 黃框 center y（相對 LINE 視窗高度）
+}
+
 # 好友頁（line1.png + line8.png）— left_panel 內的固定元素相對位置
 FRIEND_PAGE_TEMPLATE = {
     # 搜尋欄（相對 left_panel）
@@ -405,7 +412,7 @@ def find_framework_by_vision(line_crop):
         "=== MAIN UI REGIONS (bounding boxes l,t,r,b) ===\n"
         "1. search_bar: Search input field in the left panel area. Only the text input.\n"
         "2. left_panel: Panel between the narrow icon sidebar and chat area.\n"
-        "3. chat_title: Name text at top of chat area (right side). Just the name.\n"
+        "3. chat_title: Only the friend/group NAME text at top of chat area (right side). Do NOT include member count, icons or buttons. Just the name text itself.\n"
         "4. chat_area: Message area with conversation bubbles.\n"
         "5. input_box: Text input field at bottom right. Only the text area.\n\n"
         "Return RAW JSON only:\n"
@@ -416,26 +423,34 @@ def find_framework_by_vision(line_crop):
         '"input_box":{"l":0,"t":0,"r":0,"b":0}}'
     )
 
-    r = client.messages.create(
-        model="claude-sonnet-4-6", max_tokens=800,
-        messages=[{"role": "user", "content": [
-            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
-            {"type": "text", "text": prompt},
-        ]}],
-    )
-    resp = r.content[0].text.strip()
-    if resp.startswith("```"):
-        resp = re.sub(r"^```(?:json)?\s*", "", resp)
-        resp = re.sub(r"\s*```$", "", resp)
-    data = json.loads(resp)
+    for attempt in range(3):
+        try:
+            r = client.messages.create(
+                model="claude-sonnet-4-6", max_tokens=800,
+                messages=[{"role": "user", "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
+                    {"type": "text", "text": prompt},
+                ]}],
+            )
+            resp = r.content[0].text.strip()
+            if resp.startswith("```"):
+                resp = re.sub(r"^```(?:json)?\s*", "", resp)
+                resp = re.sub(r"\s*```$", "", resp)
+            data = json.loads(resp)
 
-    # 確保所有座標值都是 int（Vision 有時回傳字串）
-    for key in data:
-        if isinstance(data[key], dict):
-            for k, v in data[key].items():
-                if isinstance(v, str) and v.isdigit():
-                    data[key][k] = int(v)
-    return data
+            # 確保所有座標值都是 int（Vision 有時回傳字串）
+            for key in data:
+                if isinstance(data[key], dict):
+                    for k, v in data[key].items():
+                        if isinstance(v, str) and v.isdigit():
+                            data[key][k] = int(v)
+            return data
+        except (json.JSONDecodeError, Exception) as e:
+            _print(f"[line_locate] Vision API 回傳異常（第{attempt+1}次）: {e}")
+            if attempt < 2:
+                time.sleep(2)
+
+    raise RuntimeError("Vision API 連續 3 次回傳不合法 JSON")
 
 
 # ============================================================
@@ -830,7 +845,11 @@ def locate_line_regions(monitor=2):
     sidebar = to_screen_region(sidebar_raw)
     search_bar = to_screen_region(vision["search_bar"])
     left_panel = to_screen_region(vision["left_panel"])
-    chat_title = to_screen_region(vision["chat_title"])
+    # chat_title：固定位置（從 line1_new.png 黃框實測，741x1031 圖片）
+    # 黃框 x=[366-412] y=[63-94] center=(389,78)
+    # 永遠點這個固定位置，不管客戶名字是什麼
+    chat_title_raw = {"l": 366, "t": 63, "r": 412, "b": 94}
+    chat_title = to_screen_region(chat_title_raw)
 
     # chat_area 和 input_box：用固定比例算（不用 Vision、不用 separator_x）
     # sidebar(62) + left_panel(185) = 247px, 247/742 ≈ 0.333
@@ -1193,7 +1212,7 @@ def rename_friend(regions, new_name, monitor=2):
 
     _print(f"[rename] 開始改名: {new_name}")
 
-    # Step 1: 點擊 chat_title 開啟個人資料小卡片
+    # Step 1: 點擊 chat_title 開啟個人資料小卡片（用定位腳本的 regions）
     ct = regions.get("chat_title", {})
     ct_cx, ct_cy = ct.get("center", (0, 0))
     if ct_cx == 0:
