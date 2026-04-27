@@ -843,7 +843,9 @@ def locate_line_regions(monitor=2):
     # chat_area、input_box 用像素比例（不靠 Vision，避免定位錯誤）
     sidebar_raw = {"l": 0, "t": 0, "r": sidebar_w, "b": lh}
     sidebar = to_screen_region(sidebar_raw)
-    search_bar = to_screen_region(vision["search_bar"])
+    # search_bar：固定位置（從 line1_new.png 綠框比對，741x1031 圖片）
+    search_bar_raw = {"l": 78, "t": 66, "r": 310, "b": 96}
+    search_bar = to_screen_region(search_bar_raw)
     left_panel = to_screen_region(vision["left_panel"])
     # chat_title：固定位置（從 line1_new.png 黃框實測，741x1031 圖片）
     # 黃框 x=[366-412] y=[63-94] center=(389,78)
