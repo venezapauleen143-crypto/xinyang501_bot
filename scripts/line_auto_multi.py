@@ -52,6 +52,49 @@ load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
 client = anthropic.Anthropic()
 TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
 DEFAULT_SOP = "C:/Users/blue_/claude-telegram-bot/scripts/line_sop/織夢小棧.json"
+EXCEL_PATH = r"C:\Users\blue_\Desktop\客戶資料.xlsx"
+
+# ============================================================
+# Excel 讀寫（客戶資料）
+# ============================================================
+import openpyxl
+
+def write_customer_to_excel(name, birthday, phone, area, line_name):
+    """寫入客戶資料到 Excel（編號先空），回傳行號"""
+    wb = openpyxl.load_workbook(EXCEL_PATH)
+    ws = wb.active
+    row_num = ws.max_row + 1
+    ws.cell(row=row_num, column=1, value="")           # 編號（先空）
+    ws.cell(row=row_num, column=2, value=name)          # 姓名
+    ws.cell(row=row_num, column=3, value=birthday)      # 出生月日
+    ws.cell(row=row_num, column=4, value=phone)         # 電話
+    ws.cell(row=row_num, column=5, value=area)          # 地區
+    ws.cell(row=row_num, column=6, value=line_name)     # LINE名稱
+    ws.cell(row=row_num, column=7, value=datetime.now().strftime("%Y-%m-%d"))  # 報名日期
+    wb.save(EXCEL_PATH)
+    return row_num
+
+def update_customer_id(row_num, customer_id):
+    """補上編號到 Excel"""
+    wb = openpyxl.load_workbook(EXCEL_PATH)
+    ws = wb.active
+    ws.cell(row=row_num, column=1, value=customer_id)
+    wb.save(EXCEL_PATH)
+
+def read_customer_from_excel(customer_id):
+    """用編號讀取客戶資料"""
+    wb = openpyxl.load_workbook(EXCEL_PATH)
+    ws = wb.active
+    for row in range(ws.max_row, 1, -1):
+        if str(ws.cell(row=row, column=1).value) == str(customer_id):
+            return {
+                "name": ws.cell(row=row, column=2).value,
+                "birthday": ws.cell(row=row, column=3).value,
+                "phone": ws.cell(row=row, column=4).value,
+                "area": ws.cell(row=row, column=5).value,
+                "line_name": ws.cell(row=row, column=6).value,
+            }
+    return None
 
 # ============================================================
 # GPU 記憶體清理
@@ -260,6 +303,8 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
         if "編織" in reply or "歡迎" in reply:
             img_path = sop.get("course_info", {}).get("image", "")
             if img_path:
+                if not os.path.isabs(img_path):
+                    img_path = str(SCRIPT_DIR.parent / img_path)
                 send_image(img_path, regions)
                 print(f"[Customer] 已發送課程圖片: {img_path}", flush=True)
 
@@ -269,125 +314,146 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
             if part and not (part.startswith("{") and part.endswith("}")):
                 history.append({"text": part, "sender": "me", "y": 0})
 
-        # 偵測到編號 → 從回覆抓編號 → 強制改名 → 提取資料 → 分享溫妮 → 轉發友資群
+        # 偵測到編號 → 提取資料存Excel → 改名 → 分享溫妮 → 讀Excel發友資群
         if "編號" in reply:
             from line_locate import share_contact_card, switch_page, locate_line_regions, rename_friend, CHAT_PAGE_TEMPLATE
 
-            # === Step A: 從回覆文字直接抓編號（一定抓得到，因為是自己打的）===
-            id_match = re.search(r"編號[：:]\s*\*{0,2}(\d{5})\*{0,2}", reply)
-            customer_id = id_match.group(1) if id_match else None
-            print(f"[Customer] StepA: 從回覆抓到編號={customer_id}", flush=True)
-
-            # === Step B: Claude API 提取報名資料（在改名之前，避免 API 呼叫干擾）===
-            chat_text = "\n".join(
-                f"{'客戶' if m['sender']=='them' else '小編'}: {m['text']}"
-                for m in history[-20:]
-            )
-            info = None
+            # === Step 2: Claude API 結構化輸出提取報名資料 ===
+            # 跟 generate_reply 一樣：送 history + new_them + SOP context
+            history_lines = []
+            for msg in history[-20:]:
+                label = "[客戶]" if msg["sender"] == "them" else "[小編]"
+                history_lines.append(f"{label} {msg['text']}")
+            history_text = "\n".join(history_lines)
+            new_text = "\n".join(f"• {m}" for m in new_them)
+            print(f"[Customer] Step2: 新訊息數={len(new_them)}", flush=True)
+            extracted = None
             for attempt in range(3):
                 try:
                     extract_r = client.messages.create(
                         model="claude-sonnet-4-6",
                         max_tokens=200,
                         messages=[{"role": "user", "content": (
-                            f"從以下對話中提取客戶的報名資料。\n\n"
+                            f"以下是對話紀錄：\n\n{history_text}\n\n"
+                            f"客戶剛發了新訊息：\n{new_text}\n\n"
+                            f"從客戶的訊息中提取報名資料。\n\n"
                             f"拆分規則：\n"
                             f"- 中文 = 姓名\n"
-                            f"- 4碼數字 = 生日月日（如0910 = 09/10）\n"
+                            f"- 4碼數字 = 生日月日（格式 MM/DD，如0910 → 09/10）\n"
                             f"- 09開頭10碼 = 手機號碼\n"
-                            f"- 數字可能黏在一起，自己拆分\n\n"
-                            f"範例1：王小明09220912345678 → name:王小明, birthday:09/22, phone:0912345678\n"
-                            f"範例2：陳美玲 0520 0987654321 → name:陳美玲, birthday:05/20, phone:0987654321\n"
-                            f"範例3：李大華08150933456789 → name:李大華, birthday:08/15, phone:0933456789\n\n"
-                            f"回傳純 JSON，不要 markdown：\n"
-                            f'{{\"name\": \"姓名\", \"birthday\": \"生日月日\", \"phone\": \"電話\", \"area\": \"地區\", \"id\": \"編號\"}}\n\n'
-                            f"對話：\n{chat_text}"
-                        )}]
+                            f"- 地點相關中文 = 地區\n"
+                            f"- 數字可能黏在一起，自己拆分\n"
+                            f"- 忽略課程圖片和系統訊息，只看客戶自己打的內容"
+                        )}],
+                        output_config={
+                            "format": {
+                                "type": "json_schema",
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "customer_name": {"type": "string", "description": "客戶姓名"},
+                                        "birthday":      {"type": "string", "description": "出生月日，格式 MM/DD"},
+                                        "phone":         {"type": "string", "description": "手機號碼，10碼"},
+                                        "area":          {"type": "string", "description": "想參加的地點"}
+                                    },
+                                    "required": ["customer_name", "birthday", "phone", "area"],
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
                     )
-                    import json as _json
-                    resp_text = extract_r.content[0].text.strip()
-                    if resp_text.startswith("```"):
-                        import re as _re
-                        resp_text = _re.sub(r"^```(?:json)?\s*", "", resp_text)
-                        resp_text = _re.sub(r"\s*```$", "", resp_text)
-                    data = _json.loads(resp_text)
-
-                    info = (
-                        f"【新報名】\n"
-                        f"✏ 姓名：{data.get('name', '')}\n"
-                        f"✏ 出生月/日：{data.get('birthday', '')}\n"
-                        f"✏ 聯絡電話：{data.get('phone', '')}\n"
-                        f"✏ 想參加的地點：{data.get('area', '')}\n"
-                        f"✏ 編號：{customer_id}"
-                    )
-                    print(f"[Customer] StepB: 資料提取成功（第{attempt+1}次）", flush=True)
+                    extracted = json.loads(extract_r.content[0].text)
+                    print(f"[Customer] Step2: 資料提取成功（第{attempt+1}次）", flush=True)
+                    print(f"[Customer] Step2: {extracted}", flush=True)
                     break
                 except Exception as e:
-                    print(f"[Customer] StepB: 資料提取失敗（第{attempt+1}次）: {e}", flush=True)
+                    print(f"[Customer] Step2: 資料提取失敗（第{attempt+1}次）: {e}", flush=True)
                     if attempt < 2:
                         time.sleep(2)
 
-            if not info:
-                info = f"【新報名】{name}\n編號：{customer_id}"
-                print(f"[Customer] StepB: 3次都失敗，使用簡易格式", flush=True)
+            # === Step 3: 寫入 Excel（編號先空）===
+            if extracted:
+                excel_row = write_customer_to_excel(
+                    name=extracted.get("customer_name", ""),
+                    birthday=extracted.get("birthday", ""),
+                    phone=extracted.get("phone", ""),
+                    area=extracted.get("area", ""),
+                    line_name=name,
+                )
+                print(f"[Customer] Step3: 已寫入 Excel 第{excel_row}行", flush=True)
+            else:
+                excel_row = write_customer_to_excel("", "", "", "", name)
+                print(f"[Customer] Step3: 提取失敗，寫入空資料到 Excel", flush=True)
 
-            # === Step C: 強制改名（把客戶 LINE 名稱改成編號）===
+            # === Step 4: regex 抓編號 → 補寫 Excel ===
+            id_match = re.search(r"編號[：:]\s*\*{0,2}(\d{5})\*{0,2}", reply)
+            customer_id = id_match.group(1) if id_match else None
+            if customer_id:
+                update_customer_id(excel_row, customer_id)
+                print(f"[Customer] Step4: 編號 {customer_id} 已寫入 Excel", flush=True)
+            else:
+                print(f"[Customer] Step4: 抓不到編號", flush=True)
+
+            # === Step 5: rename_friend（把 LINE 名稱改成編號）===
             regions = locate_line_regions(monitor)
             rename_friend(regions, customer_id, monitor)
-            print(f"[Customer] StepC: 已改名為 {customer_id}", flush=True)
+            print(f"[Customer] Step5: 已改名為 {customer_id}", flush=True)
             time.sleep(1)
 
-            # 改名後用編號搜尋
             search_name = customer_id
 
-            # === Step C: 分享溫妮好友資訊給客戶 ===
-            print(f"[Customer] StepC: 分享溫妮好友資訊給 {search_name}", flush=True)
+            # === Step 6: 分享溫妮好友資訊給客戶 ===
             regions = locate_line_regions(monitor)
             share_contact_card(regions, "溫妮", search_name, monitor)
+            print(f"[Customer] Step6: 已分享溫妮給 {search_name}", flush=True)
 
-            # === 轉發報名資訊到友資群 ===
-            print(f"[Customer] 轉發報名資訊到友資群...", flush=True)
+            # === Step 7: 讀 Excel → 組報名資訊 → 發友資群 ===
+            print(f"[Customer] Step7: 轉發報名資訊到友資群...", flush=True)
+            cust_data = read_customer_from_excel(customer_id)
+            if cust_data:
+                info = (
+                    f"【新報名】\n"
+                    f"✏ 姓名：{cust_data['name']}\n"
+                    f"✏ 出生月/日：{cust_data['birthday']}\n"
+                    f"✏ 聯絡電話：{cust_data['phone']}\n"
+                    f"✏ 想參加的地點：{cust_data['area']}\n"
+                    f"✏ 編號：{customer_id}"
+                )
+            else:
+                info = f"【新報名】{name}\n編號：{customer_id}"
+                print(f"[Customer] Step7: Excel 找不到編號 {customer_id}，使用簡易格式", flush=True)
 
-            # Step 1: 切到聊天頁（分享溫妮後停在好友頁）
+            # Step 7a: 切到聊天頁（分享溫妮後停在好友頁）
             regions = locate_line_regions(monitor)
             if regions["current_page"] != "chat":
                 regions = switch_page(regions, "chat", monitor)
-            print(f"[Customer] Step1: 已切到聊天頁", flush=True)
 
-            # Step 2: 按 Esc 清空旁邊的聊天框
-            pyautogui.press("escape")
-            time.sleep(1)
-            print(f"[Customer] Step2: 已清空聊天框", flush=True)
-
-            # Step 3: 點第一個對話（友資群置頂，永遠在第一個）
-            regions = locate_line_regions(monitor)
+            # Step 7b: 點第一個對話（友資群置頂，永遠在第一個）
+            # 用 left_panel 的螢幕座標計算（友資群在 left_panel 頂部）
+            # line1_new 圖片座標：友資群中心 x=210, y=140
+            # left_panel 圖片座標：l=64, t=111 → 友資群相對 left_panel 頂部偏移 y=140-111=29
             lp = regions["left_panel"]
-            lp_h = lp["bottom"] - lp["top"]
-            first_item_y = int(lp["top"] + lp_h * CHAT_PAGE_TEMPLATE["list_start_y_ratio"] + lp_h * CHAT_PAGE_TEMPLATE["item_height_ratio"] * 0.5)
             first_item_x = (lp["left"] + lp["right"]) // 2
+            first_item_y = lp["top"] + 29
             pyautogui.click(first_item_x, first_item_y)
             time.sleep(1.5)
             regions = locate_line_regions(monitor)
-            print(f"[Customer] Step3: 已進入友資群（置頂第一個）", flush=True)
 
-            # Step 4: 發送報名資訊到友資群
+            # Step 7d: 發送報名資訊到友資群
             send_reply(info, regions)
-            print(f"[Customer] Step4: 已發送報名資訊到友資群", flush=True)
+            print(f"[Customer] Step7d: 已發送報名資訊到友資群", flush=True)
             time.sleep(1)
 
-            # Step 5: 切到好友頁（分享好友資訊只能在好友頁操作）
+            # === Step 8: 分享客戶好友資訊到友資群 ===
             regions = switch_page(regions, "friend", monitor)
-            print(f"[Customer] Step5: 已切到好友頁", flush=True)
-
-            # Step 6: 搜尋客戶 → 分享客戶好友資訊給友資群（用編號搜尋）
             share_contact_card(regions, search_name, "友資群", monitor)
-            print(f"[Customer] Step6: 已分享 {search_name} 的好友資訊到友資群", flush=True)
+            print(f"[Customer] Step8: 已分享 {search_name} 的好友資訊到友資群", flush=True)
 
-            # Step 7: 回到聊天頁
+            # === Step 9: 回到聊天頁 ===
             regions = locate_line_regions(monitor)
             if regions["current_page"] != "chat":
                 regions = switch_page(regions, "chat", monitor)
-            print(f"[Customer] Step7: 已回到聊天頁", flush=True)
+            print(f"[Customer] Step9: 已回到聊天頁", flush=True)
 
         time.sleep(2)
 

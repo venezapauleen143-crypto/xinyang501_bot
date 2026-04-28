@@ -839,13 +839,24 @@ def locate_line_regions(monitor=2):
     # 組合框架結果
     # sidebar、search_bar、left_panel 用 Vision
     # chat_area、input_box 用像素比例（不靠 Vision，避免定位錯誤）
-    sidebar_raw = {"l": 0, "t": 0, "r": sidebar_w, "b": lh}
+    # sidebar：固定位置（從 line1_new.png 白框比對，741x1031 圖片）
+    sidebar_raw = {"l": 9, "t": 26, "r": 55, "b": 417}
     sidebar = to_screen_region(sidebar_raw)
-    # search_bar：固定位置（從 line1_new.png 綠框比對，741x1031 圖片）
-    search_bar_raw = {"l": 78, "t": 66, "r": 310, "b": 96}
+    # search_bar：根據頁面使用不同固定位置
+    if current_page == "friend":
+        # 好友頁（從 line1.png 比對，縮放到 741x1031）
+        search_bar_raw = {"l": 68, "t": 37, "r": 322, "b": 64}
+    else:
+        # 聊天頁（從 line1_new.png 綠框比對，741x1031 圖片）
+        search_bar_raw = {"l": 78, "t": 66, "r": 310, "b": 96}
     search_bar = to_screen_region(search_bar_raw)
-    # left_panel：固定位置（從 line1_new.png 藍框比對，741x1031 圖片）
-    left_panel_raw = {"l": 64, "t": 111, "r": 357, "b": 948}
+    # left_panel：根據頁面使用不同固定位置
+    if current_page == "friend":
+        # 好友頁（從 line1.png 灰框比對，縮放到 741x1031）
+        left_panel_raw = {"l": 55, "t": 70, "r": 351, "b": 1021}
+    else:
+        # 聊天頁（從 line1_new.png 藍框比對，741x1031 圖片）
+        left_panel_raw = {"l": 64, "t": 111, "r": 357, "b": 948}
     left_panel = to_screen_region(left_panel_raw)
     # chat_title：固定位置（從 line1_new.png 黃框實測，741x1031 圖片）
     # 黃框 x=[366-412] y=[63-94] center=(389,78)
@@ -853,24 +864,11 @@ def locate_line_regions(monitor=2):
     chat_title_raw = {"l": 366, "t": 63, "r": 412, "b": 94}
     chat_title = to_screen_region(chat_title_raw)
 
-    # chat_area 和 input_box：用固定比例算（不用 Vision、不用 separator_x）
-    # sidebar(62) + left_panel(185) = 247px, 247/742 ≈ 0.333
-    # 這個比例不受搜尋頁面/聊天頁面影響，永遠固定
-    chat_left = int(lw * 0.333)
-    chat_area_raw = {
-        "l": chat_left,
-        "t": int(lh * 0.06),   # 標題列下方（視窗高度 6%，跳過「仁輝 JAMES」標題）
-        "r": lw,
-        "b": int(lh * 0.92),   # 輸入框上方（視窗高度 92%）
-    }
+    # chat_area：固定位置（從 line1_new.png 黑框比對，741x1031 圖片）
+    chat_area_raw = {"l": 371, "t": 99, "r": 737, "b": 910}
     chat_area = to_screen_region(chat_area_raw)
-
-    input_box_raw = {
-        "l": chat_left,
-        "t": int(lh * 0.92),   # 對話區下方
-        "r": lw,
-        "b": int(lh * 0.98),   # 視窗底部附近
-    }
+    # input_box：固定位置（從 line1_new.png 深藍框比對，741x1031 圖片）
+    input_box_raw = {"l": 371, "t": 923, "r": 726, "b": 979}
     input_box = to_screen_region(input_box_raw)
 
     # sidebar 按鈕（用像素分析 + 模板比例，不靠 Vision）
@@ -878,7 +876,7 @@ def locate_line_regions(monitor=2):
 
     # Step 5: 掃描當前頁面內容（PaddleOCR 主力）
     _print(f"[line_locate] 掃描 {current_page} 頁面內容...")
-    panel_rect = vision["left_panel"]
+    panel_rect = left_panel_raw
     panel_crop = line_crop.crop((panel_rect["l"], panel_rect["t"], panel_rect["r"], panel_rect["b"]))
 
     page_content = {}
