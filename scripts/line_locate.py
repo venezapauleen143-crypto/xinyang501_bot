@@ -1238,30 +1238,25 @@ def rename_friend(regions, new_name, monitor=2):
     _print(f"[rename] Step2: 找到小卡片 hwnd={card_hwnd} ({card_left},{card_top})-({card_right},{card_bottom})")
 
     # Step 3: OCR 偵測小卡片上的名字位置 → 點擊名字 → 開啟編輯畫面
-    # 截圖小卡片區域（用 mss，支援螢幕2負數座標）
+    # 只截名字區域（y=320~370 的窄條），減少雜訊
     with mss.mss() as sct:
         card_monitor = {
-            "left": card_left, "top": card_top,
-            "width": card_right - card_left, "height": card_bottom - card_top
+            "left": card_left, "top": card_top + 320,
+            "width": card_right - card_left, "height": 50
         }
         card_raw = sct.grab(card_monitor)
         card_img = Image.frombytes("RGB", card_raw.size, card_raw.rgb)
     card_ocr = ocr_scan_panel(card_img)
-    _print(f"[rename] Step3: 小卡片 OCR 找到 {len(card_ocr)} 個文字")
+    _print(f"[rename] Step3: 名字區域 OCR 找到 {len(card_ocr)} 個文字")
 
-    # 從 OCR 結果找名字（排除按鈕文字等）
-    SKIP_TEXTS = ["語音通話", "視訊通話", "聊天", "LINE", "設定暱稱", "封鎖", "檢舉", "加入好友"]
+    # 窄條裡第一個文字就是名字
     name_item = None
-    for item in card_ocr:
-        if any(skip in item["text"] for skip in SKIP_TEXTS):
-            continue
-        if len(item["text"]) >= 1:
-            name_item = item
-            break  # 第一個非按鈕文字就是名字
+    if card_ocr:
+        name_item = card_ocr[0]
 
     if name_item:
         name_x = card_left + name_item["x"] + name_item["w"] // 2
-        name_y = card_top + name_item["y"] + name_item["h"] // 2
+        name_y = card_top + 320 + name_item["y"] + name_item["h"] // 2  # 320 = 窄條起始偏移
         _print(f"[rename] Step3: OCR 找到名字 '{name_item['text']}' at ({name_x}, {name_y})")
     else:
         # OCR 找不到，用固定座標兜底

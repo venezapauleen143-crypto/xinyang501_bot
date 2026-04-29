@@ -338,6 +338,8 @@ def generate_reply(system_prompt, conversation_history, new_messages_text):
         f"【最重要】你的回覆會直接發送給客戶看到，所以：\n"
         f"- 只寫要發送的文字，一個字的分析、判斷、解釋都不能有\n"
         f"- 不能出現「姓名=」「生日=」「電話=」「編號=」「解析」「資料」這種格式\n"
+        f"- 不能出現「聯絡卡片」「已讀」「未讀」「儲存另存新檔」「Keep筆記」「以下為尚未閱讀的訊息」這種LINE系統訊息\n"
+        f"- 不能出現「contact_card」「send_image」這種模板標記\n"
         f"- 客戶提供資料後，直接回「好的已幫您登記✅」然後給編號\n"
         f"- 多條訊息用 ||| 分隔"
     )
@@ -371,6 +373,8 @@ def filter_reply(reply):
             "解析一下", "解析：", "判斷：", "分析：",
             "缺少", "不完整", "有問題", "不對",
             "-[", "- [",  # AI 列點分析格式
+            "聯絡卡片", "已讀", "未讀", "儲存另存新檔", "Keep筆記",
+            "以下為尚未閱讀", "contact_card", "send_image",
         ]):
             continue
         filtered_lines.append(line)
