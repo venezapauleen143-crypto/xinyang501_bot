@@ -234,18 +234,22 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
         name = "unknown"
     print(f"[Customer] 客戶名稱: {name}", flush=True)
 
-    # 群組過濾：黑名單 + (數字) 特徵偵測
+    # 群組過濾：黑名單（部分匹配） + (數字) 特徵偵測
     SKIP_GROUPS = ["友資群", "好朋友的群組"]
-    if name in SKIP_GROUPS or re.search(r"\(\d+\)", name):
+    if any(g in name or name in g for g in SKIP_GROUPS) or re.search(r"\(\d+\)", name):
         print(f"[Customer] {name} 是群組，跳過", flush=True)
-        pyautogui.press("escape")
-        time.sleep(0.5)
         return regions
 
     # Step 3: 截圖對話區 + OCR 讀取內容
     chat_img = grab_chat_area(regions, monitor)
     current_messages = ocr_extract_messages(chat_img)
     print(f"[Customer] OCR 讀到 {len(current_messages)} 條訊息", flush=True)
+
+    # 偵測是否為好友（非好友會有 LINE 警告框）
+    NOT_FRIEND_KEYWORDS = ["加入好友", "請先確認", "封鎖", "檢舉", "詐騙行為", "用戶可疑"]
+    all_text = " ".join(m["text"] for m in current_messages)
+    is_friend = not any(kw in all_text for kw in NOT_FRIEND_KEYWORDS)
+    print(f"[Customer] 好友狀態: {'是好友' if is_friend else '不是好友'}", flush=True)
 
     # Step 4: 取得或建立該客戶的對話歷史
     if name not in all_histories:
@@ -401,6 +405,18 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                 print(f"[Customer] Step4: 編號 {customer_id} 已寫入 Excel", flush=True)
             else:
                 print(f"[Customer] Step4: 抓不到編號", flush=True)
+
+            # === Step 4.5: 如果不是好友，先點「加入好友」===
+            if not is_friend:
+                from line_locate import ADD_FRIEND_BTN
+                ca = regions["chat_area"]
+                btn_cx = (ADD_FRIEND_BTN["l"] + ADD_FRIEND_BTN["r"]) // 2
+                btn_cy = (ADD_FRIEND_BTN["t"] + ADD_FRIEND_BTN["b"]) // 2
+                add_btn_x = ca["left"] + (btn_cx - 371)
+                add_btn_y = ca["top"] + (btn_cy - 99)
+                pyautogui.click(add_btn_x, add_btn_y)
+                print(f"[Customer] Step4.5: 點擊「加入好友」at ({add_btn_x}, {add_btn_y})", flush=True)
+                time.sleep(1.5)
 
             # === Step 5: rename_friend（把 LINE 名稱改成編號）===
             regions = locate_line_regions(monitor)

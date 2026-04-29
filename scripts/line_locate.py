@@ -1185,6 +1185,10 @@ PROFILE_EDIT_OFFSETS = {
 }
 
 
+# 非好友警告框「加入好友」按鈕位置（從 LINE21.png 紅框比對，縮放到 741x1031）
+ADD_FRIEND_BTN = {"l": 423, "t": 273, "r": 499, "b": 298}
+
+
 def rename_friend(regions, new_name, monitor=2):
     """
     把當前聊天對象的好友名稱改成 new_name（LINE17 → LINE18 流程）。
@@ -1233,10 +1237,38 @@ def rename_friend(regions, new_name, monitor=2):
     card_hwnd, card_left, card_top, card_right, card_bottom = profile_card
     _print(f"[rename] Step2: 找到小卡片 hwnd={card_hwnd} ({card_left},{card_top})-({card_right},{card_bottom})")
 
-    # Step 3: 點擊小卡片的名字（LINE17 紅框）→ 開啟編輯畫面
-    name_x = card_left + PROFILE_CARD_OFFSETS["name_x"]
-    name_y = card_top + PROFILE_CARD_OFFSETS["name_y"]
-    _print(f"[rename] Step3: 點擊名字 ({name_x}, {name_y})")
+    # Step 3: OCR 偵測小卡片上的名字位置 → 點擊名字 → 開啟編輯畫面
+    # 截圖小卡片區域（用 mss，支援螢幕2負數座標）
+    with mss.mss() as sct:
+        card_monitor = {
+            "left": card_left, "top": card_top,
+            "width": card_right - card_left, "height": card_bottom - card_top
+        }
+        card_raw = sct.grab(card_monitor)
+        card_img = Image.frombytes("RGB", card_raw.size, card_raw.rgb)
+    card_ocr = ocr_scan_panel(card_img)
+    _print(f"[rename] Step3: 小卡片 OCR 找到 {len(card_ocr)} 個文字")
+
+    # 從 OCR 結果找名字（排除按鈕文字等）
+    SKIP_TEXTS = ["語音通話", "視訊通話", "聊天", "LINE", "設定暱稱", "封鎖", "檢舉", "加入好友"]
+    name_item = None
+    for item in card_ocr:
+        if any(skip in item["text"] for skip in SKIP_TEXTS):
+            continue
+        if len(item["text"]) >= 1:
+            name_item = item
+            break  # 第一個非按鈕文字就是名字
+
+    if name_item:
+        name_x = card_left + name_item["x"] + name_item["w"] // 2
+        name_y = card_top + name_item["y"] + name_item["h"] // 2
+        _print(f"[rename] Step3: OCR 找到名字 '{name_item['text']}' at ({name_x}, {name_y})")
+    else:
+        # OCR 找不到，用固定座標兜底
+        name_x = card_left + PROFILE_CARD_OFFSETS["name_x"]
+        name_y = card_top + PROFILE_CARD_OFFSETS["name_y"]
+        _print(f"[rename] Step3: OCR 找不到名字，用固定座標 ({name_x}, {name_y})")
+
     pyautogui.click(name_x, name_y)
     time.sleep(1.5)
 
@@ -1250,11 +1282,9 @@ def rename_friend(regions, new_name, monitor=2):
     edit_hwnd, edit_left, edit_top, edit_right, edit_bottom = edit_popup
     _print(f"[rename] Step4: 編輯畫面 hwnd={edit_hwnd} ({edit_left},{edit_top})-({edit_right},{edit_bottom})")
 
-    # Step 5: 三次點擊名字（LINE18 紅框）→ 全選
-    edit_name_x = edit_left + PROFILE_EDIT_OFFSETS["name_x"]
-    edit_name_y = edit_top + PROFILE_EDIT_OFFSETS["name_y"]
-    _print(f"[rename] Step5: 三次點擊名字 ({edit_name_x}, {edit_name_y})")
-    pyautogui.click(edit_name_x, edit_name_y, clicks=3)
+    # Step 5: Ctrl+A 全選名字（進入編輯模式後直接全選，不需要固定座標）
+    _print(f"[rename] Step5: Ctrl+A 全選名字")
+    pyautogui.hotkey("ctrl", "a")
     time.sleep(0.5)
 
     # Step 6: 輸入新名稱（用剪貼簿貼上，避免中文輸入問題）
