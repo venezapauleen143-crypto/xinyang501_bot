@@ -418,13 +418,14 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                 print(f"[Customer] Step4.5: 點擊「加入好友」at ({add_btn_x}, {add_btn_y})", flush=True)
                 time.sleep(1.5)
 
-            # === Step 5: rename_friend（把 LINE 名稱改成編號）===
+            # === Step 5: rename_friend（把 LINE 名稱改成 日期+編號）===
+            rename_name = f"{datetime.now().strftime('%m-%d')} {customer_id}"
             regions = locate_line_regions(monitor)
-            rename_friend(regions, customer_id, monitor)
-            print(f"[Customer] Step5: 已改名為 {customer_id}", flush=True)
+            rename_friend(regions, rename_name, monitor)
+            print(f"[Customer] Step5: 已改名為 {rename_name}", flush=True)
             time.sleep(1)
 
-            search_name = customer_id
+            search_name = rename_name
 
             # === Step 6: 分享溫妮好友資訊給客戶 ===
             regions = locate_line_regions(monitor)
