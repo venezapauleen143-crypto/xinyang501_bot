@@ -234,6 +234,14 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
         name = "unknown"
     print(f"[Customer] 客戶名稱: {name}", flush=True)
 
+    # 群組過濾：黑名單 + (數字) 特徵偵測
+    SKIP_GROUPS = ["友資群", "好朋友的群組"]
+    if name in SKIP_GROUPS or re.search(r"\(\d+\)", name):
+        print(f"[Customer] {name} 是群組，跳過", flush=True)
+        pyautogui.press("escape")
+        time.sleep(0.5)
+        return regions
+
     # Step 3: 截圖對話區 + OCR 讀取內容
     chat_img = grab_chat_area(regions, monitor)
     current_messages = ocr_extract_messages(chat_img)
