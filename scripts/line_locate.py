@@ -1426,7 +1426,7 @@ def share_contact_card(regions, share_who, share_to, monitor=2):
     fx, fy = friend_pos["center"]
     _print(f"[share] 右鍵點擊 {share_who} at ({fx}, {fy})")
     pyautogui.rightClick(fx, fy)
-    time.sleep(0.8)
+    time.sleep(1.5)
 
     # 截圖 OCR 找「分享好友資訊」
     full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)

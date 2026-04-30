@@ -235,7 +235,7 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
     print(f"[Customer] 客戶名稱: {name}", flush=True)
 
     # 群組過濾：黑名單（部分匹配） + (數字) 特徵偵測
-    SKIP_GROUPS = ["友資群", "好朋友的群組"]
+    SKIP_GROUPS = ["友資群", "友资群", "友資", "友资", "好朋友的群組", "好朋友的群组"]
     if any(g in name or name in g for g in SKIP_GROUPS) or re.search(r"\(\d+\)", name):
         print(f"[Customer] {name} 是群組，跳過", flush=True)
         return regions
@@ -416,7 +416,7 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                 add_btn_y = ca["top"] + (btn_cy - 99)
                 pyautogui.click(add_btn_x, add_btn_y)
                 print(f"[Customer] Step4.5: 點擊「加入好友」at ({add_btn_x}, {add_btn_y})", flush=True)
-                time.sleep(1.5)
+                time.sleep(3)
 
             # === Step 5: rename_friend（把 LINE 名稱改成 日期+編號）===
             rename_name = f"{datetime.now().strftime('%m-%d')} {customer_id}"
@@ -429,8 +429,11 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
 
             # === Step 6: 分享溫妮好友資訊給客戶 ===
             regions = locate_line_regions(monitor)
-            share_contact_card(regions, "溫妮", search_name, monitor)
-            print(f"[Customer] Step6: 已分享溫妮給 {search_name}", flush=True)
+            result = share_contact_card(regions, "溫妮", search_name, monitor)
+            if result:
+                print(f"[Customer] Step6: 已分享溫妮給 {search_name}", flush=True)
+            else:
+                print(f"[Customer] Step6: 分享溫妮給 {search_name} 失敗", flush=True)
 
             # === Step 7: 讀 Excel → 組報名資訊 → 發友資群 ===
             print(f"[Customer] Step7: 轉發報名資訊到友資群...", flush=True)
@@ -471,8 +474,11 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
 
             # === Step 8: 分享客戶好友資訊到友資群 ===
             regions = switch_page(regions, "friend", monitor)
-            share_contact_card(regions, search_name, "友資群", monitor)
-            print(f"[Customer] Step8: 已分享 {search_name} 的好友資訊到友資群", flush=True)
+            result = share_contact_card(regions, search_name, "友資群", monitor)
+            if result:
+                print(f"[Customer] Step8: 已分享 {search_name} 的好友資訊到友資群", flush=True)
+            else:
+                print(f"[Customer] Step8: 分享 {search_name} 的好友資訊到友資群失敗", flush=True)
 
             # === Step 9: 回到聊天頁 ===
             regions = locate_line_regions(monitor)
@@ -480,7 +486,7 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                 regions = switch_page(regions, "chat", monitor)
             print(f"[Customer] Step9: 已回到聊天頁", flush=True)
 
-        time.sleep(2)
+        time.sleep(0.5)
 
     return regions
 
@@ -572,7 +578,7 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=2):
 
                 # 按 Esc 退出聊天室（不標已讀，對方再回覆會重新出現綠色徽章）
                 pyautogui.press("escape")
-                time.sleep(1)
+                time.sleep(0.5)
 
             # 全部處理完，等待新的未讀
             print(f"[Monitor] 本輪處理完畢，等待新訊息...", flush=True)
