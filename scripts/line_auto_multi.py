@@ -419,7 +419,7 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                 time.sleep(3)
 
             # === Step 5: rename_friend（把 LINE 名稱改成 日期+編號）===
-            rename_name = f"{datetime.now().strftime('%m-%d')} {customer_id}"
+            rename_name = f"{customer_id} {datetime.now().strftime('%m-%d')}"
             regions = locate_line_regions(monitor)
             rename_friend(regions, rename_name, monitor)
             print(f"[Customer] Step5: 已改名為 {rename_name}", flush=True)
