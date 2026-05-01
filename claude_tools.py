@@ -17589,6 +17589,16 @@ if __name__ == "__main__":
 
     try:
         tools[tool]()
+    except IndexError:
+        print(f"用法錯誤：'{tool}' 需要更多參數")
+        print(f"請查 claude_tools.py 找對應 lambda 看需要的參數，或用 'python claude_tools.py' 看完整工具清單")
+        sys.exit(1)
+    except TypeError as e:
+        if "positional argument" in str(e) or "required" in str(e):
+            print(f"用法錯誤：'{tool}' 參數數量不對 ({e})")
+        else:
+            print(f"執行失敗：{e}")
+        sys.exit(1)
     except Exception as e:
         print(f"執行失敗：{e}")
         sys.exit(1)
