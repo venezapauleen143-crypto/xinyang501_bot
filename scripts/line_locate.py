@@ -1700,12 +1700,12 @@ def search_friend_and_scan(regions, friend_name, monitor=None):
     from difflib import SequenceMatcher
 
     # Step 1: 點搜尋欄 → 輸入好友名稱
+    # ⚠️ 不能用 press("delete") 清空（會在 LINE 搜尋框留下 "." 字元，造成搜尋變 ".溫妮" 找不到）
+    # ctrl+v 本身會取代 ctrl+a 選中的內容，不需要先 delete
     sx, sy = regions["search_bar"]["center"]
     pyautogui.click(sx, sy)
     time.sleep(0.5)
     pyautogui.hotkey("ctrl", "a")
-    time.sleep(0.1)
-    pyautogui.press("delete")
     time.sleep(0.1)
     pyperclip.copy(friend_name)
     pyautogui.hotkey("ctrl", "v")
