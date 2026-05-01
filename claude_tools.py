@@ -6262,7 +6262,7 @@ def execute_desktop_control(action: str, x=None, y=None, text=None, app=None, di
                 try:
                     import ctypes as _ct, win32gui as _w32g, win32ui as _w32u, win32con as _w32c, mss as _mss
                     with _mss.mss() as sct:
-                        _m2 = sct.monitors[2]  # mss monitors[2] = left=3840
+                        _m2 = sct.monitors[2]  # mss monitors[2] = Telegram 螢幕（筆電left=3840、桌機left=1920）
                     _left, _top = _m2["left"], _m2["top"]
                     _w, _h = _m2["width"], _m2["height"]
                     _user32 = _ct.windll.user32
