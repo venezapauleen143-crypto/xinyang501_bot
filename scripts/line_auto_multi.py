@@ -164,7 +164,7 @@ def is_before_stop_time(stop_time):
 # ============================================================
 # 偵測聊天列表中有未讀標記的對話
 # ============================================================
-def find_unread_conversations(monitor=2):
+def find_unread_conversations(monitor=None):
     """
     切到聊天頁，用 line_locate.py 的 find_unread_badges 偵測綠色未讀標記。
 
@@ -191,7 +191,7 @@ def find_unread_conversations(monitor=2):
 # ============================================================
 # 處理單一客戶的對話
 # ============================================================
-def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monitor=2):
+def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monitor=None):
     """
     點進一個客戶的對話，讀取內容，判斷 SOP 步驟，回覆。
 
@@ -494,7 +494,7 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
 # ============================================================
 # 主流程
 # ============================================================
-def main(stop_time, sop_path=DEFAULT_SOP, monitor=2):
+def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
     from line_locate import (
         locate_line_regions, switch_page, find_line_window,
         screenshot_line_window,

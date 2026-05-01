@@ -74,7 +74,7 @@ if hasattr(signal, "SIGBREAK"):
     signal.signal(signal.SIGBREAK, _signal_handler)
 
 
-def send_message(contact_name, message, monitor=2):
+def send_message(contact_name, message, monitor=None):
     """完整流程：定位 LINE → 搜尋好友 → 點進對話 → 發送訊息
     所有定位邏輯由 line_locate.py 處理"""
 

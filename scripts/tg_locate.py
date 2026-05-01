@@ -11,7 +11,7 @@ Telegram UI 定位模組 — 每次運行都用 OCR + Claude Vision 精確找到
 
 使用方式：
     from tg_locate import locate_telegram_regions
-    regions = locate_telegram_regions(monitor=2)
+    regions = locate_telegram_regions(monitor=None)
     # regions["search_bar"] = {"left": x, "top": y, "right": x, "bottom": y, "center": (cx, cy)}
 """
 
@@ -70,8 +70,8 @@ def find_telegram_window():
     return main
 
 
-def screenshot_telegram(monitor=2):
-    """截圖指定螢幕，裁切出 Telegram 區域"""
+def screenshot_telegram(monitor=None):
+    """截圖指定螢幕，裁切出 Telegram 區域。monitor=None 時自動偵測 Telegram 在哪個螢幕"""
     tg = find_telegram_window()
     if not tg:
         raise RuntimeError("找不到 Telegram 視窗")
@@ -79,6 +79,16 @@ def screenshot_telegram(monitor=2):
     hwnd, title, (wl, wt, wr, wb) = tg
 
     with mss.mss() as sct:
+        # 自動偵測 Telegram 在哪個 monitor
+        if monitor is None:
+            tg_cx = (wl + wr) // 2
+            tg_cy = (wt + wb) // 2
+            for i, m in enumerate(sct.monitors[1:], 1):
+                if m["left"] <= tg_cx < m["left"] + m["width"] and m["top"] <= tg_cy < m["top"] + m["height"]:
+                    monitor = i
+                    break
+            if monitor is None:
+                monitor = 1
         mon = sct.monitors[monitor]
         img = sct.grab(mon)
         pil = Image.frombytes("RGB", img.size, img.rgb)
@@ -188,7 +198,7 @@ def find_regions_by_vision(tg_crop):
     return json.loads(resp)
 
 
-def locate_telegram_regions(monitor=2, debug=False):
+def locate_telegram_regions(monitor=None, debug=False):
     """
     主函數：找到 Telegram 所有 UI 區域的精確座標
 
@@ -330,6 +340,6 @@ def locate_telegram_regions(monitor=2, debug=False):
 
 # === 直接執行時測試 ===
 if __name__ == "__main__":
-    regions = locate_telegram_regions(monitor=2, debug=False)
+    regions = locate_telegram_regions(monitor=None, debug=False)
     print("\n=== 結果 ===")
     _print(json.dumps(regions, ensure_ascii=False, indent=2, default=str))

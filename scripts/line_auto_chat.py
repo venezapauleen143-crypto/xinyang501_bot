@@ -254,7 +254,7 @@ def build_system_prompt(sop):
 # ============================================================
 # 對話區截圖 + OCR 訊息提取（全部呼叫 line_locate.py）
 # ============================================================
-def grab_chat_area(regions, monitor=2):
+def grab_chat_area(regions, monitor=None):
     """截取 LINE 對話區（呼叫 line_locate.py）"""
     from line_locate import screenshot_chat_area
     return screenshot_chat_area(regions, monitor)
@@ -457,7 +457,7 @@ def send_multi_reply(reply_text, regions):
 # ============================================================
 # 搜尋好友 + 進入對話（全部呼叫 line_locate.py）
 # ============================================================
-def enter_conversation(contact_name, monitor=2):
+def enter_conversation(contact_name, monitor=None):
     """搜尋好友並進入對話視窗，所有定位邏輯由 line_locate.py 處理"""
     from line_locate import (
         locate_line_regions, switch_page, screenshot_line,
@@ -533,7 +533,7 @@ def is_before_stop_time(stop_time):
     return now_min < stop_min
 
 
-def monitor_and_reply(regions, stop_time, system_prompt, conversation_history, contact_name="", monitor=2):
+def monitor_and_reply(regions, stop_time, system_prompt, conversation_history, contact_name="", monitor=None):
     """監控對話區，偵測新訊息後自動回覆。
     conversation_history 是完整的對話記錄（包含歡迎詞），會在這裡持續累加。
     """
@@ -668,7 +668,7 @@ def monitor_and_reply(regions, stop_time, system_prompt, conversation_history, c
 # ============================================================
 # 主流程
 # ============================================================
-def main(contact_name, stop_time, sop_path=DEFAULT_SOP, monitor=2):
+def main(contact_name, stop_time, sop_path=DEFAULT_SOP, monitor=None):
     import threading
 
     # 啟動前殺殘留進程（防 VRAM 雙倍佔用）
