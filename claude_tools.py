@@ -338,9 +338,15 @@ import pyautogui
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 強制 stdout 使用 UTF-8
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+# 強制 stdout/stderr 使用 UTF-8（修 subprocess 跑時 emoji GBK encode 錯誤）
+# reconfigure 在 console 跑 work，但 subprocess pipe 不一定 work，所以用 TextIOWrapper 強制 wrap
+try:
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+except Exception:
+    pass
 
 load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
 
@@ -864,9 +870,18 @@ def file_move(src, dst):
     print(f"✅ 已移動：{src} → {dst}")
 
 def file_search(folder, keyword):
-    results = list(Path(folder).rglob(f"*{keyword}*"))
+    # 如果 keyword 已含 glob 萬用字元 (* ? [) 直接當 pattern 用，否則 wrap 成 *keyword*
+    if any(c in keyword for c in "*?["):
+        pattern = keyword
+    else:
+        pattern = f"*{keyword}*"
+    try:
+        results = list(Path(folder).rglob(pattern))
+    except ValueError as e:
+        print(f"glob pattern 錯誤：{e}")
+        return
     if not results:
-        print(f"找不到包含「{keyword}」的檔案")
+        print(f"找不到符合「{keyword}」的檔案")
         return
     for r in results:
         print(f"  {r}")
@@ -17062,7 +17077,7 @@ if __name__ == "__main__":
         "schedule_add":  lambda: schedule_add(args[0], args[1], args[2]),
         "schedule_del":  lambda: schedule_del(args[0]),
         "memory_save":   lambda: memory_save(int(args[0]), " ".join(args[1:])),
-        "memory_list":   lambda: memory_list(int(args[0])),
+        "memory_list":   lambda: memory_list(int(args[0])) if args else print("用法：memory_list <chat_id>"),
         "memory_del":    lambda: memory_del(int(args[0]), int(args[1])),
         "vision":        lambda: vision(" ".join(args) if args else "請描述這個畫面上有什麼，以及目前電腦在做什麼事。"),
         "find_image":    lambda: find_image(args[0], float(args[1]) if len(args) > 1 else 0.8),
@@ -17268,7 +17283,7 @@ if __name__ == "__main__":
         "wait_for_text":     lambda: wait_for_text(" ".join(args[:-1]) if len(args)>1 else args[0], float(args[-1]) if len(args)>1 and args[-1].replace(".","").isdigit() else 60.0),
         "data_process":      lambda: data_process(args[0], args[1] if len(args)>1 else "", args[2] if len(args)>2 else "", " ".join(args[3:]) if len(args)>3 else ""),
         "wake_on_lan":       lambda: wake_on_lan(args[0], args[1] if len(args)>1 else "255.255.255.255", int(args[2]) if len(args)>2 else 9),
-        "clipboard_history": lambda: clipboard_history(args[0] if args else "list", int(args[1]) if len(args)>1 else 0),
+        "clipboard_history": lambda: execute_clipboard_history(args[0] if args else "list", int(args[1]) if len(args)>1 else 0),
         "file_watcher":      lambda: file_watcher(args[0], args[1] if len(args)>1 else "all", args[2] if len(args)>2 else "", float(args[3]) if len(args)>3 else 3600.0),
         "pixel_watch":       lambda: pixel_watch(int(args[0]), int(args[1]), int(args[2]) if len(args)>2 else 10, float(args[3]) if len(args)>3 else 1.0, float(args[4]) if len(args)>4 else 60.0, args[5] if len(args)>5 else ""),
         "object_detect":     lambda: object_detect(" ".join(args[:-1]) if len(args)>1 else args[0], args[-1] if len(args)>1 and args[-1] in ("click","double_click","find") else "find"),
