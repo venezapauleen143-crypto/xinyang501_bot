@@ -20135,7 +20135,7 @@ def collect_daily_report() -> str:
              f"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;"
              f"Get-WinEvent -FilterHashtable @{{LogName='Security';Id=4688;StartTime='{today}'}} "
              f"-ErrorAction SilentlyContinue -MaxEvents 50 | "
-             f"Select-Object TimeCreated,@{{N='Process';E={{($_.Message -split '新增處理程序名稱:')[1] -split '\`n' | Select-Object -First 1}}}} | "
+             f"Select-Object TimeCreated,@{{N='Process';E={{($_.Message -split '新增處理程序名稱:')[1] -split '\\`n' | Select-Object -First 1}}}} | "
              f"ConvertTo-Csv -NoTypeInformation"],
             capture_output=True, text=True, encoding="utf-8"
         )
