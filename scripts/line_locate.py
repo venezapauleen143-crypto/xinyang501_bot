@@ -221,8 +221,8 @@ def find_line_window():
     return max(results, key=lambda x: (x[3][2] - x[3][0]) * (x[3][3] - x[3][1]))
 
 
-def screenshot_line(monitor=2):
-    """截圖指定螢幕，裁切出 LINE 區域"""
+def screenshot_line(monitor=None):
+    """截圖指定螢幕，裁切出 LINE 區域。monitor=None 時自動偵測 LINE 在哪個 monitor（桌機/筆電位置不同）"""
     # 確保 DPI 設定正確（每次呼叫都設，防止被其他模組覆蓋）
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(0)
@@ -236,6 +236,16 @@ def screenshot_line(monitor=2):
     hwnd, title, cls, (wl, wt, wr, wb) = line
 
     with mss.mss() as sct:
+        # 自動偵測 LINE 在哪個 monitor（用視窗中心點判斷）
+        if monitor is None:
+            line_cx = (wl + wr) // 2
+            line_cy = (wt + wb) // 2
+            for i, m in enumerate(sct.monitors[1:], 1):
+                if m["left"] <= line_cx < m["left"] + m["width"] and m["top"] <= line_cy < m["top"] + m["height"]:
+                    monitor = i
+                    break
+            if monitor is None:
+                monitor = 1  # fallback 主螢幕
         mon = sct.monitors[monitor]
         img = sct.grab(mon)
         pil = Image.frombytes("RGB", img.size, img.rgb)
@@ -777,7 +787,7 @@ def vision_scan_panel(panel_img, current_page):
 # ============================================================
 # 主函數
 # ============================================================
-def locate_line_regions(monitor=2):
+def locate_line_regions(monitor=None):
     """
     主函數：定位 LINE 所有 UI 區域 + 掃描當前頁面完整內容
 
@@ -1024,7 +1034,7 @@ def find_conversation(regions, name):
     return None
 
 
-def screenshot_line_window(monitor=2):
+def screenshot_line_window(monitor=None):
     """
     截取 LINE 視窗的完整截圖（只裁 LINE 視窗，跟 line16.png 一樣的方式）。
     用 win32gui 找視窗位置，裁切出 LINE 視窗部分。
