@@ -1203,14 +1203,18 @@ def stt(duration=5, file_path="", language="zh-TW"):
 
 def ocr(image_path: str = ""):
     import easyocr
+    import numpy as np
+    from PIL import Image as _PILImage
     reader = easyocr.Reader(["ch_tra", "en"], gpu=False)
     if image_path:
-        source = image_path
+        source_img = _PILImage.open(image_path).convert("RGB")
     else:
-        img = pyautogui.screenshot()
-        source = str(SCREENSHOT_DIR / f"ocr_tmp_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-        img.save(source)
-    results = reader.readtext(source)
+        source_img = pyautogui.screenshot()
+        cache_path = str(SCREENSHOT_DIR / f"ocr_tmp_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        source_img.save(cache_path)
+    # 用 numpy array 傳給 easyocr，避免 cv2 不支援 unicode 路徑（中文資料夾）的 bug
+    arr = np.array(source_img)
+    results = reader.readtext(arr)
     texts = [r[1] for r in results]
     output = "\n".join(texts)
     print(output)
