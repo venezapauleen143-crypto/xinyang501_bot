@@ -1077,7 +1077,7 @@ def find_unread_badges(monitor=None):
     result = []
     y = first_badge_y
 
-    while y < lh - 50:
+    while y < int(lh * 0.85):  # 上限 0.85*lh，避開右下角綠色 + 鈕（FAB）誤判為徽章
         # 檢查這個位置的像素是不是綠色
         # 掃描徽章 x 附近幾個像素，增加可靠性
         green_count = 0
