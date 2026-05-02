@@ -1199,7 +1199,7 @@ PROFILE_EDIT_OFFSETS = {
 ADD_FRIEND_BTN = {"l": 423, "t": 273, "r": 499, "b": 298}
 
 
-def rename_friend(regions, new_name, monitor=None):
+def rename_friend(regions, new_name, monitor=None, current_name=None):
     """
     把當前聊天對象的好友名稱改成 new_name（LINE17 → LINE18 流程）。
 
@@ -1214,12 +1214,14 @@ def rename_friend(regions, new_name, monitor=None):
     5. 三次點擊名字（line20 紅框偏移）→ 全選
     6. 輸入 new_name → 覆蓋原名
     7. 點擊儲存（line20 黃框偏移）→ 視窗切回小卡片
-    8. 點 X 關閉（line19 綠框偏移）
+    8. 點 X 關閉(line19 綠框偏移)
 
     參數：
         regions: locate_line_regions() 的返回值（需要 chat_title）
         new_name: 要改成的新名稱（通常是編號 = 電話後五碼）
         monitor: 螢幕編號
+        current_name: 客戶當前的 LINE 顯示名（從 chat_title OCR 來），用來在窄條 OCR 結果中比對驗證；
+                      比對成功 → 用 OCR 動態位置；比對失敗 → 走 PROFILE_CARD_OFFSETS 固定座標兜底
     """
     import pyautogui
     import pyperclip
@@ -1259,20 +1261,41 @@ def rename_friend(regions, new_name, monitor=None):
     card_ocr = ocr_scan_panel(card_img)
     _print(f"[rename] Step3: 名字區域 OCR 找到 {len(card_ocr)} 個文字")
 
-    # 窄條裡第一個文字就是名字
+    # 🛡️ 第一保險：把 OCR 結果跟客戶原名（current_name）比對；只有對到才採用 OCR 位置
+    # 防 4/29 簡化版踩過的坑：客戶有設個人簽名時，窄條會抓到「站在風口…」這種狀態訊息，誤認成名字
+    import zhconv  # 繁簡標準化（PaddleOCR 對繁體可能輸出簡體）
+    from difflib import SequenceMatcher
     name_item = None
-    if card_ocr:
-        name_item = card_ocr[0]
+    match_reason = ""
+    if card_ocr and current_name and current_name != "unknown":
+        norm_current = zhconv.convert(current_name, "zh-tw")
+        for item in card_ocr:
+            norm_text = zhconv.convert(item["text"], "zh-tw")
+            if not norm_text:
+                continue
+            ratio = SequenceMatcher(None, norm_current, norm_text).ratio()
+            if norm_current in norm_text or norm_text in norm_current or ratio > 0.6:
+                name_item = item
+                match_reason = f"比對 '{current_name}' → OCR '{item['text']}' (ratio={ratio:.2f})"
+                break
 
     if name_item:
+        # OCR 對到原名 → 用動態位置（更精準）
         name_x = card_left + name_item["x"] + name_item["w"] // 2
         name_y = card_top + 320 + name_item["y"] + name_item["h"] // 2  # 320 = 窄條起始偏移
-        _print(f"[rename] Step3: OCR 找到名字 '{name_item['text']}' at ({name_x}, {name_y})")
+        _print(f"[rename] Step3: {match_reason}，點擊 ({name_x}, {name_y})")
     else:
-        # OCR 找不到，用固定座標兜底
+        # 🛡️ 第二保險：固定座標兜底（PROFILE_CARD_OFFSETS 從 line19 參考圖實測）
         name_x = card_left + PROFILE_CARD_OFFSETS["name_x"]
         name_y = card_top + PROFILE_CARD_OFFSETS["name_y"]
-        _print(f"[rename] Step3: OCR 找不到名字，用固定座標 ({name_x}, {name_y})")
+        if not current_name or current_name == "unknown":
+            reason = "沒給 current_name 無法比對"
+        elif not card_ocr:
+            reason = "窄條 OCR 沒結果"
+        else:
+            ocr_texts = [it["text"] for it in card_ocr]
+            reason = f"OCR={ocr_texts} 都比對不到 '{current_name}'"
+        _print(f"[rename] Step3: {reason}，用固定座標兜底 ({name_x}, {name_y})")
 
     pyautogui.click(name_x, name_y)
     time.sleep(1.5)
@@ -1698,6 +1721,7 @@ def search_friend_and_scan(regions, friend_name, monitor=None):
     import pyautogui
     import pyperclip
     from difflib import SequenceMatcher
+    import zhconv  # 繁簡標準化（PaddleOCR PP-OCRv5 對繁體有時會輸出簡體，例如「溫」→「温」，比對前先統一才能對到）
 
     # Step 1: 點搜尋欄 → 輸入好友名稱
     # ⚠️ 不能用 press("delete") 清空（會在 LINE 搜尋框留下 "." 字元，造成搜尋變 ".溫妮" 找不到）
@@ -1737,20 +1761,23 @@ def search_friend_and_scan(regions, friend_name, monitor=None):
     ocr_items = ocr_scan_panel(panel_crop)
 
     # Step 4: 從搜尋欄下方找好友名（line7.png 黑框項目）
+    # 把搜尋字串先標準化成繁體（zh-tw），OCR 結果在迴圈裡也標準化，避免 PaddleOCR 把繁體輸出成簡體導致比對失敗
+    norm_friend = zhconv.convert(friend_name, "zh-tw")
     for item in ocr_items:
         if item["y"] < skip_y_in_panel:
             continue  # 跳過搜尋欄裡的文字
         if "好友" in item["text"] and len(item["text"]) < 6:
             continue  # 跳過「好友 1」分類標題
-        ratio = SequenceMatcher(None, friend_name, item["text"]).ratio()
-        if friend_name in item["text"] or item["text"] in friend_name or ratio > 0.6:
+        norm_text = zhconv.convert(item["text"], "zh-tw")
+        ratio = SequenceMatcher(None, norm_friend, norm_text).ratio()
+        if norm_friend in norm_text or norm_text in norm_friend or ratio > 0.6:
             # 計算螢幕絕對座標（點擊 panel 中間 x，好友項目 y + 偏移）
             abs_x = int(mon["left"] + (il + lp_il + pw // 2) * (mon["width"] / full_img.size[0]))
             abs_y = int(mon["top"] + (it + lp_it + item["y"] + 25) * (mon["height"] / full_img.size[1]))
-            _print(f"[line_locate] 搜尋結果找到: {item['text']} (y={item['y']}), 螢幕座標=({abs_x}, {abs_y})")
+            _print(f"[line_locate] 搜尋結果找到: {item['text']} → norm={norm_text!r} (y={item['y']}), 螢幕座標=({abs_x}, {abs_y})")
             return {"name": item["text"], "center": (abs_x, abs_y)}
 
-    _print(f"[line_locate] OCR 找不到 {friend_name}")
+    _print(f"[line_locate] OCR 找不到 {friend_name}（標準化後={norm_friend!r}）")
     return None
 
 

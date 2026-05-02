@@ -419,9 +419,11 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                 time.sleep(3)
 
             # === Step 5: rename_friend（把 LINE 名稱改成 日期+編號）===
+            # 把客戶當前 LINE 顯示名（name，從 chat_title OCR 抓到）一起傳進去
+            # 讓 rename_friend 的窄條 OCR 結果能跟原名比對驗證，避免誤點到狀態訊息（雙重保險）
             rename_name = f"{customer_id} {datetime.now().strftime('%m-%d')}"
             regions = locate_line_regions(monitor)
-            rename_friend(regions, rename_name, monitor)
+            rename_friend(regions, rename_name, monitor, current_name=name)
             print(f"[Customer] Step5: 已改名為 {rename_name}", flush=True)
             time.sleep(1)
 
