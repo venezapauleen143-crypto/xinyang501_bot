@@ -82,7 +82,7 @@ MSG_LOG = Path(__file__).parent / "messages.log"
 
 def log_message(direction: str, sender: str, chat_id: int, text: str):
     """寫入訊息日誌供終端機同步使用"""
-    ts = dt.dt.datetime.now().strftime("%H:%M:%S")
+    ts = dt.datetime.now().strftime("%H:%M:%S")
     line = f"[{ts}] {direction} [{chat_id}] {sender}: {text}\n"
     with open(MSG_LOG, "a", encoding="utf-8") as f:
         f.write(line)
@@ -10491,7 +10491,7 @@ def _tg_log(msg):
     """寫 log 到檔案"""
     try:
         with open(_TG_AUTO_LOG, "a", encoding="utf-8") as f:
-            f.write(f"[{dt.dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+            f.write(f"[{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except Exception:
         pass
 
@@ -10525,7 +10525,7 @@ def execute_tg_auto_reply(action: str = "start", duration_minutes: float = 30, s
     if stop_time:
         end_str = stop_time
     else:
-        end_dt = dt.dt.datetime.now() + dt.timedelta(minutes=duration_minutes)
+        end_dt = dt.datetime.now() + dt.timedelta(minutes=duration_minutes)
         end_str = end_dt.strftime("%H:%M")
 
     # 必須有好友名稱
@@ -10709,7 +10709,7 @@ def execute_reminder(time_str, message):
             t.sleep(int(time_str))
         else:
             import datetime as dt
-            now = dt.dt.datetime.now()
+            now = dt.datetime.now()
             target = dt.datetime.strptime(time_str, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
             if target < now: target = target.replace(day=now.day+1)
             t.sleep((target-now).total_seconds())
@@ -10728,7 +10728,7 @@ def execute_webpage_shot(action, url, selector="body", interval=60.0, duration=3
     try:
         if action == "screenshot":
             from playwright.sync_api import sync_playwright
-            out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webpage_{dt.dt.datetime.now().strftime('%H%M%S')}.png")
+            out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webpage_{dt.datetime.now().strftime('%H%M%S')}.png")
             with sync_playwright() as p:
                 browser = p.chromium.launch()
                 page = browser.new_page(viewport={"width": 1280, "height": 800})
@@ -10751,7 +10751,7 @@ def execute_webpage_shot(action, url, selector="body", interval=60.0, duration=3
                 t.sleep(interval)
                 new_hash, snippet = _fetch()
                 if new_hash != last_hash:
-                    changes.append(f"[{dt.dt.datetime.now().strftime('%H:%M:%S')}] {snippet}")
+                    changes.append(f"[{dt.datetime.now().strftime('%H:%M:%S')}] {snippet}")
                     last_hash = new_hash
             return f"監控結束，共 {len(changes)} 次變化\n" + "\n".join(changes[:5])
     except Exception as e:
@@ -11113,7 +11113,7 @@ def execute_tts_advanced(action, text="", voice="zh-CN-YunxiNeural"):
     try:
         import edge_tts, asyncio
         if action == "speak":
-            out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"tts_{dt.dt.datetime.now().strftime('%H%M%S')}.mp3")
+            out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"tts_{dt.datetime.now().strftime('%H%M%S')}.mp3")
             _clean = clean_for_tts(text)
             async def _gen():
                 comm = edge_tts.Communicate(_clean, voice, rate="-5%", pitch="-5Hz")
@@ -11136,7 +11136,7 @@ def execute_todo(action, task="", todo_id=0):
         conn.execute("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT, done INTEGER DEFAULT 0, created TEXT)")
         conn.commit()
         if action == "add":
-            conn.execute("INSERT INTO todos (task,created) VALUES (?,?)", (task, dt.dt.datetime.now().strftime("%Y-%m-%d %H:%M")))
+            conn.execute("INSERT INTO todos (task,created) VALUES (?,?)", (task, dt.datetime.now().strftime("%Y-%m-%d %H:%M")))
             conn.commit(); conn.close(); return f"✅ 已新增：{task}"
         elif action == "list":
             rows = conn.execute("SELECT id,task,done,created FROM todos ORDER BY done,id").fetchall()
@@ -11164,7 +11164,7 @@ def execute_sysres_chart(duration=10):
         for _ in range(duration):
             cpu_vals.append(psutil.cpu_percent(interval=1))
             mem_vals.append(psutil.virtual_memory().percent)
-        out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"sysres_{dt.dt.datetime.now().strftime('%H%M%S')}.png")
+        out = str(Path("C:/Users/blue_/Desktop/測試檔案") / f"sysres_{dt.datetime.now().strftime('%H%M%S')}.png")
         fig, ax = plt.subplots()
         ax.plot(range(1,duration+1), cpu_vals, label="CPU %", color="blue")
         ax.plot(range(1,duration+1), mem_vals, label="RAM %", color="orange")
@@ -11220,7 +11220,7 @@ def execute_clipboard_image(action, path=""):
             win32clipboard.OpenClipboard()
             try: data = win32clipboard.GetClipboardData(win32clipboard.CF_DIB)
             finally: win32clipboard.CloseClipboard()
-            out = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"clipboard_{dt.dt.datetime.now().strftime('%H%M%S')}.png")
+            out = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"clipboard_{dt.datetime.now().strftime('%H%M%S')}.png")
             Image.open(_io.BytesIO(data)).save(out)
             return f"✅ 剪貼簿圖片已存：{out}"
         elif action == "set":
@@ -11514,7 +11514,7 @@ def execute_automation(action, condition_type="", condition_value="", command=""
                 elif condition_type == "process_running":
                     triggered = any(condition_value.lower() in p.name().lower() for p in psutil.process_iter())
                 elif condition_type == "time_is":
-                    triggered = dt.dt.datetime.now().strftime("%H:%M") == condition_value
+                    triggered = dt.datetime.now().strftime("%H:%M") == condition_value
                 if triggered:
                     subprocess.Popen(command, shell=True)
                     return f"✅ 條件達成（{condition_type}={condition_value}），已執行：{command}"
@@ -11574,7 +11574,7 @@ def execute_automation(action, condition_type="", condition_value="", command=""
             w_, h_ = x2-x_, y2-y_
             import pyautogui
             screenshot = pyautogui.screenshot(region=(x_, y_, w_, h_))
-            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"window_{keyword}_{dt.dt.datetime.now().strftime('%H%M%S')}.png")
+            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"window_{keyword}_{dt.datetime.now().strftime('%H%M%S')}.png")
             screenshot.save(out)
             return f"✅ 視窗截圖：{out}"
     except Exception as e:
@@ -12253,7 +12253,7 @@ def execute_adb(action, x=0, y=0, x2=0, y2=0, text="", path="", remote="", packa
             r = subprocess.run(["adb", "devices", "-l"], capture_output=True, text=True)
             return f"📱 ADB 裝置：\n{r.stdout.strip()}"
         elif action == "screenshot":
-            out = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"adb_{dt.dt.datetime.now().strftime('%H%M%S')}.png")
+            out = path or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"adb_{dt.datetime.now().strftime('%H%M%S')}.png")
             subprocess.run(prefix + ["shell", "screencap", "-p", "/sdcard/screen.png"], capture_output=True)
             subprocess.run(prefix + ["pull", "/sdcard/screen.png", out], capture_output=True)
             return f"✅ 手機截圖已存：{out}"
@@ -12451,7 +12451,7 @@ def execute_hyperv(action, name="", snapshot=""):
             ps(f"Resume-VM -Name '{name}'")
             return f"✅ 已繼續：{name}"
         elif action == "snapshot":
-            sname = snapshot or dt.dt.datetime.now().strftime("snap_%Y%m%d_%H%M%S")
+            sname = snapshot or dt.datetime.now().strftime("snap_%Y%m%d_%H%M%S")
             out, rc = ps(f"Checkpoint-VM -Name '{name}' -SnapshotName '{sname}'")
             return f"✅ 快照已建立：{sname}" if rc == 0 else f"❌ 失敗：{out}"
         elif action == "restore":
@@ -12982,14 +12982,14 @@ def execute_webcam(action, duration=5.0, output="", device=0):
             cap.release()
             if not ret:
                 return "❌ 無法拍攝"
-            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{dt.dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
             cv2.imwrite(out, frame)
             return f"✅ 已拍照：{out}"
         elif action == "video":
             cap = cv2.VideoCapture(int(device))
             if not cap.isOpened():
                 return f"❌ 無法開啟攝影機 {device}"
-            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{dt.dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
+            out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.avi")
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             writer = cv2.VideoWriter(out, cv2.VideoWriter_fourcc(*"XVID"), 20, (w,h))
@@ -13269,7 +13269,7 @@ def execute_global_hotkey(hotkey, command, duration=60.0):
         import keyboard as kb, time as t
         triggered = []
         def on_trigger():
-            triggered.append(dt.dt.datetime.now().strftime("%H:%M:%S"))
+            triggered.append(dt.datetime.now().strftime("%H:%M:%S"))
             subprocess.run(command, shell=True)
         kb.add_hotkey(hotkey, on_trigger)
         t.sleep(duration)
@@ -13318,7 +13318,7 @@ def execute_report(title, data_json, output=""):
     try:
         import jinja2, json
         data = json.loads(data_json)
-        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"report_{dt.dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
+        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"report_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
         tmpl = jinja2.Template("""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>body{font-family:sans-serif;margin:40px}table{border-collapse:collapse;width:100%}
 th,td{border:1px solid #ccc;padding:8px}th{background:#4472C4;color:white}
@@ -13330,7 +13330,7 @@ tr:nth-child(even){background:#f2f2f2}h1{color:#4472C4}</style></head>
 {% for row in rows %}<tr>{% for v in row.values() %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</table>
 {% else %}<ul>{% for i in rows %}<li>{{ i }}</li>{% endfor %}</ul>{% endif %}
 {% else %}<p>{{ rows }}</p>{% endif %}{% endfor %}</body></html>""")
-        Path(out_path).write_text(tmpl.render(title=title, data=data, time=dt.dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")), encoding="utf-8")
+        Path(out_path).write_text(tmpl.render(title=title, data=data, time=dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")), encoding="utf-8")
         return f"✅ 報告已生成：{out_path}"
     except Exception as e:
         return f"❌ 報告生成失敗：{e}"
@@ -13459,7 +13459,7 @@ def execute_face_detect(image_path="", output=""):
         faces = cascade.detectMultiScale(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 1.1, 4)
         for (x, y, w, h) in faces:
             cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
-        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"faces_{dt.dt.datetime.now().strftime('%H%M%S')}.jpg")
+        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"faces_{dt.datetime.now().strftime('%H%M%S')}.jpg")
         cv2.imwrite(out_path, img)
         return f"✅ 偵測到 {len(faces)} 張人臉：{out_path}"
     except Exception as e:
@@ -13517,7 +13517,7 @@ def execute_screenshot_compare(img1_path="", img2_path="", output=""):
         _, thresh = cv2.threshold(cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY), 30, 255, cv2.THRESH_BINARY)
         contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         result = img2[:h,:w].copy(); cv2.drawContours(result, contours, -1, (0, 0, 255), 2)
-        out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"diff_{dt.dt.datetime.now().strftime('%H%M%S')}.png")
+        out = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"diff_{dt.datetime.now().strftime('%H%M%S')}.png")
         cv2.imwrite(out, result)
         pct = cv2.countNonZero(thresh) / (h * w) * 100
         return f"差異：{pct:.2f}%，標記圖：{out}"
@@ -13529,7 +13529,7 @@ def execute_screen_record(action, duration=10.0, output=""):
     try:
         if action == "record":
             import mss, cv2, numpy as np, time as t
-            out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"record_{dt.dt.datetime.now().strftime('%H%M%S')}.mp4")
+            out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"record_{dt.datetime.now().strftime('%H%M%S')}.mp4")
             with mss.mss() as sct:
                 mon = sct.monitors[1]
                 w, h = mon["width"], mon["height"]
@@ -13543,7 +13543,7 @@ def execute_screen_record(action, duration=10.0, output=""):
             return f"✅ 錄影完成：{out_path}"
         elif action == "webcam":
             import cv2
-            out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{dt.dt.datetime.now().strftime('%H%M%S')}.jpg")
+            out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"webcam_{dt.datetime.now().strftime('%H%M%S')}.jpg")
             cap = cv2.VideoCapture(0)
             ret, frame = cap.read()
             cap.release()
@@ -13569,7 +13569,7 @@ def execute_chart(chart_type, data_json, title="", output=""):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt, json
         data = json.loads(data_json)
-        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"chart_{dt.dt.datetime.now().strftime('%H%M%S')}.png")
+        out_path = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"chart_{dt.datetime.now().strftime('%H%M%S')}.png")
         fig, ax = plt.subplots()
         if chart_type == "line":
             for label, values in data.items():
@@ -13787,7 +13787,7 @@ def execute_disk_backup(action, src="", dest=""):
                 except Exception: pass
             return f"✅ 已清理 {count} 個暫存項目"
         elif action == "backup":
-            out = Path(dest) / f"{Path(src).name}_{dt.dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            out = Path(dest) / f"{Path(src).name}_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
             shutil.make_archive(str(out), "zip", src)
             return f"✅ 備份完成：{out}.zip"
     except Exception as e:
@@ -14049,7 +14049,7 @@ def execute_video_gen(mode: str = "slideshow", output: str = "", **kwargs) -> st
     ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
     w, h = kwargs.get("size", (1280, 720))
     fps  = kwargs.get("fps", 24)
-    out  = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"video_{dt.dt.datetime.now().strftime('%H%M%S')}.mp4")
+    out  = output or str(Path("C:/Users/blue_/Desktop/測試檔案") / f"video_{dt.datetime.now().strftime('%H%M%S')}.mp4")
 
     def _write_frames(frames_iter, out_path, vid_fps, width, height):
         """ffmpeg pipe 寫 mp4，失敗時 raise"""
@@ -14513,7 +14513,7 @@ def execute_qr_code(action, content="", path="", duration=30.0):
             while t.time() - start < duration:
                 cur = pyperclip.paste()
                 if cur != last:
-                    changes.append(f"[{dt.dt.datetime.now().strftime('%H:%M:%S')}] {cur[:100]}")
+                    changes.append(f"[{dt.datetime.now().strftime('%H:%M:%S')}] {cur[:100]}")
                     last = cur
                 t.sleep(0.5)
             return "\n".join(changes) if changes else f"監控 {duration} 秒內無剪貼簿變化"
@@ -19839,7 +19839,7 @@ async def memories(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
     logging.info("【排程觸發】goodmorning 開始執行")
     with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
-        f.write(f"[{dt.dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] goodmorning 觸發\n")
+        f.write(f"[{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] goodmorning 觸發\n")
     group_id = int(os.getenv("GROUP_CHAT_ID"))
     import asyncio
     loop = asyncio.get_running_loop()
@@ -19896,7 +19896,7 @@ async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
                 "1. 一段鼓勵員工的早安問候（30-60字），要能激勵他們在工作上更努力、更有幹勁，讓人看了充滿動力想好好表現。不要太正式或說教，用自然的台灣口語，像老闆真心鼓勵夥伴的感覺。\n"
                 "2. 今日國際重要新聞：從【國際新聞標題】中挑出 3 則最重要的，用一句話簡述每則。\n"
                 "3. 今日台灣重要新聞：從【台灣新聞標題】中挑出 3 則最重要的（涵蓋生活、財經、天氣等不同面向），用一句話簡述每則。\n"
-                f"4. 長輩早安語（30-60字）：今天是{dt.dt.datetime.now().strftime('%Y年%m月%d日')}，現在是{'春天' if dt.dt.datetime.now().month in (3,4,5) else '夏天' if dt.dt.datetime.now().month in (6,7,8) else '秋天' if dt.dt.datetime.now().month in (9,10,11) else '冬天'}。用真實女孩子會打字的方式寫一段早安祝福，對象是群組裡的大家。要像真人女生在手機上打的訊息，不是AI生成的文章。規則：不要用emoji、不要用破折號（——）、不要用疊字（舒舒服服、開開心心、平平安安）、不要用分號、不要排比句、不要文藝腔。用正常的標點符號（逗號句號問號驚嘆號就好）。要口語自然，像真的在聊天打字。內容方向可以是：關心天氣穿著、健康提醒、生活小提醒、感恩的事、鼓勵的話，每天不一樣。季節要正確，不要寫錯季節的內容。\n"
+                f"4. 長輩早安語（30-60字）：今天是{dt.datetime.now().strftime('%Y年%m月%d日')}，現在是{'春天' if dt.datetime.now().month in (3,4,5) else '夏天' if dt.datetime.now().month in (6,7,8) else '秋天' if dt.datetime.now().month in (9,10,11) else '冬天'}。用真實女孩子會打字的方式寫一段早安祝福，對象是群組裡的大家。要像真人女生在手機上打的訊息，不是AI生成的文章。規則：不要用emoji、不要用破折號（——）、不要用疊字（舒舒服服、開開心心、平平安安）、不要用分號、不要排比句、不要文藝腔。用正常的標點符號（逗號句號問號驚嘆號就好）。要口語自然，像真的在聊天打字。內容方向可以是：關心天氣穿著、健康提醒、生活小提醒、感恩的事、鼓勵的話，每天不一樣。季節要正確，不要寫錯季節的內容。\n"
                 "整體風格溫馨但不做作，像一個可靠的夥伴跟大家說早安。每段完整寫完，不要被截斷。"
             ),
             messages=[{"role": "user", "content": f"生成今天的早安訊息。\n\n今日新聞標題：\n{news_raw}"}]
@@ -19911,7 +19911,7 @@ async def goodmorning(context: ContextTypes.DEFAULT_TYPE):
 async def goodnight(context: ContextTypes.DEFAULT_TYPE):
     logging.info("【排程觸發】goodnight 開始執行")
     with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
-        f.write(f"[{dt.dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] goodnight 觸發\n")
+        f.write(f"[{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] goodnight 觸發\n")
     group_id = int(os.getenv("GROUP_CHAT_ID"))
     import asyncio
     loop = asyncio.get_running_loop()
@@ -19934,13 +19934,13 @@ async def elder_goodnight(context: ContextTypes.DEFAULT_TYPE):
     """每天 22:15 長輩晚安問候"""
     logging.info("【排程觸發】elder_goodnight 開始執行")
     with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
-        f.write(f"[{dt.dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] elder_goodnight 觸發\n")
+        f.write(f"[{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] elder_goodnight 觸發\n")
     group_id = int(os.getenv("GROUP_CHAT_ID"))
     import asyncio
     loop = asyncio.get_running_loop()
     def generate_elder_goodnight():
         import random
-        today = dt.dt.datetime.now()
+        today = dt.datetime.now()
         date_str = today.strftime("%Y年%m月%d日")
         month = today.month
         if month in (3, 4, 5):
@@ -19996,7 +19996,7 @@ async def auto_compile_knowledge(context: ContextTypes.DEFAULT_TYPE):
     """每天 22:45 自動：讀今天的 Claude Code session → 存 daily log → 編譯知識庫"""
     logging.info("【排程觸發】auto_compile_knowledge 開始執行")
     with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
-        f.write(f"[{dt.dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] auto_compile_knowledge 觸發\n")
+        f.write(f"[{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] auto_compile_knowledge 觸發\n")
     import asyncio
     loop = asyncio.get_running_loop()
 
@@ -20066,12 +20066,12 @@ async def auto_compile_knowledge(context: ContextTypes.DEFAULT_TYPE):
                         existing = daily_file.read_text(encoding="utf-8")
                         if "auto_compile" not in existing:
                             daily_file.write_text(
-                                existing + f"\n## Auto Compile ({dt.dt.datetime.now().strftime('%H:%M')})\n\n" + new_content,
+                                existing + f"\n## Auto Compile ({dt.datetime.now().strftime('%H:%M')})\n\n" + new_content,
                                 encoding="utf-8"
                             )
                     else:
                         daily_file.write_text(
-                            f"# Daily Log: {today_str}\n\n## Auto Compile ({dt.dt.datetime.now().strftime('%H:%M')})\n\n" + new_content,
+                            f"# Daily Log: {today_str}\n\n## Auto Compile ({dt.datetime.now().strftime('%H:%M')})\n\n" + new_content,
                             encoding="utf-8"
                         )
                     results.append(f"extracted {len(summaries)} sessions to {daily_file.name}")
@@ -20224,7 +20224,7 @@ async def daily_pc_report(context: ContextTypes.DEFAULT_TYPE):
     """每天晚上 10:00 台灣時間：匯報今天電腦做了什麼"""
     logging.info("【排程觸發】daily_pc_report 開始執行")
     with open("C:/Users/blue_/claude-telegram-bot/schedule.log", "a", encoding="utf-8") as f:
-        f.write(f"[{dt.dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] daily_pc_report 觸發\n")
+        f.write(f"[{dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] daily_pc_report 觸發\n")
     import asyncio
     loop = asyncio.get_running_loop()
 

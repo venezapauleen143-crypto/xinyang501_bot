@@ -42,6 +42,24 @@ from pathlib import Path
 import anthropic
 
 # ============================================================
+# 螢幕偵測（避免寫死 monitor 編號，依 CLAUDE.md「monitor=None 自動偵測」規則）
+# ============================================================
+def _resolve_monitor(regions, monitor):
+    """如果 monitor=None，從 regions['tg_window'] 推算 Telegram 在哪個螢幕。"""
+    if monitor is not None:
+        return monitor
+    if regions and "tg_window" in regions:
+        tg = regions["tg_window"]
+        cx = (tg["left"] + tg["right"]) // 2
+        cy = (tg["top"] + tg["bottom"]) // 2
+        with mss.mss() as sct:
+            for i, m in enumerate(sct.monitors[1:], 1):
+                if m["left"] <= cx < m["left"] + m["width"] and m["top"] <= cy < m["top"] + m["height"]:
+                    return i
+    return 1  # fallback 主螢幕
+
+
+# ============================================================
 # 日期處理工具
 # ============================================================
 def get_date_context():
@@ -202,7 +220,7 @@ POLL_INTERVAL = 6
 # ============================================================
 # Step 1: 定位 Telegram UI
 # ============================================================
-def locate_all(monitor=2):
+def locate_all(monitor=None):
     """用 tg_locate 模組定位所有 UI 區域"""
     try:
         from tg_locate import locate_telegram_regions
@@ -215,7 +233,7 @@ def locate_all(monitor=2):
 # ============================================================
 # Step 2: 搜尋好友
 # ============================================================
-def search_contact(regions, contact_name, monitor=2):
+def search_contact(regions, contact_name, monitor=None):
     """在搜尋欄輸入好友名稱"""
     sx, sy = regions["search_bar"]["center"]
     print(f"[Step 2] 點擊搜尋欄 ({sx}, {sy})", flush=True)
@@ -238,7 +256,7 @@ def search_contact(regions, contact_name, monitor=2):
 # ============================================================
 # Step 3: 從搜尋結果點選好友
 # ============================================================
-def click_contact(regions, contact_name, monitor=2):
+def click_contact(regions, contact_name, monitor=None):
     """Vision 找到搜尋結果中的好友並點擊"""
     # 截圖聯絡人清單區域
     cl = regions["contact_list"]
@@ -315,7 +333,7 @@ def click_contact(regions, contact_name, monitor=2):
 # ============================================================
 # Step 4: 確認好友名稱
 # ============================================================
-def verify_friend(target_name, monitor=2, regions=None):
+def verify_friend(target_name, monitor=None, regions=None):
     """確認好友名稱框裡的名字是不是目標好友（用傳入的 regions，不重新定位）"""
     if regions is None:
         regions = locate_all(monitor)
@@ -368,7 +386,7 @@ def verify_friend(target_name, monitor=2, regions=None):
 # ============================================================
 # Step 5-7: 監控對話 + 自動回覆
 # ============================================================
-def grab_chat(regions, monitor=2):
+def grab_chat(regions, monitor=None):
     """截取對話區"""
     ca = regions["chat_area"]
     with mss.mss() as sct:
@@ -780,7 +798,7 @@ def send_reply(msg, regions):
     time.sleep(1)
 
 
-def monitor_and_reply(regions, stop_time, monitor=2):
+def monitor_and_reply(regions, stop_time, monitor=None):
     """
     OCR 文字追蹤監控。
     1. 截圖 → OCR 提取文字 + 像素顏色判斷 sender
@@ -938,7 +956,7 @@ def monitor_and_reply(regions, stop_time, monitor=2):
 # ============================================================
 # 主流程
 # ============================================================
-def main(contact_name, stop_time, monitor=2):
+def main(contact_name, stop_time, monitor=None):
     import threading
 
     # 啟動前殺殘留進程（防 VRAM 雙倍佔用）
@@ -971,6 +989,7 @@ def main(contact_name, stop_time, monitor=2):
     # Step 1: 定位
     print("\n[Step 1] 定位 Telegram UI...", flush=True)
     regions = locate_all(monitor)
+    monitor = _resolve_monitor(regions, monitor)  # auto-detect 後固定成 int 給後續函數用
     if should_stop():
         return False
 
