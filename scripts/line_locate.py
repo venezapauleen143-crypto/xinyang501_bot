@@ -202,8 +202,25 @@ def _get_ocr_engine():
 # ============================================================
 # 視窗偵測
 # ============================================================
-def find_line_window():
-    """用 win32gui 找到 LINE 主視窗"""
+# 當前要操作的 Sandboxie box 名稱（多開 LINE 用，由 orchestrator 設定）；None = 抓最大的 LINE
+_active_box = None
+
+
+def set_active_box(box):
+    """設定當前要操作的 Sandboxie box 名稱（如 'blue_1', 'blue_2'）。
+    orchestrator 切換 LINE 前呼叫；之後 find_line_window/screenshot_line 都會只認這個 box 的視窗。
+    """
+    global _active_box
+    _active_box = box
+
+
+def find_line_window(box=None):
+    """用 win32gui 找到 LINE 主視窗。
+    box=None 時用模組層級的 _active_box；都沒指定才抓最大的 LINE 視窗（單開模式）。
+    """
+    if box is None:
+        box = _active_box
+
     results = []
     def callback(hwnd, _):
         if win32gui.IsWindowVisible(hwnd):
@@ -214,6 +231,9 @@ def find_line_window():
                 h = rect[3] - rect[1]
                 if w > 300 and h > 300:
                     cls = win32gui.GetClassName(hwnd)
+                    # 多開模式：指定 box 時，只接受該 box 的視窗
+                    if box and f"Sandbox:{box}:" not in cls:
+                        return
                     results.append((hwnd, title, cls, rect))
     win32gui.EnumWindows(callback, results)
     if not results:

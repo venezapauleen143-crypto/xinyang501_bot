@@ -547,53 +547,72 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
     print(f"\n[Monitor] 開始監控未讀訊息...", flush=True)
     print(f"[Monitor] 停止方式：touch {STOP_FILE}", flush=True)
 
+    # 多開 LINE 設定：要輪流操作的 Sandboxie box 列表（Stage 1 序列化執行）
+    # 只列一個 box = 單開模式（向下相容）；多個 box = 序列輪流
+    from line_locate import set_active_box, find_line_window
+    import win32gui as _w32g
+    BOXES = ["blue_1", "blue_2"]  # blue_1=新LINE  blue_2=織夢
+
     while is_before_stop_time(stop_time):
         if should_stop():
             break
 
-        try:
-            # Step 1: 切到聊天頁，用定位腳本偵測綠色未讀標記
-            regions, unread_list = find_unread_conversations(monitor)
+        for box in BOXES:
+            if should_stop():
+                break
+            try:
+                # 切到指定 box 的 LINE 視窗
+                set_active_box(box)
+                line = find_line_window()
+                if not line:
+                    print(f"[Multi] 找不到 box={box} 的 LINE 視窗，跳過", flush=True)
+                    continue
+                hwnd = line[0]
+                try:
+                    _w32g.SetForegroundWindow(hwnd)
+                except Exception as e:
+                    print(f"[Multi] SetForegroundWindow {box} 失敗: {e}", flush=True)
+                time.sleep(1.0)
+                print(f"\n[Multi] === 開始處理 box={box} (hwnd={hwnd}) ===", flush=True)
 
-            if not unread_list:
-                # 沒有未讀，等待
-                for _ in range(POLL_INTERVAL):
+                # Step 1: 切到聊天頁，用定位腳本偵測綠色未讀標記
+                regions, unread_list = find_unread_conversations(monitor)
+
+                if not unread_list:
+                    print(f"[Multi] box={box} 無未讀，跳下一個", flush=True)
+                    continue
+
+                print(f"[Multi] box={box} 偵測到 {len(unread_list)} 個未讀對話", flush=True)
+
+                # Step 2: 逐一處理每個未讀對話
+                for conv in unread_list:
                     if should_stop():
                         break
-                    time.sleep(1)
-                continue
 
-            print(f"\n[Monitor] 偵測到 {len(unread_list)} 個未讀對話", flush=True)
+                    regions = handle_one_customer(
+                        conv, regions, system_prompt, sop, all_histories, monitor
+                    )
 
-            # Step 2: 逐一處理每個未讀對話
-            for conv in unread_list:
-                if should_stop():
-                    break
+                    if should_stop():
+                        break
 
-                # 處理這個客戶
-                regions = handle_one_customer(
-                    conv, regions, system_prompt, sop, all_histories, monitor
-                )
+                    # 按 Esc 退出聊天室（不標已讀，對方再回覆會重新出現綠色徽章）
+                    pyautogui.press("escape")
+                    time.sleep(0.5)
 
-                if should_stop():
-                    break
+                print(f"[Multi] box={box} 本輪處理完畢", flush=True)
 
-                # 按 Esc 退出聊天室（不標已讀，對方再回覆會重新出現綠色徽章）
-                pyautogui.press("escape")
-                time.sleep(0.5)
+            except Exception as e:
+                print(f"[ERR] box={box}: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+                time.sleep(2)
 
-            # 全部處理完，等待新的未讀
-            print(f"[Monitor] 本輪處理完畢，等待新訊息...", flush=True)
-            for _ in range(POLL_INTERVAL):
-                if should_stop():
-                    break
-                time.sleep(1)
-
-        except Exception as e:
-            print(f"[ERR] {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-            time.sleep(5)
+        # 全部 box 跑完一輪，等待後再從頭
+        for _ in range(POLL_INTERVAL):
+            if should_stop():
+                break
+            time.sleep(1)
 
     reason = "收到停止信號" if _should_stop else "到達結束時間"
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 監控結束（{reason}）", flush=True)
