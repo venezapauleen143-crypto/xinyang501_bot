@@ -26,6 +26,7 @@
 
   "rules": {
     "id_generation": "電話號碼後五碼",
+    "id_keyword": "編號",
     "forward_to": "溫妮",
     "never_fabricate_address": true,
     "never_promise_exact_date": true,

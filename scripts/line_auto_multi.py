@@ -59,8 +59,8 @@ EXCEL_PATH = r"C:\Users\blue_\Desktop\客戶資料.xlsx"
 # ============================================================
 import openpyxl
 
-def write_customer_to_excel(name, birthday, phone, area, line_name):
-    """寫入客戶資料到 Excel（編號先空），回傳行號"""
+def write_customer_to_excel(name, birthday, phone, area, line_name, ad_type=""):
+    """寫入客戶資料到 Excel（編號先空），回傳行號。ad_type=廣告種類（SOP 名稱，區分客戶從哪個帳號來）"""
     wb = openpyxl.load_workbook(EXCEL_PATH)
     ws = wb.active
     row_num = ws.max_row + 1
@@ -71,6 +71,7 @@ def write_customer_to_excel(name, birthday, phone, area, line_name):
     ws.cell(row=row_num, column=5, value=area)          # 地區
     ws.cell(row=row_num, column=6, value=line_name)     # LINE名稱
     ws.cell(row=row_num, column=7, value=datetime.now().strftime("%Y-%m-%d"))  # 報名日期
+    ws.cell(row=row_num, column=8, value=ad_type)       # 廣告種類（SOP 名稱）
     wb.save(EXCEL_PATH)
     return row_num
 
@@ -326,8 +327,9 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
             if part and not (part.startswith("{") and part.endswith("}")):
                 history.append({"text": part, "sender": "me", "y": 0})
 
-        # 偵測到編號 → 提取資料存Excel → 改名 → 分享溫妮 → 讀Excel發友資群
-        if "編號" in reply:
+        # 偵測到編號（或 SOP 自訂的 id_keyword，如 Resin 用「學號」）→ 提取資料存Excel → 改名 → 分享溫妮 → 讀Excel發友資群
+        id_kw = sop.get("rules", {}).get("id_keyword", "編號")
+        if id_kw in reply:
             from line_locate import share_contact_card, switch_page, locate_line_regions, rename_friend, CHAT_PAGE_TEMPLATE
 
             # === Step 2: Claude API 結構化輸出提取報名資料 ===
@@ -384,6 +386,7 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                         time.sleep(2)
 
             # === Step 3: 寫入 Excel（編號先空）===
+            ad_type = sop.get("name", "")  # 廣告種類 = 當前 SOP 名稱
             if extracted:
                 excel_row = write_customer_to_excel(
                     name=extracted.get("customer_name", ""),
@@ -391,14 +394,15 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
                     phone=extracted.get("phone", ""),
                     area=extracted.get("area", ""),
                     line_name=name,
+                    ad_type=ad_type,
                 )
-                print(f"[Customer] Step3: 已寫入 Excel 第{excel_row}行", flush=True)
+                print(f"[Customer] Step3: 已寫入 Excel 第{excel_row}行（廣告種類={ad_type}）", flush=True)
             else:
-                excel_row = write_customer_to_excel("", "", "", "", name)
-                print(f"[Customer] Step3: 提取失敗，寫入空資料到 Excel", flush=True)
+                excel_row = write_customer_to_excel("", "", "", "", name, ad_type=ad_type)
+                print(f"[Customer] Step3: 提取失敗，寫入空資料到 Excel（廣告種類={ad_type}）", flush=True)
 
-            # === Step 4: regex 抓編號 → 補寫 Excel ===
-            id_match = re.search(r"編號[：:]\s*\*{0,2}(\d{5})\*{0,2}", reply)
+            # === Step 4: regex 抓編號（用 SOP 自訂 keyword，如「編號」或「學號」）→ 補寫 Excel ===
+            id_match = re.search(rf"{id_kw}[：:]\s*\*{{0,2}}(\d{{5}})\*{{0,2}}", reply)
             customer_id = id_match.group(1) if id_match else None
             if customer_id:
                 update_customer_id(excel_row, customer_id)
@@ -516,10 +520,27 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
     print(f"SOP：{sop_path}", flush=True)
     print("=" * 50, flush=True)
 
-    # 載入 SOP
-    sop = load_sop(sop_path)
-    system_prompt = build_system_prompt(sop)
-    print(f"[Init] SOP: {sop['name']}（{len(sop['steps'])} 步驟）", flush=True)
+    # 多開 LINE 設定：每個 box 對應的 SOP 檔案路徑
+    BOX_SOP = {
+        "blue_1": "C:/Users/blue_/claude-telegram-bot/scripts/line_sop/Resin藝術學堂.json",
+        "blue_2": "C:/Users/blue_/claude-telegram-bot/scripts/line_sop/織夢小棧.json",
+    }
+
+    # 預載所有 box 的 SOP 跟 system_prompt（避免每輪迴圈重複載入）
+    box_sop_cache = {}      # box -> sop dict
+    box_prompt_cache = {}   # box -> system_prompt str
+    for _box, _sop_path in BOX_SOP.items():
+        try:
+            _sop = load_sop(_sop_path)
+            box_sop_cache[_box] = _sop
+            box_prompt_cache[_box] = build_system_prompt(_sop)
+            print(f"[Init] {_box} → SOP: {_sop['name']}（{len(_sop['steps'])} 步驟）", flush=True)
+        except Exception as e:
+            print(f"[Init] {_box} 載入 SOP 失敗: {e}", flush=True)
+
+    # 預設用第一個 box 的 SOP（給單開模式向下相容）
+    sop = next(iter(box_sop_cache.values()))
+    system_prompt = next(iter(box_prompt_cache.values()))
 
     # 置前 LINE
     line = find_line_window()
@@ -547,11 +568,10 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
     print(f"\n[Monitor] 開始監控未讀訊息...", flush=True)
     print(f"[Monitor] 停止方式：touch {STOP_FILE}", flush=True)
 
-    # 多開 LINE 設定：要輪流操作的 Sandboxie box 列表（Stage 1 序列化執行）
-    # 只列一個 box = 單開模式（向下相容）；多個 box = 序列輪流
+    # 多開 LINE 設定：BOXES 順序就是輪詢順序
     from line_locate import set_active_box, find_line_window
     import win32gui as _w32g
-    BOXES = ["blue_1", "blue_2"]  # blue_1=新LINE  blue_2=織夢
+    BOXES = list(BOX_SOP.keys())   # 從 BOX_SOP 讀順序
 
     while is_before_stop_time(stop_time):
         if should_stop():
@@ -561,8 +581,14 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
             if should_stop():
                 break
             try:
-                # 切到指定 box 的 LINE 視窗
+                # 切到指定 box 的 LINE 視窗 + 載入該 box 的 SOP
                 set_active_box(box)
+                box_sop = box_sop_cache.get(box)
+                box_prompt = box_prompt_cache.get(box)
+                if not box_sop or not box_prompt:
+                    print(f"[Multi] box={box} 沒設定 SOP，跳過", flush=True)
+                    continue
+
                 line = find_line_window()
                 if not line:
                     print(f"[Multi] 找不到 box={box} 的 LINE 視窗，跳過", flush=True)
@@ -573,7 +599,7 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
                 except Exception as e:
                     print(f"[Multi] SetForegroundWindow {box} 失敗: {e}", flush=True)
                 time.sleep(1.0)
-                print(f"\n[Multi] === 開始處理 box={box} (hwnd={hwnd}) ===", flush=True)
+                print(f"\n[Multi] === 開始處理 box={box} → {box_sop['name']} (hwnd={hwnd}) ===", flush=True)
 
                 # Step 1: 切到聊天頁，用定位腳本偵測綠色未讀標記
                 regions, unread_list = find_unread_conversations(monitor)
@@ -584,13 +610,13 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
 
                 print(f"[Multi] box={box} 偵測到 {len(unread_list)} 個未讀對話", flush=True)
 
-                # Step 2: 逐一處理每個未讀對話
+                # Step 2: 逐一處理每個未讀對話（用該 box 對應的 sop + system_prompt）
                 for conv in unread_list:
                     if should_stop():
                         break
 
                     regions = handle_one_customer(
-                        conv, regions, system_prompt, sop, all_histories, monitor
+                        conv, regions, box_prompt, box_sop, all_histories, monitor
                     )
 
                     if should_stop():
