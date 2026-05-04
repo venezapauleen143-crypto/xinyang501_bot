@@ -375,22 +375,27 @@ def is_only_sticker(new_them):
 
 
 def analyze_sticker(regions, monitor=None):
-    """截聊天區底部，用 Haiku 4.5 Vision 解讀貼圖含意。回傳 5 字內的情緒詞。"""
+    """截聊天區底部，用 Haiku 4.5 Vision 解讀貼圖含意。回傳分類詞。
+
+    截 500px 涵蓋更廣（避免聊天記錄少時漏抓貼圖），
+    prompt 強調「最下方那筆」避免誤判上方訊息，
+    fallback 處理 Vision 看不懂或長句子，預設「同意」推進 SOP。
+    """
     from line_locate import screenshot_chat_area
     import base64, io as _io
 
     try:
         chat_img = screenshot_chat_area(regions, monitor)
-        # 只看最近 200px（通常含最後一筆訊息）
+        # 截最後 500 px（涵蓋 4-6 筆訊息，確保最新貼圖一定包進來）
         h = chat_img.size[1]
-        bottom = chat_img.crop((0, max(0, h - 200), chat_img.size[0], h))
+        bottom = chat_img.crop((0, max(0, h - 500), chat_img.size[0], h))
 
         buf = _io.BytesIO()
         bottom.save(buf, format="PNG")
         img_b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
 
         r = client.messages.create(
-            model="claude-haiku-4-5",  # 簡單分類用 Haiku 最便宜（~NT$0.011/次）
+            model="claude-haiku-4-5",  # 簡單分類用 Haiku 最便宜
             max_tokens=80,
             messages=[{
                 "role": "user",
@@ -399,17 +404,30 @@ def analyze_sticker(regions, monitor=None):
                                                   "media_type": "image/png",
                                                   "data": img_b64}},
                     {"type": "text", "text": (
-                        "這是 LINE 對話視窗最近一筆訊息（客戶傳的貼圖）。"
-                        "用一個 5 字內的詞描述貼圖想表達的情緒/意思。"
-                        "範例：同意、拒絕、打招呼、謝謝、猶豫、困惑、開心、難過。"
-                        "只回那個詞，不要解釋。"
+                        "這是 LINE 對話視窗的截圖。\n"
+                        "**畫面最下方那筆訊息是客戶傳的貼圖**（其他訊息忽略）。\n"
+                        "從以下 6 個分類選 1 個（只回分類名，不要解釋）：\n"
+                        "- 同意：OK、好、贊成、可以、笑臉、比讚\n"
+                        "- 拒絕：NO、不要、不行、搖頭\n"
+                        "- 道謝：謝謝、感激、愛心\n"
+                        "- 道別：再見、bye、晚安、結束\n"
+                        "- 打招呼：你好、Hi、嗨、開心\n"
+                        "- 不確定：看不出明確情緒時選這個\n\n"
+                        "只回那 2-3 個字的分類名（如「同意」「拒絕」）。"
                     )}
                 ]
             }]
         )
-        return r.content[0].text.strip()
+        text = r.content[0].text.strip()
+
+        # Fallback：Vision 看不懂或回應過長 → 預設「同意」推進 SOP
+        if len(text) > 8:
+            return "同意（Vision 解讀失敗，預設正面）"
+        if any(kw in text for kw in ["看不到", "看不見", "無法", "不清楚", "不確定"]):
+            return "同意（Vision 看不清，預設正面）"
+        return text
     except Exception as e:
-        return f"無法解讀（{type(e).__name__}）"
+        return f"同意（API 錯誤 {type(e).__name__}，預設正面）"
 
 
 # ============================================================
