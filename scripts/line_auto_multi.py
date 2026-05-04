@@ -410,17 +410,16 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
             else:
                 print(f"[Customer] Step4: 抓不到編號", flush=True)
 
-            # === Step 4.5: 如果不是好友，先點「加入好友」===
+            # === Step 4.5: 如果不是好友，先點「加入好友」(雙重保險)===
             if not is_friend:
-                from line_locate import ADD_FRIEND_BTN
-                ca = regions["chat_area"]
-                btn_cx = (ADD_FRIEND_BTN["l"] + ADD_FRIEND_BTN["r"]) // 2
-                btn_cy = (ADD_FRIEND_BTN["t"] + ADD_FRIEND_BTN["b"]) // 2
-                add_btn_x = ca["left"] + (btn_cx - 371)
-                add_btn_y = ca["top"] + (btn_cy - 99)
-                pyautogui.click(add_btn_x, add_btn_y)
-                print(f"[Customer] Step4.5: 點擊「加入好友」at ({add_btn_x}, {add_btn_y})", flush=True)
-                time.sleep(3)
+                from line_locate import find_add_friend_btn
+                pos = find_add_friend_btn(regions, monitor)
+                if pos:
+                    pyautogui.click(*pos)
+                    print(f"[Customer] Step4.5: 點擊「加入好友」at {pos}", flush=True)
+                    time.sleep(3)
+                else:
+                    print(f"[Customer] Step4.5: 找不到「加入好友」按鈕，跳過加好友", flush=True)
 
             # === Step 5: rename_friend（把 LINE 名稱改成 日期+編號）===
             # 把客戶當前 LINE 顯示名（name，從 chat_title OCR 抓到）一起傳進去

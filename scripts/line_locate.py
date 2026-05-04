@@ -1215,8 +1215,67 @@ PROFILE_EDIT_OFFSETS = {
 }
 
 
-# 非好友警告框「加入好友」按鈕位置（從 LINE21.png 紅框比對，縮放到 741x1031）
-ADD_FRIEND_BTN = {"l": 423, "t": 273, "r": 499, "b": 298}
+# 非好友警告框「加入好友」按鈕位置（OCR 失敗時的兜底座標）
+# 桌機 LINE 實測（5/4，OCR 量），跟筆電 line21.png 量的位置不同（桌機高 63 px）
+# find_add_friend_btn() 第一保險走 OCR 動態，OCR 失敗才用這個兜底
+ADD_FRIEND_BTN_FALLBACK = {"l": 438, "t": 215, "r": 492, "b": 232}
+
+
+def find_add_friend_btn(regions, monitor=None):
+    """
+    找「加入好友」按鈕的螢幕絕對座標（雙重保險）。
+
+    🛡️ 第一保險：OCR 動態找按鈕位置（跨機器通用，LINE 改版也能認）
+    🛡️ 第二保險：OCR 失敗 → 用 ADD_FRIEND_BTN_FALLBACK + chat_area 算位置
+
+    參數：
+        regions: locate_line_regions() 的返回值（不會重新定位，省效能）
+        monitor: 螢幕編號
+
+    回傳：(x, y) 螢幕絕對座標，或 None（chat_area 都失效時才會 None）
+    """
+    full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+    sx_r = full_img.size[0] / mon["width"]
+    sy_r = full_img.size[1] / mon["height"]
+
+    # 🛡️ 第一保險：只 OCR chat_area 上半 200px（按鈕一定在這範圍）
+    try:
+        ca = regions["chat_area"]
+        ca_il = max(0, int((ca["left"] - mon["left"]) * sx_r) - il)
+        ca_it = max(0, int((ca["top"] - mon["top"]) * sy_r) - it)
+        ca_ir = min(line_crop.size[0], int((ca["right"] - mon["left"]) * sx_r) - il)
+        ca_ib = min(line_crop.size[1], ca_it + 200)
+        top = line_crop.crop((ca_il, ca_it, ca_ir, ca_ib))
+        items = ocr_scan_panel(top)
+        # 警告文字「請您確認是否要將此人加入好友」也含「加入好友」substring，
+        # 必須用長度過濾才能精準抓到按鈕（4 字）不抓警告（12+ 字）
+        for item in items:
+            text = item["text"].strip()
+            if text == "加入好友" or ("加入好友" in text and len(text) <= 6):
+                cx_inline = ca_il + item["x"] + item["w"] // 2
+                cy_inline = ca_it + item["y"] + item["h"] // 2
+                abs_x = int(mon["left"] + (il + cx_inline) * sx_r)
+                abs_y = int(mon["top"] + (it + cy_inline) * sy_r)
+                _print(f"[add_friend] OCR 找到「加入好友」按鈕 ({text!r}) at ({abs_x}, {abs_y})")
+                return (abs_x, abs_y)
+        _print(f"[add_friend] OCR 沒找到「加入好友」按鈕（4字短文），走兜底")
+    except Exception as e:
+        _print(f"[add_friend] OCR 失敗: {e}，走兜底")
+
+    # 🛡️ 第二保險：固定座標兜底（用 ADD_FRIEND_BTN_FALLBACK + chat_area）
+    try:
+        ca = regions["chat_area"]
+        btn_cx = (ADD_FRIEND_BTN_FALLBACK["l"] + ADD_FRIEND_BTN_FALLBACK["r"]) // 2
+        btn_cy = (ADD_FRIEND_BTN_FALLBACK["t"] + ADD_FRIEND_BTN_FALLBACK["b"]) // 2
+        # FALLBACK 座標是相對 LINE 視窗左上角（742×1040），轉換成相對 chat_area
+        # chat_area 在 LINE 內預期位置：left ≈ 371, top ≈ 99（line1 參考圖實測）
+        abs_x = ca["left"] + (btn_cx - 371)
+        abs_y = ca["top"] + (btn_cy - 99)
+        _print(f"[add_friend] 用固定座標兜底 at ({abs_x}, {abs_y})")
+        return (abs_x, abs_y)
+    except Exception as e:
+        _print(f"[add_friend] 兜底也失敗: {e}")
+        return None
 
 
 def rename_friend(regions, new_name, monitor=None, current_name=None):
