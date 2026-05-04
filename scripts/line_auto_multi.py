@@ -600,20 +600,27 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
                 time.sleep(1.0)
                 print(f"\n[Multi] === 開始處理 box={box} → {box_sop['name']} (hwnd={hwnd}) ===", flush=True)
 
-                # Step 1: 切到聊天頁，用定位腳本偵測綠色未讀標記
-                regions, unread_list = find_unread_conversations(monitor)
-
-                if not unread_list:
-                    print(f"[Multi] box={box} 無未讀，跳下一個", flush=True)
-                    continue
-
-                print(f"[Multi] box={box} 偵測到 {len(unread_list)} 個未讀對話", flush=True)
-
-                # Step 2: 逐一處理每個未讀對話（用該 box 對應的 sop + system_prompt）
-                for conv in unread_list:
+                # Step 1-2: 處理未讀（每處理 1 個就重新偵測，避免 chat list 重排造成座標失效）
+                # rename/分享後 LINE 會把對話置頂 → 後面的 y 座標會錯位 → 必須重 detect
+                processed_count = 0
+                MAX_PER_BOX = 10  # 每 box 單輪最多處理 10 個未讀（避免無限 loop）
+                while processed_count < MAX_PER_BOX:
                     if should_stop():
                         break
 
+                    regions, unread_list = find_unread_conversations(monitor)
+                    if not unread_list:
+                        if processed_count == 0:
+                            print(f"[Multi] box={box} 無未讀，跳下一個", flush=True)
+                        else:
+                            print(f"[Multi] box={box} 本輪處理完畢（共 {processed_count} 個）", flush=True)
+                        break
+
+                    if processed_count == 0:
+                        print(f"[Multi] box={box} 偵測到 {len(unread_list)} 個未讀對話", flush=True)
+
+                    # 永遠處理最頂端未讀（重新 detect 後 unread_list[0] 是當下最新位置）
+                    conv = unread_list[0]
                     regions = handle_one_customer(
                         conv, regions, box_prompt, box_sop, all_histories, monitor
                     )
@@ -624,8 +631,10 @@ def main(stop_time, sop_path=DEFAULT_SOP, monitor=None):
                     # 按 Esc 退出聊天室（不標已讀，對方再回覆會重新出現綠色徽章）
                     pyautogui.press("escape")
                     time.sleep(0.5)
-
-                print(f"[Multi] box={box} 本輪處理完畢", flush=True)
+                    processed_count += 1
+                else:
+                    # while 條件 processed_count < MAX_PER_BOX 失敗（達上限）
+                    print(f"[Multi] box={box} 達單輪上限 {MAX_PER_BOX}，跳下一個", flush=True)
 
             except Exception as e:
                 print(f"[ERR] box={box}: {e}", flush=True)

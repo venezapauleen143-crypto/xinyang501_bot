@@ -182,7 +182,9 @@ def build_system_prompt(sop):
     # SOP 步驟
     steps_text = ""
     for step in sop["steps"]:
-        replies = "\n".join(step.get("replies", []))
+        # 用 ||| 分隔每個 reply，讓 Claude 看到「要分段送」的訊號 → 輸出也會帶 |||
+        # send_multi_reply 收到 ||| 會分多個 LINE 氣泡發送，避免一大塊訊息嚇到客戶
+        replies = "\n|||\n".join(step.get("replies", []))
         steps_text += f"\n【{step['id']}】{step['description']}\n回覆：{replies}\n"
         if "expect" in step:
             steps_text += f"等待客戶：{step['expect']}\n"
