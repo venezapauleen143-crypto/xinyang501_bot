@@ -292,6 +292,14 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
 
     print(f"[Customer] 新訊息: {new_them}", flush=True)
 
+    # 純貼圖 → 用 Haiku 4.5 Vision 解讀貼圖含意，注入到訊息讓 AI 看得懂
+    # （客戶傳文字不觸發 Vision，省 token）
+    from line_auto_chat import is_only_sticker, analyze_sticker
+    if is_only_sticker(new_them):
+        meaning = analyze_sticker(regions, monitor)
+        print(f"[Customer] 純貼圖 → Vision 解讀為「{meaning}」", flush=True)
+        new_them = [f"[貼圖含意：{meaning}]"]
+
     # Step 6: Claude AI 生成回覆
     reply = generate_reply(system_prompt, history, new_them)
 

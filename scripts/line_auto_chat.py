@@ -170,6 +170,7 @@ def build_system_prompt(sop):
 
     # 規則
     rules = sop["rules"]
+    id_kw = rules.get("id_keyword", "編號")  # 織夢=編號 / Resin=學號（用在「對話結束規則」prompt）
     rules_text = (
         f"編號生成方式：{rules['id_generation']}\n"
         f"資料傳給：{rules['forward_to']}\n"
@@ -247,7 +248,7 @@ def build_system_prompt(sop):
         f"回覆格式：只回覆要發送的文字，不要加任何格式、解釋、或標記。\n"
         f"如果需要分多條訊息發送，用 ||| 分隔，例如：第一條訊息|||第二條訊息|||第三條訊息\n\n"
         f"====== 對話結束規則 ======\n"
-        f"SOP 走到 done 步驟後（已給編號、已說祝您課程體驗愉快），如果客戶只是道謝或道別（謝謝、好的、掰掰等），只回覆 [END] 兩個字，不要回其他任何內容。\n"
+        f"SOP 走到 done 步驟後（已給{id_kw}、已說祝您課程體驗愉快），如果客戶只是道謝或道別（謝謝、好的、掰掰等），只回覆 [END] 兩個字，不要回其他任何內容。\n"
         f"[END] 代表這個對話已經完成，不需要再回覆。\n"
     )
     return prompt
@@ -316,6 +317,99 @@ def detect_new_messages(conversation_history, current_msgs):
             new_them.append(msg["text"])
 
     return new_them
+
+
+# ============================================================
+# 貼圖偵測 + Vision 解讀（純貼圖才花 token，文字訊息不觸發）
+# ============================================================
+def is_only_sticker(new_them):
+    """訊息看起來像貼圖（短到無法表達完整意思）→ 觸發 Vision 解讀。
+
+    重要：LINE 桌機 OCR 不輸出「[貼圖]」placeholder，貼圖被當作圖像。
+    OCR 對貼圖只能讀到貼圖上的文字（如 BT21 OK 貼圖只讀到「K」）或讀不到。
+    所以判斷不能找「[貼圖]」字眼，要用「訊息很短 + 不完整」來推測。
+
+    判斷標準：
+    - 含 4+ 中文字 = 完整中文句子 → 不算貼圖
+    - 含 6+ 字（任何字元）= 完整訊息 → 不算貼圖
+    - 全部訊息都短到不完整 → 可能是貼圖 → 觸發 Vision
+
+    副作用：客戶傳「OK」「可以」這種純文字短訊息也會觸發 Vision，
+    但 Vision 看到文字也能解讀（結果跟貼圖一樣是「同意」），不影響流程。
+    """
+    if not new_them:
+        return False
+
+    # 先過濾 LINE 桌機常見系統訊息（OCR 會抓到這些跟客戶實際訊息混在一起）
+    LINE_SYSTEM_TEXTS = (
+        "以下為尚未閱讀的訊息", "以下為尚未閱請的訊息",
+        "儲存", "另存新檔", "分享", "Keep筆記",
+        "請您確認是否要將此人加入好友", "請您確認是否要將此人加人好友",
+        "請留意聊天室中潛在的詐騙行為", "請留意聊天室中清在的詐騙行為",
+        "加入好友 封鎖 檢举", "加入好友 封鎖", "封鎖 檢举",
+        "[貼圖]", "[圖片]", "[Sticker]",
+    )
+
+    real_msgs = []
+    for msg in new_them:
+        clean = msg.strip()
+        if not clean:
+            continue
+        # 含任一系統訊息字眼 → 跳過
+        if any(sys_text in clean for sys_text in LINE_SYSTEM_TEXTS):
+            continue
+        real_msgs.append(clean)
+
+    if not real_msgs:
+        return False  # 全部都是系統訊息或空 → 不需要 Vision
+
+    for clean in real_msgs:
+        # 含 4+ 中文字 = 完整中文句子（如「想了解課程」）
+        chinese_count = sum(1 for c in clean if '一' <= c <= '鿿')
+        if chinese_count >= 4:
+            return False
+        # 含 6+ 字（不論中英）= 完整訊息（如「OK 我懂了」「Hello world」）
+        if len(clean) >= 6:
+            return False
+    return True  # 真實訊息都太短 → 可能是貼圖
+
+
+def analyze_sticker(regions, monitor=None):
+    """截聊天區底部，用 Haiku 4.5 Vision 解讀貼圖含意。回傳 5 字內的情緒詞。"""
+    from line_locate import screenshot_chat_area
+    import base64, io as _io
+
+    try:
+        chat_img = screenshot_chat_area(regions, monitor)
+        # 只看最近 200px（通常含最後一筆訊息）
+        h = chat_img.size[1]
+        bottom = chat_img.crop((0, max(0, h - 200), chat_img.size[0], h))
+
+        buf = _io.BytesIO()
+        bottom.save(buf, format="PNG")
+        img_b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+
+        r = client.messages.create(
+            model="claude-haiku-4-5",  # 簡單分類用 Haiku 最便宜（~NT$0.011/次）
+            max_tokens=80,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64",
+                                                  "media_type": "image/png",
+                                                  "data": img_b64}},
+                    {"type": "text", "text": (
+                        "這是 LINE 對話視窗最近一筆訊息（客戶傳的貼圖）。"
+                        "用一個 5 字內的詞描述貼圖想表達的情緒/意思。"
+                        "範例：同意、拒絕、打招呼、謝謝、猶豫、困惑、開心、難過。"
+                        "只回那個詞，不要解釋。"
+                    )}
+                ]
+            }]
+        )
+        return r.content[0].text.strip()
+    except Exception as e:
+        return f"無法解讀（{type(e).__name__}）"
 
 
 # ============================================================
