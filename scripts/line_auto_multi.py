@@ -72,15 +72,156 @@ def write_customer_to_excel(name, birthday, phone, area, line_name, ad_type=""):
     ws.cell(row=row_num, column=6, value=line_name)     # LINE名稱
     ws.cell(row=row_num, column=7, value=datetime.now().strftime("%Y-%m-%d"))  # 報名日期
     ws.cell(row=row_num, column=8, value=ad_type)       # 廣告種類（SOP 名稱）
+    ws.cell(row=row_num, column=9, value="")            # 撞腳（先空，撞號比對後填 Y/N）
     wb.save(EXCEL_PATH)
     return row_num
 
-def update_customer_id(row_num, customer_id):
-    """補上編號到 Excel"""
+def finalize_customer_normal(row_num, customer_id):
+    """正常客戶：col 1=電話後五碼、col 9=N"""
     wb = openpyxl.load_workbook(EXCEL_PATH)
     ws = wb.active
     ws.cell(row=row_num, column=1, value=customer_id)
+    ws.cell(row=row_num, column=9, value="N")
     wb.save(EXCEL_PATH)
+
+def finalize_customer_collision(row_num):
+    """撞號客戶：col 1 留空、col 9=Y（被撞那筆 A 不動）"""
+    wb = openpyxl.load_workbook(EXCEL_PATH)
+    ws = wb.active
+    ws.cell(row=row_num, column=9, value="Y")
+    wb.save(EXCEL_PATH)
+
+def check_duplicate_phone_in_excel(phone, exclude_row=None):
+    """用 col 4 全 10 碼比對 Excel，回傳被撞那筆 row（int）或 None。"""
+    wb = openpyxl.load_workbook(EXCEL_PATH)
+    ws = wb.active
+    for row in range(2, ws.max_row + 1):
+        if exclude_row is not None and row == exclude_row:
+            continue
+        cell = ws.cell(row=row, column=4).value
+        if cell and str(cell).strip() == phone:
+            wb.close()
+            return row
+    wb.close()
+    return None
+
+# ============================================================
+# 層 3：提取資料驗證器（hybrid validator）
+# ============================================================
+def validate_extraction(extracted, them_texts=None):
+    """驗證 Step 2 提取結果是否合法。回傳錯誤列表（空 = OK）。
+
+    them_texts: 客戶訊息列表（給層 5「值必須在原文」用）
+
+    擋下 AI 常見的 hallucination：
+    - 生日月日不合法（如 09/87）
+    - 電話格式錯
+    - 生日跟電話前 4 碼重複（AI 容易把電話前 4 碼當生日）
+    - 🆕 層 5：生日 4 碼必須真的出現在客戶訊息原文中（防 AI 拼湊虛構）
+    - 🆕 層 5：電話 10 碼必須真的出現在客戶訊息原文中
+    """
+    errors = []
+
+    # 1. 生日合法性（必須是 MM/DD，月 1-12，日 1-31）
+    birthday = str(extracted.get("birthday", "")).strip()
+    bday_4 = ""  # 4 碼純數字版（拿來跟電話前 4 碼比對）
+    try:
+        m_str, d_str = birthday.split("/")
+        m, d = int(m_str), int(d_str)
+        if not (1 <= m <= 12 and 1 <= d <= 31):
+            errors.append(f"生日 {birthday} 月日不合法（月必須 1-12，日 1-31）")
+        else:
+            bday_4 = f"{m:02d}{d:02d}"
+    except (ValueError, AttributeError):
+        errors.append(f"生日 '{birthday}' 不是 MM/DD 格式")
+
+    # 2. 電話合法性（09 開頭 10 碼純數字）
+    phone = str(extracted.get("phone", "")).strip()
+    phone_digits = "".join(c for c in phone if c.isdigit())
+    if not phone_digits.startswith("09") or len(phone_digits) != 10:
+        errors.append(f"電話 '{phone}' 不是 09 開頭 10 碼")
+
+    # 3. ⭐ 生日不能跟電話前 4 碼重複（AI 把電話前 4 碼誤當生日的常見錯誤）
+    if bday_4 and phone_digits.startswith(bday_4):
+        errors.append(f"生日 {bday_4} 跟電話前 4 碼相同 → AI 可能把電話前 4 碼誤當生日")
+
+    # 4. ⭐⭐ 層 5：值必須真的出現在客戶訊息原文中（純數字 OR 帶分隔符多種寫法）
+    if them_texts:
+        all_them_text = " ".join(them_texts)
+        all_them_digits = "".join(c for c in all_them_text if c.isdigit())
+
+        # 4a. 生日：嘗試多種寫法（4/6、5/20、80/11/19、4月6日 都相容）
+        if bday_4:
+            try:
+                bm = int(m_str)
+                bd = int(d_str)
+                # 純數字版（4 碼補零標準）
+                digit_candidate = f"{bm:02d}{bd:02d}"   # 0406, 0520, 1119
+                # 原文版（含各種分隔符 / 月日 - .）
+                text_candidates = [
+                    f"{bm:02d}/{bd:02d}", f"{bm}/{bd:02d}",
+                    f"{bm:02d}/{bd}",     f"{bm}/{bd}",
+                    f"{bm:02d}月{bd:02d}日", f"{bm}月{bd}日",
+                    f"{bm:02d}月{bd}日",     f"{bm}月{bd:02d}日",
+                    f"{bm:02d}-{bd:02d}", f"{bm}-{bd}",
+                    f"{bm:02d}-{bd}",     f"{bm}-{bd:02d}",
+                    # 「.」分隔符（民國年常見寫法 45.5.19、85.07.24 等）
+                    f"{bm:02d}.{bd:02d}", f"{bm}.{bd:02d}",
+                    f"{bm:02d}.{bd}",     f"{bm}.{bd}",
+                ]
+                found_in_digits = digit_candidate in all_them_digits
+                found_in_text = any(c in all_them_text for c in text_candidates)
+                if not (found_in_digits or found_in_text):
+                    errors.append(
+                        f"生日 {birthday} 沒出現在客戶訊息中（嘗試純數字 {digit_candidate} "
+                        f"和分隔符寫法都找不到），AI 可能虛構"
+                    )
+            except (ValueError, NameError):
+                pass  # step 1 已標記非法格式
+
+        # 4b. 電話 10 碼（電話格式較單一，純數字比對已穩）
+        if phone_digits and len(phone_digits) == 10 and phone_digits not in all_them_digits:
+            errors.append(
+                f"電話 {phone_digits} 沒出現在客戶訊息純數字中，AI 可能虛構"
+            )
+
+    return errors
+
+# ============================================================
+# 層 4：程式偵測「資料是否齊全」(LLM fallback)
+# ============================================================
+# 台灣 22 個縣市（含金門連江）
+_TW_AREA_KEYWORDS = [
+    "台北", "臺北", "新北", "桃園", "台中", "臺中", "台南", "臺南", "高雄",
+    "新竹", "苗栗", "彰化", "南投", "雲林", "嘉義", "屏東", "宜蘭", "花蓮",
+    "台東", "臺東", "基隆", "金門", "連江", "澎湖", "馬祖",
+]
+
+def has_complete_data(new_them, history):
+    """偵測 new_them + history 對方訊息中是否含完整四項（姓名+生日+電話+地區）。
+
+    用途：AI 漏出 [DATA_READY] 時，程式 fallback 兜底。
+    """
+    them_texts = list(new_them) + [m["text"] for m in history if m.get("sender") == "them"]
+    all_text = " ".join(them_texts)
+
+    # 1. 09 開頭 10 碼電話（容許空格、橫線）
+    has_phone = bool(re.search(r'09\d{2}[\s\-]?\d{3}[\s\-]?\d{3}', all_text)) \
+                or bool(re.search(r'09\d{8}', "".join(c for c in all_text if c.isdigit() or c in " -")))
+
+    # 2. 4 碼合法生日（MMDD 格式：月 01-12 + 日 01-31，且前後不黏其他數字）
+    has_birthday = bool(re.search(
+        r'(?<![\d])(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])(?![\d])',
+        all_text
+    ))
+
+    # 3. 中文姓名（連續 2-4 個中文字）
+    has_name = bool(re.search(r'[一-鿿]{2,4}', all_text))
+
+    # 4. 地區關鍵字（台灣縣市）
+    has_area = any(kw in all_text for kw in _TW_AREA_KEYWORDS)
+
+    return has_phone and has_birthday and has_name and has_area
 
 def read_customer_from_excel(customer_id):
     """用編號讀取客戶資料"""
@@ -241,6 +382,11 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
         print(f"[Customer] {name} 是群組，跳過", flush=True)
         return regions
 
+    # 撞腳客戶過濾：已被標記為「撞腳」的客戶 → 完全不處理（避免重複發敷衍訊息）
+    if name.startswith("撞腳") or name.startswith("撞脚"):
+        print(f"[Customer] {name} 已標記為撞腳客戶，跳過不處理", flush=True)
+        return regions
+
     # Step 3: 截圖對話區 + OCR 讀取內容
     chat_img = grab_chat_area(regions, monitor)
     current_messages = ocr_extract_messages(chat_img)
@@ -294,7 +440,7 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
 
     # 純貼圖 → 用 Haiku 4.5 Vision 解讀貼圖含意，注入到訊息讓 AI 看得懂
     # （客戶傳文字不觸發 Vision，省 token）
-    from line_auto_chat import is_only_sticker, analyze_sticker
+    from line_auto_chat import is_only_sticker, analyze_sticker, send_multi_reply
     if is_only_sticker(new_them):
         meaning = analyze_sticker(regions, monitor)
         print(f"[Customer] 純貼圖 → Vision 解讀為「{meaning}」", flush=True)
@@ -303,204 +449,315 @@ def handle_one_customer(conv, regions, system_prompt, sop, all_histories, monito
     # Step 6: Claude AI 生成回覆
     reply = generate_reply(system_prompt, history, new_them)
 
-    if reply and len(reply) > 1:
-        # 偵測 [END] 標記
-        if "[END]" in reply:
-            print(f"[Customer] SOP 結束（{name}）", flush=True)
-            return regions
+    if not reply or len(reply) <= 1:
+        time.sleep(0.5)
+        return regions
 
-        # 過濾 AI 分析內容
-        reply = filter_reply(reply)
-        if not reply:
-            print(f"[Customer] 過濾後為空，跳過", flush=True)
-            return regions
+    # 偵測 [END] 標記
+    if "[END]" in reply:
+        print(f"[Customer] SOP 結束（{name}）", flush=True)
+        return regions
 
-        print(f"[Customer] 回覆: {reply[:80]}", flush=True)
+    # ============================================================
+    # 偵測 [DATA_READY] 暗號 → 走「先寫 Excel → 比對撞號 → 給編號」流程
+    # 雙保險：AI 出 [DATA_READY] OR 程式偵測四項齊全（fallback 兜底 AI 漏判）
+    # ============================================================
+    ai_signal = "[DATA_READY]" in reply
+    fallback_trigger = (not ai_signal) and has_complete_data(new_them, history)
+    if ai_signal or fallback_trigger:
+        if ai_signal:
+            print(f"[Customer] AI 判定資料齊全（[DATA_READY]）→ 進入報名流程", flush=True)
+        else:
+            print(f"[Customer] ⚠️ AI 漏出 [DATA_READY] 但程式偵測四項齊全 → fallback 觸發報名流程", flush=True)
+            print(f"[Customer] AI 原始 reply: {reply[:120]}", flush=True)
+        # ⚠️ [DATA_READY] / 一般 reply 不送給客戶、不寫進 history（避免污染歷史）
 
-        # 發送回覆
-        send_multi_reply(reply, regions)
+        from line_locate import (
+            share_contact_card, switch_page, locate_line_regions,
+            rename_friend, find_add_friend_btn,
+        )
 
-        # 如果是歡迎詞（包含課程介紹），發送課程圖片
-        if "編織" in reply or "歡迎" in reply:
-            img_path = sop.get("course_info", {}).get("image", "")
-            if img_path:
-                if not os.path.isabs(img_path):
-                    img_path = str(SCRIPT_DIR.parent / img_path)
-                send_image(img_path, regions)
-                print(f"[Customer] 已發送課程圖片: {img_path}", flush=True)
+        # === Step 2: Claude API 結構化輸出提取報名資料（schema 強化 + few-shot + validator retry）===
+        history_lines = []
+        for msg in history[-20:]:
+            label = "[客戶]" if msg["sender"] == "them" else "[小編]"
+            history_lines.append(f"{label} {msg['text']}")
+        history_text = "\n".join(history_lines)
+        new_text = "\n".join(f"• {m}" for m in new_them)
+        print(f"[Customer] Step2: 新訊息數={len(new_them)}", flush=True)
 
-        # 回覆加入歷史
-        for part in reply.split("|||"):
-            part = part.strip()
-            if part and not (part.startswith("{") and part.endswith("}")):
-                history.append({"text": part, "sender": "me", "y": 0})
+        # 層 1：強化 schema（pattern 擋非法格式）
+        extraction_schema = {
+            "type": "object",
+            "properties": {
+                "customer_name": {
+                    "type": "string",
+                    "description": "客戶姓名（2-4 個中文字）"
+                },
+                "birthday": {
+                    "type": "string",
+                    "pattern": "^(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])$",
+                    "description": "出生月日 MM/DD（月 01-12，日 01-31）。⚠️ 絕對不能拿電話的前 4 碼當生日，必須是另一個獨立的 4 碼數字。"
+                },
+                "phone": {
+                    "type": "string",
+                    "pattern": "^09\\d{8}$",
+                    "description": "手機號碼，09 開頭 10 碼純數字（不要含空格、橫線）"
+                },
+                "area": {
+                    "type": "string",
+                    "description": "客戶想參加的地點（縣市名稱）"
+                }
+            },
+            "required": ["customer_name", "birthday", "phone", "area"],
+            "additionalProperties": False
+        }
 
-        # 偵測到編號（或 SOP 自訂的 id_keyword，如 Resin 用「學號」）→ 提取資料存Excel → 改名 → 分享溫妮 → 讀Excel發友資群
-        id_kw = sop.get("rules", {}).get("id_keyword", "編號")
-        if id_kw in reply:
-            from line_locate import share_contact_card, switch_page, locate_line_regions, rename_friend, CHAT_PAGE_TEMPLATE
+        # 層 2：few-shot 範例（含邊緣情境）
+        base_prompt = (
+            f"以下是對話紀錄：\n\n{history_text}\n\n"
+            f"客戶剛發了新訊息:\n{new_text}\n\n"
+            f"從客戶的訊息中提取報名資料。\n\n"
+            f"拆分規則:\n"
+            f"- 中文 = 姓名（2-4 個中文字）\n"
+            f"- 4碼數字 = 生日月日（格式 MM/DD，如 0910 → 09/10）\n"
+            f"- 09開頭10碼 = 手機號碼\n"
+            f"- 地點相關中文 = 地區（縣市）\n"
+            f"- 數字可能黏在一起，自己拆分\n"
+            f"- 忽略課程圖片和系統訊息，只看客戶自己打的內容\n\n"
+            f"範例（包含邊緣情境）:\n"
+            f"✅ 王小明 0915 0980588129 → name=王小明, birthday=09/15, phone=0980588129\n"
+            f"✅ 陳采汝 620926 0968903365 → name=陳采汝, birthday=09/26, phone=0968903365\n"
+            f"⚠️ 王大路 0912 0987652714 → name=王大路, birthday=09/12, phone=0987652714\n"
+            f"   注意：09/12 是生日，不是 09/87！0987 是電話前 4 碼，不是生日。\n"
+            f"⚠️ 數字黏一起 09120987652714 → birthday=09/12, phone=0987652714（前 4 碼=生日，後 10 碼=電話）\n"
+            f"⚠️ 電話前 4 碼（如 0987、0915、0912）永遠不能當生日，生日必須是『獨立的另一個 4 碼數字』"
+        )
 
-            # === Step 2: Claude API 結構化輸出提取報名資料 ===
-            # 跟 generate_reply 一樣：送 history + new_them + SOP context
-            history_lines = []
-            for msg in history[-20:]:
-                label = "[客戶]" if msg["sender"] == "them" else "[小編]"
-                history_lines.append(f"{label} {msg['text']}")
-            history_text = "\n".join(history_lines)
-            new_text = "\n".join(f"• {m}" for m in new_them)
-            print(f"[Customer] Step2: 新訊息數={len(new_them)}", flush=True)
-            extracted = None
-            for attempt in range(3):
-                try:
-                    extract_r = client.messages.create(
-                        model="claude-sonnet-4-6",
-                        max_tokens=200,
-                        messages=[{"role": "user", "content": (
-                            f"以下是對話紀錄：\n\n{history_text}\n\n"
-                            f"客戶剛發了新訊息：\n{new_text}\n\n"
-                            f"從客戶的訊息中提取報名資料。\n\n"
-                            f"拆分規則：\n"
-                            f"- 中文 = 姓名\n"
-                            f"- 4碼數字 = 生日月日（格式 MM/DD，如0910 → 09/10）\n"
-                            f"- 09開頭10碼 = 手機號碼\n"
-                            f"- 地點相關中文 = 地區\n"
-                            f"- 數字可能黏在一起，自己拆分\n"
-                            f"- 忽略課程圖片和系統訊息，只看客戶自己打的內容"
-                        )}],
-                        output_config={
-                            "format": {
-                                "type": "json_schema",
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "customer_name": {"type": "string", "description": "客戶姓名"},
-                                        "birthday":      {"type": "string", "description": "出生月日，格式 MM/DD"},
-                                        "phone":         {"type": "string", "description": "手機號碼，10碼"},
-                                        "area":          {"type": "string", "description": "想參加的地點"}
-                                    },
-                                    "required": ["customer_name", "birthday", "phone", "area"],
-                                    "additionalProperties": False
-                                }
-                            }
+        # 層 3：retry + validator
+        extracted = None
+        last_errors = []
+        for attempt in range(3):
+            try:
+                feedback = ""
+                if last_errors:
+                    feedback = f"\n\n⚠️ 你上次提取的錯誤：{'; '.join(last_errors)}\n請仔細重新拆分，避免同樣錯誤。"
+
+                extract_r = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=200,
+                    messages=[{"role": "user", "content": base_prompt + feedback}],
+                    output_config={
+                        "format": {
+                            "type": "json_schema",
+                            "schema": extraction_schema
                         }
-                    )
-                    extracted = json.loads(extract_r.content[0].text)
-                    print(f"[Customer] Step2: 資料提取成功（第{attempt+1}次）", flush=True)
-                    print(f"[Customer] Step2: {extracted}", flush=True)
-                    break
-                except Exception as e:
-                    print(f"[Customer] Step2: 資料提取失敗（第{attempt+1}次）: {e}", flush=True)
-                    if attempt < 2:
-                        time.sleep(2)
-
-            # === Step 3: 寫入 Excel（編號先空）===
-            ad_type = sop.get("name", "")  # 廣告種類 = 當前 SOP 名稱
-            if extracted:
-                excel_row = write_customer_to_excel(
-                    name=extracted.get("customer_name", ""),
-                    birthday=extracted.get("birthday", ""),
-                    phone=extracted.get("phone", ""),
-                    area=extracted.get("area", ""),
-                    line_name=name,
-                    ad_type=ad_type,
+                    }
                 )
-                print(f"[Customer] Step3: 已寫入 Excel 第{excel_row}行（廣告種類={ad_type}）", flush=True)
-            else:
-                excel_row = write_customer_to_excel("", "", "", "", name, ad_type=ad_type)
-                print(f"[Customer] Step3: 提取失敗，寫入空資料到 Excel（廣告種類={ad_type}）", flush=True)
+                candidate = json.loads(extract_r.content[0].text)
+                print(f"[Customer] Step2: AI 提取（第{attempt+1}次）: {candidate}", flush=True)
 
-            # === Step 4: regex 抓編號（用 SOP 自訂 keyword，如「編號」或「學號」）→ 補寫 Excel ===
-            id_match = re.search(rf"{id_kw}[：:]\s*\*{{0,2}}(\d{{5}})\*{{0,2}}", reply)
-            customer_id = id_match.group(1) if id_match else None
-            if customer_id:
-                update_customer_id(excel_row, customer_id)
-                print(f"[Customer] Step4: 編號 {customer_id} 已寫入 Excel", flush=True)
-            else:
-                print(f"[Customer] Step4: 抓不到編號", flush=True)
+                # 程式 validator 雙重把關
+                # 層 5：把客戶訊息（new_them + history 對方訊息）傳進去做「值必須在原文」檢查
+                # dict.fromkeys 保留順序去重（new_them 跟 history 可能有同樣訊息，避免重複收錄）
+                step2_them_texts = list(dict.fromkeys(
+                    list(new_them) + [m["text"] for m in history if m.get("sender") == "them"]
+                ))
+                errors = validate_extraction(candidate, them_texts=step2_them_texts)
+                if not errors:
+                    extracted = candidate
+                    print(f"[Customer] Step2: 提取通過 validator ✅", flush=True)
+                    break
+                else:
+                    last_errors = errors
+                    print(f"[Customer] Step2: validator 拒絕（第{attempt+1}次）: {errors}", flush=True)
+                    if attempt < 2:
+                        time.sleep(1)
+            except Exception as e:
+                last_errors = [f"上次 API 錯誤: {str(e)[:100]}"]
+                print(f"[Customer] Step2: 提取失敗（第{attempt+1}次）: {e}", flush=True)
+                if attempt < 2:
+                    time.sleep(2)
 
-            # === Step 4.5: 如果不是好友，先點「加入好友」(雙重保險)===
+        if not extracted:
+            print(f"[Customer] Step2: 3 次重試後仍失敗（最後錯誤：{last_errors}），放棄報名流程", flush=True)
+            return regions
+
+        # 取乾淨的 phone（schema pattern 已限制 09 開頭 10 碼，這裡保險再清一次）
+        phone = "".join(c for c in str(extracted.get("phone", "")) if c.isdigit())
+        print(f"[Customer] Step2: 最終 → name={extracted.get('customer_name')}, birthday={extracted.get('birthday')}, phone={phone}, area={extracted.get('area')}", flush=True)
+
+        # === Step 3: 寫 Excel（col 1+9 留空，待撞號比對後補）===
+        ad_type = sop.get("name", "")
+        excel_row = write_customer_to_excel(
+            name=extracted.get("customer_name", ""),
+            birthday=extracted.get("birthday", ""),
+            phone=phone,
+            area=extracted.get("area", ""),
+            line_name=name,
+            ad_type=ad_type,
+        )
+        print(f"[Customer] Step3: 已寫入 Excel 第{excel_row}行（col 1+9 待補）", flush=True)
+
+        # === Step 4: 用 col 4 全 10 碼比對撞號（排除自己這筆）===
+        duplicate_row = check_duplicate_phone_in_excel(phone, exclude_row=excel_row)
+
+        if duplicate_row:
+            # === 撞號分支 ===
+            print(f"[Customer] Step4: 撞號（電話 {phone} 跟第 {duplicate_row} 行重複）→ 標撞腳", flush=True)
+            finalize_customer_collision(excel_row)
+
+            # 發敷衍訊息
+            collision_msg = "您的資料我們已收到，工作人員會盡快與您聯繫💕"
+            send_multi_reply(collision_msg, regions)
+            history.append({"text": collision_msg, "sender": "me", "y": 0})
+            time.sleep(1)
+
+            # 非好友 → 加好友
             if not is_friend:
-                from line_locate import find_add_friend_btn
                 pos = find_add_friend_btn(regions, monitor)
                 if pos:
                     pyautogui.click(*pos)
-                    print(f"[Customer] Step4.5: 點擊「加入好友」at {pos}", flush=True)
-                    time.sleep(3)
+                    print(f"[Customer] 撞號客戶非好友 → 點加好友 at {pos}", flush=True)
+                    time.sleep(7)
                 else:
-                    print(f"[Customer] Step4.5: 找不到「加入好友」按鈕，跳過加好友", flush=True)
+                    print(f"[Customer] 撞號客戶非好友但找不到加好友按鈕", flush=True)
 
-            # === Step 5: rename_friend（把 LINE 名稱改成 日期+編號）===
-            # 把客戶當前 LINE 顯示名（name，從 chat_title OCR 抓到）一起傳進去
-            # 讓 rename_friend 的窄條 OCR 結果能跟原名比對驗證，避免誤點到狀態訊息（雙重保險）
-            rename_name = f"{customer_id} {datetime.now().strftime('%m-%d')}"
+            # 改名「撞腳 MM-DD」
+            rename_name = f"撞腳 {datetime.now().strftime('%m-%d')}"
             regions = locate_line_regions(monitor)
-            rename_friend(regions, rename_name, monitor, current_name=name)
-            print(f"[Customer] Step5: 已改名為 {rename_name}", flush=True)
-            time.sleep(1)
-
-            search_name = rename_name
-
-            # === Step 6: 分享溫妮好友資訊給客戶 ===
-            regions = locate_line_regions(monitor)
-            result = share_contact_card(regions, "溫妮", search_name, monitor)
-            if result:
-                print(f"[Customer] Step6: 已分享溫妮給 {search_name}", flush=True)
+            rename_ok = rename_friend(regions, rename_name, monitor, current_name=name)
+            if rename_ok:
+                print(f"[Customer] 已改名為「{rename_name}」", flush=True)
             else:
-                print(f"[Customer] Step6: 分享溫妮給 {search_name} 失敗", flush=True)
+                print(f"[Customer] ⚠️ 改名「{rename_name}」失敗 → 請手動改名", flush=True)
 
-            # === Step 7: 讀 Excel → 組報名資訊 → 發友資群 ===
-            print(f"[Customer] Step7: 轉發報名資訊到友資群...", flush=True)
-            cust_data = read_customer_from_excel(customer_id)
-            if cust_data:
-                info = (
-                    f"【新報名】\n"
-                    f"✏ 姓名：{cust_data['name']}\n"
-                    f"✏ 出生月/日：{cust_data['birthday']}\n"
-                    f"✏ 聯絡電話：{cust_data['phone']}\n"
-                    f"✏ 想參加的地點：{cust_data['area']}\n"
-                    f"✏ 編號：{customer_id}"
-                )
+            return regions
+
+        # === 不撞號分支 ===
+        customer_id = phone[-5:]
+        finalize_customer_normal(excel_row, customer_id)
+        print(f"[Customer] Step4: 不撞號 → 編號 = {customer_id}（電話後五碼）→ Excel col 1={customer_id}, col 9=N", flush=True)
+
+        # === Step 5: 從 SOP json 拿 give_id 範本送出 ===
+        give_id_step = next((s for s in sop.get("steps", []) if s.get("id") == "give_id"), None)
+        if give_id_step:
+            for tpl in give_id_step.get("replies", []):
+                msg = tpl.replace("{id}", customer_id)
+                send_multi_reply(msg, regions)
+                history.append({"text": msg, "sender": "me", "y": 0})
+                time.sleep(0.5)
+            print(f"[Customer] Step5: 已送出 give_id 範本（編號 {customer_id}）", flush=True)
+        else:
+            # fallback: SOP 沒 give_id step
+            id_kw = sop.get("rules", {}).get("id_keyword", "編號")
+            fb_msg = f"課程名額成功登記✅\n\n這是您的{id_kw}：{customer_id}\n麻煩請複製傳給溫妮"
+            send_multi_reply(fb_msg, regions)
+            history.append({"text": fb_msg, "sender": "me", "y": 0})
+            print(f"[Customer] Step5: SOP 沒 give_id step，用 fallback 訊息（編號 {customer_id}）", flush=True)
+
+        # === Step 6: 非好友 → 加好友 ===
+        if not is_friend:
+            pos = find_add_friend_btn(regions, monitor)
+            if pos:
+                pyautogui.click(*pos)
+                print(f"[Customer] Step6: 點擊「加入好友」at {pos}", flush=True)
+                time.sleep(3)
             else:
-                info = f"【新報名】{name}\n編號：{customer_id}"
-                print(f"[Customer] Step7: Excel 找不到編號 {customer_id}，使用簡易格式", flush=True)
+                print(f"[Customer] Step6: 找不到「加入好友」按鈕，跳過加好友", flush=True)
 
-            # Step 7a: 切到聊天頁（分享溫妮後停在好友頁）
-            regions = locate_line_regions(monitor)
-            if regions["current_page"] != "chat":
-                regions = switch_page(regions, "chat", monitor)
+        # === Step 7: rename_friend（把 LINE 名稱改成 編號+日期）===
+        rename_name = f"{customer_id} {datetime.now().strftime('%m-%d')}"
+        regions = locate_line_regions(monitor)
+        rename_friend(regions, rename_name, monitor, current_name=name)
+        print(f"[Customer] Step7: 已改名為 {rename_name}", flush=True)
+        time.sleep(1)
+        search_name = rename_name
 
-            # Step 7b: 點第一個對話（友資群置頂，永遠在第一個）
-            # 用 left_panel 的螢幕座標計算（友資群在 left_panel 頂部）
-            # line1_new 圖片座標：友資群中心 x=210, y=140
-            # left_panel 圖片座標：l=64, t=111 → 友資群相對 left_panel 頂部偏移 y=140-111=29
-            lp = regions["left_panel"]
-            first_item_x = (lp["left"] + lp["right"]) // 2
-            first_item_y = lp["top"] + 29
-            pyautogui.click(first_item_x, first_item_y)
-            time.sleep(1.5)
-            regions = locate_line_regions(monitor)
+        # === Step 8: 分享溫妮給客戶 ===
+        regions = locate_line_regions(monitor)
+        result = share_contact_card(regions, "溫妮", search_name, monitor)
+        if result:
+            print(f"[Customer] Step8: 已分享溫妮給 {search_name}", flush=True)
+        else:
+            print(f"[Customer] Step8: 分享溫妮給 {search_name} 失敗", flush=True)
 
-            # Step 7d: 發送報名資訊到友資群
-            send_reply(info, regions)
-            print(f"[Customer] Step7d: 已發送報名資訊到友資群", flush=True)
-            time.sleep(1)
+        # === Step 9: 讀 Excel → 組報名資訊 → 發友資群 ===
+        cust_data = read_customer_from_excel(customer_id)
+        if cust_data:
+            info = (
+                f"【新報名】\n"
+                f"✏ 姓名：{cust_data['name']}\n"
+                f"✏ 出生月/日：{cust_data['birthday']}\n"
+                f"✏ 聯絡電話：{cust_data['phone']}\n"
+                f"✏ 想參加的地點：{cust_data['area']}\n"
+                f"✏ 編號：{customer_id}"
+            )
+        else:
+            info = f"【新報名】{name}\n編號：{customer_id}"
+            print(f"[Customer] Step9: Excel 找不到編號 {customer_id}，使用簡易格式", flush=True)
 
-            # === Step 8: 分享客戶好友資訊到友資群 ===
-            regions = switch_page(regions, "friend", monitor)
-            result = share_contact_card(regions, search_name, "友資群", monitor)
-            if result:
-                print(f"[Customer] Step8: 已分享 {search_name} 的好友資訊到友資群", flush=True)
-            else:
-                print(f"[Customer] Step8: 分享 {search_name} 的好友資訊到友資群失敗", flush=True)
+        regions = locate_line_regions(monitor)
+        if regions["current_page"] != "chat":
+            regions = switch_page(regions, "chat", monitor)
 
-            # === Step 9: 回到聊天頁 ===
-            regions = locate_line_regions(monitor)
-            if regions["current_page"] != "chat":
-                regions = switch_page(regions, "chat", monitor)
-            print(f"[Customer] Step9: 已回到聊天頁", flush=True)
+        # 點友資群（聊天頁第一個對話）
+        lp = regions["left_panel"]
+        first_item_x = (lp["left"] + lp["right"]) // 2
+        first_item_y = lp["top"] + 29
+        pyautogui.click(first_item_x, first_item_y)
+        time.sleep(1.5)
+        regions = locate_line_regions(monitor)
+
+        send_reply(info, regions)
+        print(f"[Customer] Step9: 已發送報名資訊到友資群", flush=True)
+        time.sleep(1)
+
+        # === Step 10: 分享客戶好友資訊到友資群 ===
+        regions = switch_page(regions, "friend", monitor)
+        result = share_contact_card(regions, search_name, "友資群", monitor)
+        if result:
+            print(f"[Customer] Step10: 已分享 {search_name} 的好友資訊到友資群", flush=True)
+        else:
+            print(f"[Customer] Step10: 分享 {search_name} 的好友資訊到友資群失敗", flush=True)
+
+        # === Step 11: 回到聊天頁 ===
+        regions = locate_line_regions(monitor)
+        if regions["current_page"] != "chat":
+            regions = switch_page(regions, "chat", monitor)
+        print(f"[Customer] Step11: 已回到聊天頁", flush=True)
 
         time.sleep(0.5)
+        return regions
 
+    # ============================================================
+    # 一般聊天分支：AI 沒出 [DATA_READY] → 照舊送 reply
+    # ============================================================
+    reply = filter_reply(reply)
+    if not reply:
+        print(f"[Customer] 過濾後為空，跳過", flush=True)
+        return regions
+
+    print(f"[Customer] 回覆: {reply[:80]}", flush=True)
+    send_multi_reply(reply, regions)
+
+    # 歡迎詞 → 發課程圖片
+    if "編織" in reply or "歡迎" in reply:
+        img_path = sop.get("course_info", {}).get("image", "")
+        if img_path:
+            if not os.path.isabs(img_path):
+                img_path = str(SCRIPT_DIR.parent / img_path)
+            send_image(img_path, regions)
+            print(f"[Customer] 已發送課程圖片: {img_path}", flush=True)
+
+    # 回覆加入歷史
+    for part in reply.split("|||"):
+        part = part.strip()
+        if part and not (part.startswith("{") and part.endswith("}")):
+            history.append({"text": part, "sender": "me", "y": 0})
+
+    time.sleep(0.5)
+    return regions
     return regions
 
 
