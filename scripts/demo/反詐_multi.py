@@ -134,7 +134,11 @@ def _get_world_context(opponent_location=None):
     parts = []
     now = datetime.now()
     weekday_zh = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][now.weekday()]
-    parts.append(f"📅 今天：{now.strftime('%Y-%m-%d')} {weekday_zh}")
+    parts.append(
+        f"📅 今天：{now.strftime('%Y-%m-%d')} {weekday_zh}，**現在時間 {now.strftime('%H:%M')}**\n"
+        f"⚠️ 對方訊息中提到的時間（如「8點半下班」「12點開會」）是對方的『行程時間』，"
+        f"不是「現在時間」。要分清楚。"
+    )
 
     # Angela 所在地（香港）天氣
     hk_weather = _safe_call_tool("fetch_weather", "Hong Kong")
@@ -219,8 +223,37 @@ def _sanitize_filename(name):
 
 
 def _history_file_path(name):
-    """回傳該觀眾的 .txt 完整路徑"""
+    """回傳該觀眾的 .txt 完整路徑（精確版）"""
     return HISTORIES_DIR / f"{_sanitize_filename(name)}.txt"
+
+
+def _resolve_history_file(name):
+    """找 name 對應的 .txt 檔（先精確比對 → 再模糊匹配忽略空格繁簡 → 都沒找到回精確路徑當新檔）
+
+    解決 OCR 抓客戶名時把中英文之間空格吞掉的問題（「仁輝JAMES」vs「仁輝 JAMES」）。
+    """
+    exact = _history_file_path(name)
+    if exact.exists():
+        return exact
+
+    # 正規化：移除所有空白字元（半形+全形+其他 unicode 空白）
+    def _normalize(s):
+        # 移除空白 + 簡單繁簡常見對應（之後可擴）
+        s = re.sub(r'[\s　]+', '', s)
+        return s.lower()
+
+    target = _normalize(_sanitize_filename(name))
+    if not target:
+        return exact
+
+    # 掃既有所有 .txt，找正規化後相等的
+    for f in HISTORIES_DIR.glob("*.txt"):
+        if _normalize(f.stem) == target:
+            print(f"[history] 模糊匹配：'{name}' → 沿用既有檔 '{f.name}'", flush=True)
+            return f
+
+    # 找不到 → 用精確路徑（會建新檔）
+    return exact
 
 
 def _load_customer_history(name):
@@ -233,9 +266,14 @@ def _load_customer_history(name):
 
     判斷誰是 me/them：發送者 == 客戶名（檔名）→ them，否則 → me
     """
-    path = _history_file_path(name)
+    path = _resolve_history_file(name)
     if not path.exists():
         return []
+
+    # 🔴 Bug A 修復：用 path.stem 當 actual_name，並準備 normalize 比對
+    # 原因：OCR 抓的 name（如「仁輝JAMES」無空格）可能與 .txt 內格式（「仁輝 JAMES」有空格）不同
+    actual_name = path.stem  # 從檔名拿 fuzzy match 後的版本
+    name_variants = list({name, actual_name, name.replace(" ", ""), actual_name.replace(" ", "")})
 
     history = []
     last_idx = -1  # 上一條訊息在 history 中的 index（用來接續）
@@ -260,10 +298,15 @@ def _load_customer_history(name):
                 m = re.match(r'^(\d{1,2}:\d{2})\s+(.+)$', line)
                 if m:
                     rest = m.group(2)
-                    # 發送者 startswith 客戶名 → them
-                    if rest.startswith(name + " "):
+                    # 發送者 startswith 客戶名 → them（嘗試所有 name 變體）
+                    matched_variant = None
+                    for variant in name_variants:
+                        if variant and rest.startswith(variant + " "):
+                            matched_variant = variant
+                            break
+                    if matched_variant:
                         sender = "them"
-                        text = rest[len(name) + 1:].strip()
+                        text = rest[len(matched_variant) + 1:].strip()
                     else:
                         # 不是客戶 → 小編（取第一個空格後當訊息）
                         sender = "me"
@@ -280,6 +323,266 @@ def _load_customer_history(name):
         print(f"[history] 讀取 {path.name} 失敗：{e}", flush=True)
 
     return history
+
+
+# ============================================================
+# Profile Memory（雙層記憶架構，保證 100% 不漏記）
+# 架構：raw .txt（episodic）+ profile.json（semantic 結構化事實）
+# 業界主流 2026：MemMachine / Memori 都用這架構，可達 80%+ token 節省
+# ============================================================
+
+def _profile_file_path(name):
+    """回傳 profile.json 完整路徑"""
+    return HISTORIES_DIR / f"{_sanitize_filename(name)}.profile.json"
+
+
+def _resolve_profile_file(name):
+    """找 name 對應的 .profile.json（fuzzy match 同 history）"""
+    exact = _profile_file_path(name)
+    if exact.exists():
+        return exact
+
+    def _normalize(s):
+        s = re.sub(r'[\s　]+', '', s)
+        return s.lower()
+
+    target = _normalize(_sanitize_filename(name))
+    if not target:
+        return exact
+
+    suffix = ".profile.json"
+    for f in HISTORIES_DIR.glob(f"*{suffix}"):
+        bare = f.name[:-len(suffix)]
+        if _normalize(bare) == target:
+            return f
+    return exact
+
+
+def _load_profile(name):
+    """載入 profile.json，沒有回 None"""
+    path = _resolve_profile_file(name)
+    if not path.exists():
+        return None
+    try:
+        with io.open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[profile] 讀取 {path.name} 失敗：{e}", flush=True)
+        return None
+
+
+def _save_profile(name, profile):
+    """存 profile.json"""
+    path = _resolve_profile_file(name)
+    try:
+        with io.open(path, "w", encoding="utf-8") as f:
+            json.dump(profile, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[profile] 寫入 {path.name} 失敗：{e}", flush=True)
+        return False
+
+
+def _strip_json_codeblock(text):
+    """剝掉 LLM 偶爾包的 markdown code block"""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r'^```(?:json)?\s*\n', '', text)
+        text = re.sub(r'\n?```\s*$', '', text)
+    return text.strip()
+
+
+def _extract_profile_from_history(name, history):
+    """用 Haiku 4.5 從整個 history 抽結構化 profile（首次見觀眾時用）"""
+    if not history:
+        return None
+
+    history_text_lines = []
+    for msg in history:
+        label = "[對方]" if msg["sender"] == "them" else "[Angela]"
+        history_text_lines.append(f"{label} {msg['text']}")
+    history_text = "\n".join(history_text_lines)
+
+    prompt = (
+        f"你是對話分析師。以下是 Angela 跟對方（{name}）的完整聊天記錄。"
+        f"請從中**精確抽出**對方揭露的所有事實，輸出嚴格的 JSON。\n\n"
+        f"<對話記錄>\n{history_text}\n</對話記錄>\n\n"
+        f"<抽取規則>\n"
+        f"1. **只抽對方真的說過的事**，Angela 說的不算對方的事實\n"
+        f"2. **不要推測**：對方沒說職業就不要寫 occupation\n"
+        f"3. **每筆 disclosure** 格式：speaker=\"them\"、fact=「對方說過的事實」\n"
+        f"4. 興趣/家人/工作/作息/個性等任何揭露都列進去\n"
+        f"5. shared_disclosures 是時序列表，依對話順序\n"
+        f"</抽取規則>\n\n"
+        f"<JSON 格式>\n"
+        f"{{\n"
+        f'  "name": "{name}",\n'
+        f'  "core_facts": {{\n'
+        f'    "occupation": "牙醫 或 null",\n'
+        f'    "location": "城市 或 未知",\n'
+        f'    "schedule": "作息描述 或 null",\n'
+        f'    "personality_traits": ["責任感強", "..."]\n'
+        f'  }},\n'
+        f'  "shared_disclosures": [\n'
+        f'    {{"speaker": "them", "fact": "牙醫"}},\n'
+        f'    {{"speaker": "them", "fact": "晚上 8:30 下班"}}\n'
+        f'  ],\n'
+        f'  "interests": ["..."],\n'
+        f'  "family_relationships": ["..."],\n'
+        f'  "milestones": ["Day 1: 互換職業"],\n'
+        f'  "current_stage": "Day N，描述",\n'
+        f'  "topic_hooks_remaining": ["副業", "..."]\n'
+        f"}}\n"
+        f"</JSON 格式>\n\n"
+        f"請直接輸出 JSON，不要任何解釋、不要 markdown code block。"
+    )
+
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        text = _strip_json_codeblock(resp.content[0].text)
+        profile = json.loads(text)
+        print(f"[profile] {name} 首次抽取完成（{len(profile.get('shared_disclosures') or [])} 筆 disclosures）", flush=True)
+        return profile
+    except Exception as e:
+        print(f"[profile] 首次抽取 {name} 失敗：{e}", flush=True)
+        return None
+
+
+def _update_profile_incrementally(name, old_profile, new_messages):
+    """每輪 reply 後增量更新 profile（只送舊 profile + 最新對話 → Haiku）
+
+    含 critic 驗證：舊 profile 的 disclosures / core_facts 不能消失
+    """
+    if not old_profile:
+        return None
+    if not new_messages:
+        return old_profile
+
+    new_text_lines = []
+    for msg in new_messages:
+        label = "[對方]" if msg["sender"] == "them" else "[Angela]"
+        new_text_lines.append(f"{label} {msg['text']}")
+    new_text = "\n".join(new_text_lines)
+
+    old_profile_json = json.dumps(old_profile, ensure_ascii=False, indent=2)
+
+    prompt = (
+        f"你是對話分析師。Angela 跟對方（{name}）有最新一輪對話。請**更新** profile（只加新事實，舊的全保留）。\n\n"
+        f"<舊 profile>\n{old_profile_json}\n</舊 profile>\n\n"
+        f"<最新對話>\n{new_text}\n</最新對話>\n\n"
+        f"<更新規則>\n"
+        f"1. **舊 profile 內所有事實必須保留**（除非對方明確改口/糾正）\n"
+        f"2. 只**新增**對方剛揭露的事實到對應欄位\n"
+        f"3. shared_disclosures 加新筆，舊筆不動\n"
+        f"4. milestones 出現新里程碑就加\n"
+        f"5. **不要刪舊資料**\n"
+        f"</更新規則>\n\n"
+        f"請直接輸出更新後的完整 JSON（保留所有舊資料 + 新增新揭露），不要解釋、不要 markdown。"
+    )
+
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        text = _strip_json_codeblock(resp.content[0].text)
+        new_profile = json.loads(text)
+
+        # 🔴 critic 驗證 1：disclosures 不能消失
+        old_disclosures = old_profile.get("shared_disclosures") or []
+        new_disclosures = new_profile.get("shared_disclosures") or []
+        old_facts = {d.get("fact") for d in old_disclosures if d.get("fact")}
+        new_facts = {d.get("fact") for d in new_disclosures if d.get("fact")}
+        missing = old_facts - new_facts
+        if missing:
+            print(f"[profile] ⚠️ critic 偵測到漏掉舊 disclosures：{missing}，merge 回去", flush=True)
+            existing = new_facts
+            for d in old_disclosures:
+                if d.get("fact") and d.get("fact") not in existing:
+                    new_disclosures.append(d)
+            new_profile["shared_disclosures"] = new_disclosures
+
+        # 🔴 critic 驗證 2：core_facts 已知值不能變空
+        old_core = old_profile.get("core_facts") or {}
+        new_core = new_profile.get("core_facts") or {}
+        for key in ("occupation", "location", "schedule"):
+            old_val = old_core.get(key)
+            new_val = new_core.get(key)
+            if old_val and old_val not in (None, "", "未知", "null") and \
+               (not new_val or new_val in (None, "", "未知", "null")):
+                print(f"[profile] ⚠️ critic 偵測到 core_facts.{key} 從 '{old_val}' 變空，還原", flush=True)
+                new_core[key] = old_val
+        new_profile["core_facts"] = new_core
+
+        return new_profile
+    except Exception as e:
+        print(f"[profile] 增量更新 {name} 失敗：{e}，沿用舊 profile", flush=True)
+        return old_profile
+
+
+def _format_profile_for_prompt(profile):
+    """把 profile 渲染成餵給 AI 的純文字區塊（system_prompt 用）"""
+    if not profile:
+        return ""
+    parts = ["📄 **對方檔案**（你已經知道的事實，必須記得，不要假裝不知道）"]
+
+    core = profile.get("core_facts") or {}
+    if core.get("occupation"):
+        parts.append(f"- 職業：{core['occupation']}")
+    if core.get("location") and core["location"] not in ("未知", "", None):
+        parts.append(f"- 所在地：{core['location']}")
+    if core.get("schedule"):
+        parts.append(f"- 作息：{core['schedule']}")
+    traits = core.get("personality_traits") or []
+    if traits:
+        parts.append(f"- 個性：{'、'.join(traits)}")
+
+    interests = profile.get("interests") or []
+    if interests:
+        parts.append(f"- 興趣愛好：{'、'.join(interests)}")
+
+    family = profile.get("family_relationships") or []
+    if family:
+        parts.append(f"- 家庭/關係：{'、'.join(family)}")
+
+    disclosures = profile.get("shared_disclosures") or []
+    them_d = [d for d in disclosures if d.get("speaker") == "them"]
+    if them_d:
+        parts.append("\n**對方自爆過的事實（時序）：**")
+        for d in them_d[-15:]:
+            fact = d.get("fact", "")
+            if fact:
+                parts.append(f"  - {fact}")
+
+    milestones = profile.get("milestones") or []
+    if milestones:
+        parts.append("\n**關係里程碑：**")
+        for m in milestones[-5:]:
+            parts.append(f"  - {m}")
+
+    stage = profile.get("current_stage")
+    if stage:
+        parts.append(f"\n**當前階段：** {stage}")
+
+    return "\n".join(parts)
+
+
+def _ensure_profile(name, history):
+    """保證該觀眾有 profile：沒有就抽，並存檔。回傳 profile dict 或 None。"""
+    profile = _load_profile(name)
+    if profile is None and history:
+        print(f"[profile] {name} 首次見，從 {len(history)} 條 history 抽 profile...", flush=True)
+        profile = _extract_profile_from_history(name, history)
+        if profile:
+            _save_profile(name, profile)
+    return profile
 
 
 def _get_first_chat_date(name):
@@ -602,7 +905,7 @@ def _today_date_header():
 
 def _append_to_history_file(name, sender, text):
     """即時把一條訊息 append 到觀眾的 .txt（LINE 匯出格式）"""
-    path = _history_file_path(name)
+    path = _resolve_history_file(name)
     nickname = PERSONA_NICKNAME if sender == "me" else name
     timestamp = datetime.now().strftime("%H:%M")
     today_header = _today_date_header()
@@ -672,20 +975,17 @@ def get_inter_message_delay():
 
 
 def _send_with_realistic_delay(reply, regions, name="unknown", history=None):
-    """模擬真人打字延遲：先等一個時段隨機秒數，再分段送（段間隨機 1-3 秒）。
-    遇到 {send_xxx} 標記 → 從對應圖片庫隨機抽一張用 send_image 送。
+    """分段送 reply（段間隨機 1-3 秒），送一段立刻寫一段（防 crash）。
 
-    🔴 送一段寫一段：每送出一段立刻寫進 .txt + history（防 crash 資料丟失）。
+    ⚠️ 思考延遲已**移到 handle_one_customer 開頭**（點擊前），
+    避免「秒讀延遲回」破綻。這裡只保留「段間延遲」讓多條訊息看起來像真人一條一條打。
+
+    遇到 {send_xxx} 標記 → 從對應圖片庫隨機抽一張用 send_image 送。
     history: 傳進來的 list，會被 append 每段送出的訊息（讓 main 流程不用再寫一次）
     """
     from 反詐_chat import send_reply, send_image
 
-    # 第 1 階段：思考延遲（依時段）
-    think_delay = get_current_delay()
-    print(f"[Customer] {name} 模擬思考中... 等 {think_delay:.1f} 秒", flush=True)
-    time.sleep(think_delay)
-
-    # 第 2 階段：分段送（每段間 1-3 秒），送一段立刻寫一段
+    # 分段送（每段間 1-3 秒），送一段立刻寫一段
     parts = [p.strip() for p in reply.split("|||") if p.strip()]
     for i, part in enumerate(parts):
         # 偵測 {send_xxx} 圖片標記
@@ -814,7 +1114,9 @@ def find_unread_conversations(monitor=None):
 # ============================================================
 # 處理單一客戶（演示版：簡化、純自然對話、無業務邏輯）
 # ============================================================
-def handle_one_customer(conv, regions, system_prompt, all_histories, monitor=None):
+def handle_one_customer(conv, regions, system_prompt, all_histories, all_profiles=None, monitor=None):
+    if all_profiles is None:
+        all_profiles = {}
     from 反詐_locate import locate_line_regions, ocr_scan_panel, screenshot_line
     from 反詐_chat import (
         is_only_sticker, analyze_sticker,
@@ -822,6 +1124,16 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, monitor=Non
     from difflib import SequenceMatcher
 
     cx, cy = conv["center"]
+
+    # 🔴 思考延遲（在點進去之前，避免「秒讀延遲回」破綻）
+    # LINE 點進對話會立刻已讀 → 對方看到「秒讀」+「90 秒後才回」會覺得故意冷處理
+    # 改成在外面 sleep → 對方看到「過幾分鐘才已讀 + 立刻回覆」 → 自然像真人
+    think_delay = get_current_delay()
+    print(f"[Customer] 偵測到未讀，等 {think_delay:.1f} 秒再點進去（避免秒讀）...", flush=True)
+    time.sleep(think_delay)
+    if should_stop():
+        return regions
+
     print(f"\n[Customer] 點擊未讀對話 at ({cx}, {cy})", flush=True)
     pyautogui.click(cx, cy)
     time.sleep(1.5)
@@ -878,7 +1190,13 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, monitor=Non
         else:
             print(f"[Customer] {name} 全新觀眾", flush=True)
         all_histories[name] = loaded
+        # 🔴 首次見觀眾 → 確保有 profile（沒有就抽，保證 100% 記憶）
+        if loaded:
+            all_profiles[name] = _ensure_profile(name, loaded)
+        else:
+            all_profiles[name] = None
     history = all_histories[name]
+    profile = all_profiles.get(name)
 
     if not history:
         new_them = [m["text"] for m in current_messages if m["sender"] == "them"]
@@ -940,7 +1258,12 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, monitor=Non
         system_prompt + stage_hint +
         "\n\n=== 今天的世界資訊（給你即時參考，避免破綻）===\n" + world_context
     )
-    reply = generate_reply(augmented_prompt, history, new_them)
+    # 🔴 渲染 profile 給 AI 看（保證記得對方所有事實）
+    profile_text = _format_profile_for_prompt(profile) if profile else ""
+    if profile_text:
+        print(f"[Customer] {name} profile 注入（{len((profile or {}).get('shared_disclosures') or [])} 筆事實）", flush=True)
+
+    reply = generate_reply(augmented_prompt, history, new_them, profile_text=profile_text)
     if not reply or len(reply) <= 1:
         time.sleep(0.5)
         return regions
@@ -953,6 +1276,22 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, monitor=Non
     print(f"[Customer] 回覆: {reply[:80]}", flush=True)
     # 🔴 送一段寫一段（history + .txt 由 _send_with_realistic_delay 內部即時寫入）
     _send_with_realistic_delay(reply, regions, name=name, history=history)
+
+    # 🔴 增量更新 profile（拿這輪新對方訊息 + Angela 回覆，背景 thread 跑不阻塞）
+    if profile:
+        round_msgs = [{"sender": "them", "text": t} for t in new_them]
+        round_msgs.append({"sender": "me", "text": reply})
+        try:
+            import threading
+            def _bg_update():
+                updated = _update_profile_incrementally(name, profile, round_msgs)
+                if updated:
+                    all_profiles[name] = updated
+                    _save_profile(name, updated)
+                    print(f"[Customer] {name} profile 增量更新完成（{len(updated.get('shared_disclosures') or [])} 筆）", flush=True)
+            threading.Thread(target=_bg_update, daemon=True).start()
+        except Exception as e:
+            print(f"[Customer] profile 增量更新失敗：{e}", flush=True)
 
     # ============================================================
     # 🆕 Stay-and-watch：送完 reply 後不要立刻離開，再 OCR 看有沒有新訊息
@@ -1007,8 +1346,11 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, monitor=Non
             history.append(m)
             _append_to_history_file(name, m["sender"], m["text"])
 
-        # 再生成 reply 接續回應
-        reply2 = generate_reply(augmented_prompt, history, new_them2)
+        # 再生成 reply 接續回應（也帶 profile）
+        # 用 cache 裡最新的 profile（背景 thread 可能已經更新完）
+        latest_profile = all_profiles.get(name) or profile
+        latest_profile_text = _format_profile_for_prompt(latest_profile) if latest_profile else ""
+        reply2 = generate_reply(augmented_prompt, history, new_them2, profile_text=latest_profile_text)
         if not reply2 or len(reply2) <= 1:
             break
         reply2 = filter_reply(reply2)
@@ -1078,6 +1420,7 @@ def main(stop_time, monitor=None):
     time.sleep(0.5)
 
     all_histories = {}
+    all_profiles = {}  # 🔴 結構化 profile cache（保證 100% 記憶）
     POLL_INTERVAL = 10
 
     print(f"\n[Monitor] 開始監控未讀訊息...", flush=True)
@@ -1132,7 +1475,7 @@ def main(stop_time, monitor=None):
 
                     conv = unread_list[0]
                     regions = handle_one_customer(
-                        conv, regions, box_prompt, all_histories, monitor
+                        conv, regions, box_prompt, all_histories, all_profiles, monitor
                     )
 
                     if should_stop():

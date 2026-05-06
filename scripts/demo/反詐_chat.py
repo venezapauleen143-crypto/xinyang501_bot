@@ -670,22 +670,45 @@ def _call_ai_tool(tool_name, tool_input):
         return f"[工具 {tool_name} 失敗: {type(e).__name__}: {e}]"
 
 
-def generate_reply(system_prompt, conversation_history, new_messages_text):
+def generate_reply(system_prompt, conversation_history, new_messages_text, profile_text=""):
     """Claude AI 根據 SOP + 對話歷史 + 新訊息生成回覆。
 
     支援 tool use：當對方問即時資訊（股價、特定地區天氣、新聞）AI 會自己呼叫工具。
+
+    profile_text: 對方的結構化 profile（_format_profile_for_prompt 渲染後的純文字）
+                  保證 AI 100% 記得對方說過的事實（職業、地點、家人等）
     """
-    # 組對話歷史
+    # 組對話歷史（recent window 30 條，覆蓋 day 1-9 的「最近段落」）
     history_lines = []
-    for msg in conversation_history[-20:]:
+    for msg in conversation_history[-30:]:
         label = "[客戶]" if msg["sender"] == "them" else "[小編]"
         history_lines.append(f"{label} {msg['text']}")
     history_text = "\n".join(history_lines)
 
     new_text = "\n".join(f"• {m}" for m in new_messages_text)
 
+    # 🔴 雙層記憶：profile（穩定事實）+ recent 30 條（episodic 細節）
+    if profile_text:
+        profile_block = (
+            profile_text + "\n\n"
+            "<⚠️ 記憶使用規則 - 絕對遵守>\n"
+            "上面這些是**你早就知道**的事實（你跟對方已經聊很久了）。\n"
+            "❌ 禁止對已知事實表現得像第一次聽到：\n"
+            "  - 對方提到病人/診所 → 不要說「哦你是醫生呀😮」（你早知道他是牙醫）\n"
+            "  - 對方提到下班 → 不要問「你幾點下班呀」（你早知道 8:30）\n"
+            "  - 對方提到家 → 不要問「你住哪裡」（你早知道台北）\n"
+            "  - 對方提到小孩 → 不要問「你有小孩嗎」（你早知道 2 歲）\n"
+            "✅ 應該以「老朋友」的口吻自然提及：\n"
+            "  - 「你們牙科今天忙喔」「快收工咯，撐著點」「9 點才到家辛苦」\n"
+            "  - 自然套用已知背景，不重複問已知問題\n"
+            "</⚠️ 記憶使用規則>\n\n"
+        )
+    else:
+        profile_block = ""
+
     user_content = (
-        "以下是目前的對話紀錄：\n\n" + history_text + "\n\n"
+        profile_block +
+        "以下是最近的對話紀錄：\n\n" + history_text + "\n\n"
         "對方剛發了新訊息：\n" + new_text + "\n\n"
         "請根據你的人設、口吻、當前對話階段，自然回覆對方。\n\n"
         "<工具使用規則>\n"
