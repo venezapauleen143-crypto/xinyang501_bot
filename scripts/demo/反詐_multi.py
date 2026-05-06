@@ -582,7 +582,8 @@ def _extract_profile_from_history(name, history):
     )
 
     try:
-        client = anthropic.Anthropic()
+        # 🔴 加 timeout 60 秒避免 Haiku 偶爾卡死占住 worker
+        client = anthropic.Anthropic(timeout=60.0)
         resp = client.messages.create(
             model="claude-haiku-4-5",
             max_tokens=4096,
@@ -632,7 +633,8 @@ def _update_profile_incrementally(name, old_profile, new_messages):
     )
 
     try:
-        client = anthropic.Anthropic()
+        # 🔴 加 timeout 60 秒避免 Haiku 偶爾卡死占住 worker
+        client = anthropic.Anthropic(timeout=60.0)
         resp = client.messages.create(
             model="claude-haiku-4-5",
             max_tokens=4096,
@@ -808,10 +810,34 @@ def _profile_worker_loop():
                     _PROFILE_TASK_QUEUE.put_nowait(task)
                 except _queue_mod.Full:
                     print(f"[profile-worker] queue 滿，丟棄 {name} 的 retry", flush=True)
+                    _write_dead_letter(name, "queue_full_after_rate_limit", task, err)
             else:
                 print(f"[profile-worker] {name} 處理失敗：{err[:200]}", flush=True)
+                # 🔴 dead letter queue：非 rate_limit 失敗寫盤，避免 silent drop
+                _write_dead_letter(name, "worker_exception", task, err)
+                _emit_event("profile_failed", customer=name, data={"err": err[:200]})
         finally:
             _PROFILE_TASK_QUEUE.task_done()
+
+
+def _write_dead_letter(name, reason, task, err):
+    """profile worker 失敗的任務寫到 logs/profile_failures.jsonl，方便事後追"""
+    try:
+        logs_dir = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/logs")
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        f = logs_dir / "profile_failures.jsonl"
+        record = {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "customer": name,
+            "reason": reason,
+            "err": str(err)[:500],
+            "round_msgs_count": len(task.get("round_msgs") or []),
+            "history_len": len(task.get("history") or []),
+        }
+        with io.open(f, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # dead letter 自己也失敗就放棄
 
 
 def _ensure_profile_workers_started():
@@ -828,89 +854,106 @@ def _ensure_profile_workers_started():
 
 
 # ============================================================
-# 識破偵測：對方說「你是 AI / 機器人 / 不是真人」→ 標記 + Telegram alert
+# 識破偵測：對方說「你是 AI / 機器人 / 不是真人」→ console 警告 + 標記 profile
 # ============================================================
-_AI_SUSPICION_KEYWORDS = (
+# 強質疑短語（含完整指控結構，不會誤報）
+_AI_SUSPICION_STRONG = (
     "你是ai", "你是 ai", "你是AI", "你是 AI",
-    "機器人", "机器人",
-    "不是真人", "不是真的人",
-    "你是程式", "你是机器", "你是機器",
-    "chatgpt", "ChatGPT", "claude",
-    "你是AI吧", "你是机器吧", "你是機器吧",
-    "假的吧", "你假的", "ai回的",
-    "ai 写的", "AI 寫的", "AI寫的", "ai写的",
-    "回應太快", "回应太快",
+    "你是不是ai", "你是不是 ai", "你是不是AI",
+    "你是不是機器人", "你是不是机器人", "你是不是機器", "你是不是机器",
+    "你是不是真人", "你是不是真的",
+    "你是机器人", "你是機器人", "你是机器", "你是機器",
+    "你是程式", "你是程序", "你是bot",
+    "你是chatgpt", "你是gpt", "你是claude",
+    "你是假的", "假的吧",
+    "ai 寫的", "ai寫的", "AI 寫的", "AI寫的", "ai写的", "ai 写的",
+    "ai回的", "AI回的", "ai 回的",
+    "不是真人", "不是真的人", "不是人吧",
+    "回應太快", "回应太快", "回的太快", "回得太快",
+    "機器人吧", "机器人吧", "ai吧", "AI吧",
+    # 單獨提到這些 AI 名稱在曖昧聊天中 99% 是質疑
+    "chatgpt", "ChatGPT", "ChatGpt",
 )
 
 
 def _detect_ai_suspicion(messages):
     """偵測對方訊息中是否有「懷疑 AI」的關鍵字。
 
+    只用「強質疑短語」（含「你是 X」這種完整指控結構），避免誤報：
+    - 「AI 智慧科技很厲害」← 沒有「你是」prefix，不會 match
+    - 「我看 AI 新聞」← 同上
+
     回傳：(suspected_bool, matched_quote 或 None)
     """
     for msg_text in messages:
-        low = msg_text.lower().replace(" ", "")
-        for kw in _AI_SUSPICION_KEYWORDS:
+        # 全形空格也要去掉
+        low = msg_text.lower().replace(" ", "").replace("　", "")
+        for kw in _AI_SUSPICION_STRONG:
             kw_norm = kw.lower().replace(" ", "")
             if kw_norm in low:
                 return True, msg_text
     return False, None
 
 
-def _send_telegram_alert(text):
-    """透過 Telegram bot 發送 alert 給用戶（venezapauleen143 user id 8362721681）"""
-    try:
-        import urllib.request
-        import urllib.parse
-        # 從 .env 拿 token（小牛馬 bot 共用）
-        token = os.environ.get("TELEGRAM_BOT_TOKEN")
-        if not token:
-            return False
-        chat_id = "8362721681"  # 于晏哥
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = urllib.parse.urlencode({
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST")
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return resp.status == 200
-    except Exception as e:
-        print(f"[alert] Telegram 失敗: {e}", flush=True)
-        return False
+# ============================================================
+# Event log (buffered append，避免高頻 IO)
+# ============================================================
+_EVENT_BUFFER = []
+_EVENT_BUFFER_LOCK = _threading.Lock()
+_EVENT_BUFFER_MAX = 10        # 累積 10 個事件就 flush
+_EVENT_BUFFER_FLUSH_SEC = 5   # 或 5 秒沒寫盤就 flush
+_EVENT_LAST_FLUSH = [time.time()]  # list 包起來避免 closure 問題
 
 
-def _emit_event(event_type, customer="", data=None):
-    """關鍵事件寫進 events.jsonl，供之後 aggregate 分析
+def _flush_event_buffer():
+    """把 buffer 內的 event 一次寫盤（thread-safe）"""
+    with _EVENT_BUFFER_LOCK:
+        if not _EVENT_BUFFER:
+            return
+        records = list(_EVENT_BUFFER)
+        _EVENT_BUFFER.clear()
+        _EVENT_LAST_FLUSH[0] = time.time()
 
-    欄位：timestamp / event_type / customer / data
-    Event types:
-      - customer_seen: 首次見到該客戶
-      - new_messages: 偵測到新對方訊息
-      - reply_sent: AI 已回覆
-      - profile_first_extract: 首次抽 profile 完成
-      - profile_updated: 增量更新 profile 完成
-      - ocr_failed: OCR 異常
-      - ai_suspicion: 對方疑似識破 AI
-      - rate_limit: 撞 rate limit
-    """
+    # 釋放鎖後再寫盤（避免 IO 卡其他 emit）
     try:
         events_dir = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/logs")
         events_dir.mkdir(parents=True, exist_ok=True)
-        # 按日切檔，每日一個 events_YYYY-MM-DD.jsonl
+        # 按日切檔
         today = datetime.now().strftime("%Y-%m-%d")
         events_file = events_dir / f"events_{today}.jsonl"
-        record = {
-            "ts": datetime.now().isoformat(timespec="seconds"),
-            "type": event_type,
-            "customer": customer,
-            "data": data or {},
-        }
         with io.open(events_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
     except Exception as e:
-        print(f"[event] write failed: {e}", flush=True)
+        print(f"[event] flush failed: {e}", flush=True)
+
+
+def _emit_event(event_type, customer="", data=None):
+    """關鍵事件 buffered append，10 條或 5 秒 flush 一次
+
+    Event types:
+      - customer_seen / new_messages / reply_sent
+      - profile_first_extract / profile_updated / profile_failed
+      - ocr_failed / ai_suspicion / rate_limit
+    """
+    record = {
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "type": event_type,
+        "customer": customer,
+        "data": data or {},
+    }
+    with _EVENT_BUFFER_LOCK:
+        _EVENT_BUFFER.append(record)
+        should_flush = (
+            len(_EVENT_BUFFER) >= _EVENT_BUFFER_MAX
+            or (time.time() - _EVENT_LAST_FLUSH[0]) >= _EVENT_BUFFER_FLUSH_SEC
+        )
+    if should_flush:
+        _flush_event_buffer()
+
+
+# 關閉前 flush 剩下的事件
+atexit.register(_flush_event_buffer)
 
 
 def _enqueue_profile_task(name, history, round_msgs, all_profiles):
@@ -930,20 +973,42 @@ def _enqueue_profile_task(name, history, round_msgs, all_profiles):
         print(f"[profile-worker] ⚠️ queue 滿（>200），丟棄 {name} 的更新", flush=True)
 
 
+# 🔴 cache 首次見面日期（避免每次 status snapshot 都讀整個 .txt）
+_FIRST_CHAT_DATE_CACHE = {}
+
+
 def _get_first_chat_date(name):
-    """從 .txt 找最早的日期分隔行，回傳 datetime.date"""
-    path = _history_file_path(name)
-    if not path.exists():
-        return datetime.now().date()
-    try:
-        with io.open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                m = re.match(r'^(\d{4})\.(\d{2})\.(\d{2})', line)
-                if m:
-                    return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()
-    except Exception:
-        pass
-    return datetime.now().date()
+    """從 .txt 找最早的日期分隔行，回傳 datetime.date（含 cache）"""
+    if name in _FIRST_CHAT_DATE_CACHE:
+        return _FIRST_CHAT_DATE_CACHE[name]
+
+    # 優先從 profile.first_seen 拿（已經 ISO 格式，不用讀 .txt）
+    profile = _load_profile(name)
+    if profile:
+        first_seen = profile.get("first_seen")
+        if first_seen:
+            try:
+                d = datetime.fromisoformat(first_seen).date()
+                _FIRST_CHAT_DATE_CACHE[name] = d
+                return d
+            except (ValueError, TypeError):
+                pass
+
+    # fallback：讀 .txt 第一行日期分隔
+    path = _resolve_history_file(name)
+    result = datetime.now().date()
+    if path.exists():
+        try:
+            with io.open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    m = re.match(r'^(\d{4})\.(\d{2})\.(\d{2})', line)
+                    if m:
+                        result = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()
+                        break
+        except Exception:
+            pass
+    _FIRST_CHAT_DATE_CACHE[name] = result
+    return result
 
 
 # ============================================================
@@ -1362,10 +1427,15 @@ def _send_with_realistic_delay(reply, regions, name="unknown", history=None):
         if i < len(parts) - 1:
             # 🔴 段間延遲 = 基礎延遲 + 「下一段字數比例」打字時間
             # 模擬真人：邊想（基礎）+ 邊打字（字數越多打越久）
-            base = get_inter_message_delay()
             next_part = parts[i + 1] if i + 1 < len(parts) else ""
+            is_img_tag = next_part.startswith("{") and next_part.endswith("}")
+            # 短段（< 5 字）走快速延遲 [2, 5]，長段才用設定的 [5, 12]
+            if len(next_part) < 5 and not is_img_tag:
+                base = random.uniform(2, 5)
+            else:
+                base = get_inter_message_delay()
             # 排除圖片標記（{send_xxx}）的字數計算
-            if not (next_part.startswith("{") and next_part.endswith("}")):
+            if not is_img_tag:
                 # 每字 0.3-0.5 秒（手機打字速度）
                 typing_time = len(next_part) * random.uniform(0.3, 0.5)
                 # 上限 30 秒（避免長段卡死）
@@ -1681,24 +1751,25 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
 
     print(f"[Customer] 新訊息: {new_them}", flush=True)
 
-    # 🔴 識破偵測：對方說「你是 AI / 機器人」→ 標記 profile + Telegram alert
+    # 🔴 識破偵測：對方說「你是 AI / 機器人」→ console 警告 + 標記 profile（不發 Telegram）
+    # 加 fingerprint 去重：profile.ai_suspicion_flags 內已存的 quote 不重複觸發
     suspected, suspect_quote = _detect_ai_suspicion(new_them)
     if suspected:
-        print(f"[Customer] ⚠️⚠️ {name} 疑似識破 AI！對方說：「{suspect_quote}」", flush=True)
-        _emit_event("ai_suspicion", customer=name, data={"quote": suspect_quote})
-        # 標記 profile
         cur_profile = all_profiles.get(name)
+        existing_quotes = set()
         if cur_profile:
-            flags = cur_profile.get("ai_suspicion_flags") or []
-            flags.append({
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "quote": suspect_quote,
-            })
-            cur_profile["ai_suspicion_flags"] = flags
-            _save_profile(name, cur_profile)
-        # Telegram alert
-        alert_text = f"⚠️ <b>{name}</b> 疑似識破 AI\n\n對方說：「{suspect_quote}」\n\n時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        _send_telegram_alert(alert_text)
+            existing_quotes = {f.get("quote") for f in (cur_profile.get("ai_suspicion_flags") or []) if f.get("quote")}
+        if suspect_quote not in existing_quotes:
+            print(f"[Customer] ⚠️⚠️ {name} 疑似識破 AI！對方說：「{suspect_quote}」", flush=True)
+            _emit_event("ai_suspicion", customer=name, data={"quote": suspect_quote})
+            if cur_profile:
+                flags = cur_profile.get("ai_suspicion_flags") or []
+                flags.append({
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                    "quote": suspect_quote,
+                })
+                cur_profile["ai_suspicion_flags"] = flags
+                _save_profile(name, cur_profile)
 
     # 純貼圖 → Vision
     if is_only_sticker(new_them):
