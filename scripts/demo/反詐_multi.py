@@ -68,6 +68,94 @@ HISTORIES_DIR.mkdir(parents=True, exist_ok=True)
 # 圖片庫目錄（每個分類一個子資料夾，放 .jpg/.png）
 IMAGES_DIR = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/images")
 
+# ============================================================
+# 即時資訊工具（從 claude_tools.py 借）
+# ============================================================
+sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+
+# 全域 context 快取（30 分鐘 TTL，避免每次對話都查 API）
+_WORLD_CONTEXT_CACHE = {}
+_WORLD_CONTEXT_TTL = 1800  # 30 分鐘
+
+
+def _safe_call_tool(tool_name, *args, **kwargs):
+    """安全呼叫 claude_tools 函式，失敗回空字串"""
+    try:
+        import claude_tools
+        fn = getattr(claude_tools, tool_name, None)
+        if fn is None:
+            return ""
+        result = fn(*args, **kwargs)
+        return str(result) if result else ""
+    except Exception as e:
+        print(f"[tool] {tool_name} 呼叫失敗: {e}", flush=True)
+        return ""
+
+
+# 台灣常見地名 → 對應查詢城市
+_TW_AREA_MAP = {
+    "台北": "Taipei", "新北": "New Taipei", "桃園": "Taoyuan",
+    "台中": "Taichung", "台南": "Tainan", "高雄": "Kaohsiung",
+    "新竹": "Hsinchu", "苗栗": "Miaoli", "彰化": "Changhua",
+    "南投": "Nantou", "雲林": "Yunlin", "嘉義": "Chiayi",
+    "屏東": "Pingtung", "宜蘭": "Yilan", "花蓮": "Hualien",
+    "台東": "Taitung", "基隆": "Keelung",
+}
+
+
+def _detect_opponent_location(name, history):
+    """從對方 LINE 名稱 + history 推測所在地（回傳城市名供查天氣）"""
+    text_to_scan = name + " " + " ".join(
+        m.get("text", "") for m in history if m.get("sender") == "them"
+    )
+    # 找台灣縣市
+    for tw_name, en_name in _TW_AREA_MAP.items():
+        if tw_name in text_to_scan or tw_name.replace("台", "臺") in text_to_scan:
+            return tw_name
+    # 找其他地區
+    other_areas = ["香港", "上海", "北京", "廣州", "深圳", "東京", "首爾", "新加坡"]
+    for area in other_areas:
+        if area in text_to_scan:
+            return area
+    return None
+
+
+def _get_world_context(opponent_location=None):
+    """組今天的世界資訊：日期、Angela 香港天氣、對方所在地天氣、香港當日新聞。
+
+    用 30 分鐘快取避免每次對話都重複查 API。
+    """
+    cache_key = (opponent_location or "_none_", datetime.now().strftime("%Y%m%d-%H"))
+    if cache_key in _WORLD_CONTEXT_CACHE:
+        cached, ts = _WORLD_CONTEXT_CACHE[cache_key]
+        if (time.time() - ts) < _WORLD_CONTEXT_TTL:
+            return cached
+
+    parts = []
+    now = datetime.now()
+    weekday_zh = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][now.weekday()]
+    parts.append(f"📅 今天：{now.strftime('%Y-%m-%d')} {weekday_zh}")
+
+    # Angela 所在地（香港）天氣
+    hk_weather = _safe_call_tool("fetch_weather", "Hong Kong")
+    if hk_weather:
+        parts.append(f"🌤 Angela 所在地（香港）天氣：\n{hk_weather[:300]}")
+
+    # 對方所在地天氣（如果偵測到）
+    if opponent_location:
+        opp_weather = _safe_call_tool("fetch_weather", opponent_location)
+        if opp_weather:
+            parts.append(f"🌤 對方所在地（{opponent_location}）天氣：\n{opp_weather[:300]}")
+
+    # 全球當日新聞 top 3
+    global_news = _safe_call_tool("fetch_global_news", count=3)
+    if global_news:
+        parts.append(f"📰 今日要聞：\n{global_news[:600]}")
+
+    context = "\n\n".join(parts)
+    _WORLD_CONTEXT_CACHE[cache_key] = (context, time.time())
+    return context
+
 
 def _resolve_image_tag(tag):
     """從 {send_xxx} 標記找對應圖片，回傳隨機一張的路徑（找不到回 None）"""
@@ -832,12 +920,26 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, monitor=Non
         meaning = analyze_sticker(regions, monitor)
         print(f"[Customer] 純貼圖 → Vision 解讀為「{meaning}」", flush=True)
         new_them = [f"[貼圖含意：{meaning}]"]
+    else:
+        # 🆕 偵測對方是否傳了「真實照片」（不是貼圖、不是文字）
+        # 用 Haiku Vision 看 chat_area 底部，回傳照片描述
+        from 反詐_chat import analyze_recent_photo
+        photo_desc = analyze_recent_photo(regions, monitor)
+        if photo_desc:
+            print(f"[Customer] 偵測到對方傳照片 → Vision 描述: {photo_desc}", flush=True)
+            # 把照片描述加進 new_them 讓 AI 看到
+            new_them = list(new_them) + [f"[對方傳了一張照片：{photo_desc}]"]
 
-    # AI 生成回覆（注入階段感知 Day N）
+    # AI 生成回覆（注入階段感知 Day N + 今天的世界資訊）
     day_n = _calculate_day_n(name)
     stage_hint = _build_stage_hint(day_n)
-    print(f"[Customer] {name} 對話 Day {day_n}", flush=True)
-    augmented_prompt = system_prompt + stage_hint
+    opponent_location = _detect_opponent_location(name, history)
+    world_context = _get_world_context(opponent_location)
+    print(f"[Customer] {name} 對話 Day {day_n}, 對方所在地: {opponent_location or '未知'}", flush=True)
+    augmented_prompt = (
+        system_prompt + stage_hint +
+        "\n\n=== 今天的世界資訊（給你即時參考，避免破綻）===\n" + world_context
+    )
     reply = generate_reply(augmented_prompt, history, new_them)
     if not reply or len(reply) <= 1:
         time.sleep(0.5)

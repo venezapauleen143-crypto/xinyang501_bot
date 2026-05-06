@@ -442,11 +442,239 @@ def analyze_sticker(regions, monitor=None):
         return f"同意（API 錯誤 {type(e).__name__}，預設正面）"
 
 
+def analyze_recent_photo(regions, monitor=None):
+    """偵測對方最新訊息是否為照片，並用 Haiku Vision 描述照片內容。
+
+    回傳：
+        - 沒照片 → ""
+        - 有照片 → 描述字串（如「夕陽下的沙灘，可能是台灣東海岸」）
+    """
+    from 反詐_locate import screenshot_chat_area
+    import base64, io as _io
+
+    try:
+        chat_img = screenshot_chat_area(regions, monitor)
+        # 截最下方 350 px（最新對方訊息應該在這）
+        h = chat_img.size[1]
+        bottom = chat_img.crop((0, max(0, h - 350), chat_img.size[0], h))
+
+        buf = _io.BytesIO()
+        bottom.save(buf, format="PNG")
+        img_b64 = base64.standard_b64encode(buf.getvalue()).decode("utf-8")
+
+        r = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=200,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64",
+                                                  "media_type": "image/png",
+                                                  "data": img_b64}},
+                    {"type": "text", "text": (
+                        "這是 LINE 對話視窗最下方的截圖。\n"
+                        "**只看畫面最下方那筆訊息（左側對方訊息）**。\n\n"
+                        "判斷：那筆訊息是不是「真實照片」（不是貼圖、不是文字）？\n"
+                        "- 如果是貼圖（卡通/動畫/表情符號圖示）→ 回覆「NO_PHOTO」\n"
+                        "- 如果是文字訊息 → 回覆「NO_PHOTO」\n"
+                        "- 如果是「真實照片」（自拍、食物、街景、風景等）→ "
+                        "用 1-2 句話描述照片內容（例：「街景，可能是日本東京新宿，傍晚」）\n\n"
+                        "只回描述或 NO_PHOTO，不要其他解釋。"
+                    )}
+                ]
+            }]
+        )
+        text = r.content[0].text.strip()
+        if "NO_PHOTO" in text or len(text) < 5:
+            return ""
+        return text
+    except Exception as e:
+        return ""
+
+
 # ============================================================
 # Claude AI 回覆（根據 SOP）
 # ============================================================
+# ============================================================
+# AI 工具定義（讓 AI 自己決定何時查即時資訊）
+# ============================================================
+_AI_TOOLS = [
+    {
+        "name": "fetch_weather",
+        "description": "查全球任意城市的當前即時天氣（例：'Taipei'、'台北'、'Hong Kong'、'Tokyo'、'New York'）。當對方問特定地區當下天氣時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "city": {"type": "string", "description": "城市名稱（中英文都可）"}
+            },
+            "required": ["city"]
+        }
+    },
+    {
+        "name": "fetch_stock",
+        "description": "查股票即時價格與走勢。台股用 4 碼數字（2330=台積電）、美股用代碼（AAPL=蘋果, TSLA=特斯拉）、A 股用 6 碼（000001）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代碼"},
+                "period": {"type": "string", "description": "區間（預設 1mo）", "default": "1mo"}
+            },
+            "required": ["symbol"]
+        }
+    },
+    {
+        "name": "fetch_crypto",
+        "description": "查加密貨幣價格（如 'bitcoin'、'ethereum'、'dogecoin'）",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "coin": {"type": "string", "description": "幣種英文名"}
+            },
+            "required": ["coin"]
+        }
+    },
+    {
+        "name": "search_news",
+        "description": "搜尋特定主題的新聞（例：'台積電財報'、'美國大選'、'颱風'）。對方問近期新聞事件時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "新聞關鍵字"},
+                "lang": {"type": "string", "description": "語言 zh-TW/en", "default": "zh-TW"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "tavily_search",
+        "description": "通用網路即時搜尋（適合查事實、人物、事件、特殊資訊）。當其他工具不適用時用這個。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜尋關鍵字"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "fetch_forex",
+        "description": "查外匯匯率（例：'USDTWD'=美元台幣、'JPYTWD'=日圓台幣、'EURUSD'=歐元美元）。對方聊匯率/旅遊換錢時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pair": {"type": "string", "description": "貨幣對代碼，6 個英文字母"}
+            },
+            "required": ["pair"]
+        }
+    },
+    {
+        "name": "fetch_currency_converter",
+        "description": "貨幣換算（例：100 美金等於多少台幣）。對方問換算金額時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "number", "description": "金額"},
+                "from_currency": {"type": "string", "description": "原幣別代碼，如 USD、JPY、TWD"},
+                "to_currency": {"type": "string", "description": "目標幣別代碼"}
+            },
+            "required": ["amount", "from_currency", "to_currency"]
+        }
+    },
+    {
+        "name": "fetch_finance_news",
+        "description": "查當日財經新聞概況（不需指定關鍵字，預設拿綜合 5 則）。對方聊「最近股市」「財經消息」時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer", "description": "幾則新聞", "default": 5}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "wikipedia_search",
+        "description": "維基百科查事實（人物、地點、概念、歷史事件等）。對方提到不確定的人或事物時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "查詢關鍵字"},
+                "lang": {"type": "string", "description": "語言 zh / en / ja", "default": "zh"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "read_webpage",
+        "description": "讀取網址內容（對方傳網址、提到某網站時用，可以看標題+主文）。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "完整網址"},
+                "max_chars": {"type": "integer", "description": "最多讀幾字", "default": 3000}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "fetch_sports_scores",
+        "description": "查體育即時比分（NBA、NFL、MLB、NHL、足球）。對方聊「昨天比賽」「球星」時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sport": {"type": "string", "description": "運動類別: nba/nfl/mlb/nhl/soccer", "default": "nba"},
+                "league": {"type": "string", "description": "聯盟（足球用，如 epl/laliga）", "default": ""}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "fetch_google_trends",
+        "description": "查 Google 熱搜趨勢（關鍵字熱度）。對方聊熱門話題、時下流行時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keywords": {"type": "array", "items": {"type": "string"}, "description": "1-5 個關鍵字"},
+                "geo": {"type": "string", "description": "地區 TW/US/HK/JP", "default": "TW"}
+            },
+            "required": ["keywords"]
+        }
+    },
+    {
+        "name": "ptt_search",
+        "description": "查 PTT 鄉民最近討論（台灣論壇）。對方聊台灣話題、八卦時用。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "搜尋關鍵字"},
+                "board": {"type": "string", "description": "看板 Gossiping/Stock/movie 等", "default": "Gossiping"},
+                "count": {"type": "integer", "description": "幾篇", "default": 5}
+            },
+            "required": ["keyword"]
+        }
+    },
+]
+
+
+def _call_ai_tool(tool_name, tool_input):
+    """執行 claude_tools 的工具，回傳結果字串（限長度避免 token 爆掉）"""
+    import sys as _sys
+    _sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
+    try:
+        import claude_tools
+        fn = getattr(claude_tools, tool_name, None)
+        if fn is None:
+            return f"[工具 {tool_name} 不存在]"
+        result = fn(**tool_input)
+        return str(result)[:2000]   # 上限 2000 chars
+    except Exception as e:
+        return f"[工具 {tool_name} 失敗: {type(e).__name__}: {e}]"
+
+
 def generate_reply(system_prompt, conversation_history, new_messages_text):
-    """Claude AI 根據 SOP + 對話歷史 + 新訊息生成回覆"""
+    """Claude AI 根據 SOP + 對話歷史 + 新訊息生成回覆。
+
+    支援 tool use：當對方問即時資訊（股價、特定地區天氣、新聞）AI 會自己呼叫工具。
+    """
     # 組對話歷史
     history_lines = []
     for msg in conversation_history[-20:]:
@@ -460,6 +688,54 @@ def generate_reply(system_prompt, conversation_history, new_messages_text):
         "以下是目前的對話紀錄：\n\n" + history_text + "\n\n"
         "對方剛發了新訊息：\n" + new_text + "\n\n"
         "請根據你的人設、口吻、當前對話階段，自然回覆對方。\n\n"
+        "<工具使用規則>\n"
+        "如果對方問你需要查的即時資訊（特定股票、特定地區天氣、匯率、新聞事件、體育比分、不確定的事實），"
+        "可以呼叫工具查。**查到後必須以 Angela 的口吻寫摘要**，絕對不能複製工具原文。\n\n"
+        "<好範例 1>\n"
+        "  工具輸出：TSLA: $245.30 (+2.3%) Volume 32M, P/E 84.2\n"
+        "  Angela 回覆：特斯拉今天好像漲了 2 趴多~ 245 左右吧 你有買嗎？😆\n"
+        "</好範例 1>\n\n"
+        "<壞範例 1>\n"
+        "  工具輸出：TSLA: $245.30 (+2.3%) Volume 32M, P/E 84.2\n"
+        "  ❌ Angela 回覆：TSLA 漲幅 2.3% 收盤 $245.30 成交量 32M\n"
+        "  原因：用「漲幅」「收盤」「成交量」金融術語、貼小數點精確\n"
+        "</壞範例 1>\n\n"
+        "<好範例 2>\n"
+        "  工具輸出：📊 NBA: Lakers 108 vs Thunder 90\n"
+        "  Angela 回覆：湖人昨天輸了😬 90 比 108 給雷霆 你有看？\n"
+        "</好範例 2>\n\n"
+        "<壞範例 2>\n"
+        "  工具輸出：📊 NBA: Lakers 108 vs Thunder 90\n"
+        "  ❌ Angela 回覆：📊 NBA 比分: Lakers 108 vs Thunder 90\n"
+        "  原因：直接照抄 emoji 跟英文格式\n"
+        "</壞範例 2>\n\n"
+        "<好範例 3>\n"
+        "  工具輸出：100 USD = 3,140.7 TWD（即時匯率：1 USD = 31.4070 TWD）\n"
+        "  Angela 回覆：美金 3140 多吧~ 一塊大概三十一塊台幣\n"
+        "</好範例 3>\n\n"
+        "<好範例 4>\n"
+        "  工具輸出：📍Hong Kong 25°C Light rain 濕度 79% 風速 19 km/h\n"
+        "  Angela 回覆：香港今天 25 度多雲帶點雨~ 你那邊呢？\n"
+        "</好範例 4>\n\n"
+        "<好範例 5>\n"
+        "  工具輸出：5 則新聞列表（特斯拉、蘋果、台積電、美聯儲、比特幣）\n"
+        "  Angela 回覆：我看到台積電今天又漲了😬 你有關注嗎？\n"
+        "  原則：從多則挑 1 則最相關的講，不列清單\n"
+        "</好範例 5>\n\n"
+        "<具體規則>\n"
+        "1. 數字口語化：245.30 → 「245 多」/「兩百四十多」（不要小數點）\n"
+        "2. 不抄工具 emoji：📊 💱 🌤 📍 都不用，改用 Angela 常用的 🫣 😆 🤣 🥲 😬\n"
+        "3. 不講專業術語：成交量/本益比/市值/52週高/濕度/風速 都不說\n"
+        "4. 不列清單：工具回 5 則新聞 → 你只挑 1 則最有趣的講\n"
+        "5. 結尾必帶 hook：「你也買了嗎」「你那邊呢」「你看了嗎」\n"
+        "6. 兩句話內最佳（過長像新聞 app）\n"
+        "</具體規則>\n\n"
+        "<為什麼>\n"
+        "你是 Angela——30 歲的香港都市女，跟對方在 Bumble 認識聊天。\n"
+        "真實的 Angela **不會**說「漲幅 2.3%」（會說「漲了 2 趴多」）、不會用「📊」（會用「🫣」）。\n"
+        "借你的人設過濾語氣，自然就不會像 AI。\n"
+        "</為什麼>\n"
+        "</工具使用規則>\n\n"
         "【最重要】你的回覆會直接發送給對方看到，所以：\n"
         "- 只寫要發送的文字，分析、判斷、註解全都不能有\n"
         "- 不能出現任何 LINE 系統訊息（「聯絡卡片」「已讀」「未讀」「儲存另存新檔」「Keep筆記」「以下為尚未閱讀的訊息」）\n"
@@ -470,13 +746,46 @@ def generate_reply(system_prompt, conversation_history, new_messages_text):
         "- 一次寫對的訊息，自然就好"
     )
 
-    r = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=500,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}]
-    )
-    return r.content[0].text.strip()
+    messages = [{"role": "user", "content": user_content}]
+
+    # 多輪 tool use 循環（最多 5 輪避免無限）
+    for round_i in range(5):
+        r = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=800,
+            system=system_prompt,
+            tools=_AI_TOOLS,
+            messages=messages,
+        )
+
+        # 沒呼叫工具 → 拿最終 text
+        if r.stop_reason != "tool_use":
+            for block in r.content:
+                if getattr(block, "type", None) == "text":
+                    return block.text.strip()
+            return ""
+
+        # 有呼叫工具 → 執行並把結果送回
+        tool_uses = [b for b in r.content if getattr(b, "type", None) == "tool_use"]
+        tool_results = []
+        for tu in tool_uses:
+            print(f"[Tool] AI 呼叫 {tu.name}({tu.input})", flush=True)
+            result = _call_ai_tool(tu.name, tu.input)
+            print(f"[Tool] {tu.name} → {result[:100]}...", flush=True)
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": tu.id,
+                "content": result,
+            })
+
+        messages.append({"role": "assistant", "content": r.content})
+        messages.append({"role": "user", "content": tool_results})
+
+    # 5 輪後仍在 tool use → 取最後的 text（如果有）
+    for block in r.content:
+        if getattr(block, "type", None) == "text":
+            return block.text.strip()
+    return ""
 
 
 # ============================================================
