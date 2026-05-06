@@ -13,7 +13,7 @@
 
   "default_delay": [30, 90],
 
-  "inter_message_delay": [1, 3],
+  "inter_message_delay": [5, 12],
 
   "_演講當天調整建議": "演講時段（如 19-22）建議 delay_min=20、delay_max=60，觀眾體驗到延遲又不會等太久"
 }

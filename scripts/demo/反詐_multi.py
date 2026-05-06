@@ -37,6 +37,45 @@ except Exception:
 if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
+    # 🔴 log rotation: 把 stdout/stderr 同步寫到 logs/反詐_multi.log（100MB × 5 份）
+    import logging
+    from logging.handlers import RotatingFileHandler
+    LOGS_DIR = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/logs")
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    _log_handler = RotatingFileHandler(
+        str(LOGS_DIR / "反詐_multi.log"),
+        maxBytes=100 * 1024 * 1024,  # 100MB
+        backupCount=5,
+        encoding="utf-8",
+    )
+    _log_handler.setLevel(logging.INFO)
+    _log_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+
+    class _TeeStream:
+        """同時把寫入分流到原 stdout 和 log file"""
+        def __init__(self, original, handler):
+            self.original = original
+            self.handler = handler
+            self.buffer = ""
+        def write(self, s):
+            self.original.write(s)
+            self.buffer += s
+            while "\n" in self.buffer:
+                line, self.buffer = self.buffer.split("\n", 1)
+                if line.strip():
+                    record = logging.LogRecord(
+                        name="multi", level=logging.INFO, pathname="", lineno=0,
+                        msg=line, args=(), exc_info=None,
+                    )
+                    self.handler.emit(record)
+        def flush(self):
+            self.original.flush()
+        def __getattr__(self, name):
+            return getattr(self.original, name)
+
+    sys.stdout = _TeeStream(sys.stdout, _log_handler)
+    sys.stderr = _TeeStream(sys.stderr, _log_handler)
+
 import win32gui
 import pyautogui
 import pyperclip
@@ -222,38 +261,54 @@ def _sanitize_filename(name):
     return re.sub(r'[/\\:*?"<>|\r\n\t]', '_', name).strip() or "unknown"
 
 
+def _today_subdir():
+    """今日的子目錄路徑（histories/YYYY-MM-DD/）"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    p = HISTORIES_DIR / today
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def _history_file_path(name):
-    """回傳該觀眾的 .txt 完整路徑（精確版）"""
-    return HISTORIES_DIR / f"{_sanitize_filename(name)}.txt"
+    """回傳該觀眾的 .txt 完整路徑（新檔放今日子目錄）"""
+    return _today_subdir() / f"{_sanitize_filename(name)}.txt"
 
 
 def _resolve_history_file(name):
-    """找 name 對應的 .txt 檔（先精確比對 → 再模糊匹配忽略空格繁簡 → 都沒找到回精確路徑當新檔）
+    """找 name 對應的 .txt 檔。
 
-    解決 OCR 抓客戶名時把中英文之間空格吞掉的問題（「仁輝JAMES」vs「仁輝 JAMES」）。
+    搜尋順序：
+      1. 今日子目錄精確
+      2. 平級舊檔精確（向後相容）
+      3. 全目錄遞迴 fuzzy match（忽略空格繁簡）
+      4. 都沒有 → 回今日子目錄路徑（會建新檔）
     """
-    exact = _history_file_path(name)
-    if exact.exists():
-        return exact
+    today_path = _history_file_path(name)
+    if today_path.exists():
+        return today_path
 
-    # 正規化：移除所有空白字元（半形+全形+其他 unicode 空白）
+    # 平級舊檔（向後相容 5/6 之前的檔案）
+    legacy = HISTORIES_DIR / f"{_sanitize_filename(name)}.txt"
+    if legacy.exists():
+        return legacy
+
+    # 正規化 fuzzy match
     def _normalize(s):
-        # 移除空白 + 簡單繁簡常見對應（之後可擴）
         s = re.sub(r'[\s　]+', '', s)
         return s.lower()
 
     target = _normalize(_sanitize_filename(name))
     if not target:
-        return exact
+        return today_path
 
-    # 掃既有所有 .txt，找正規化後相等的
-    for f in HISTORIES_DIR.glob("*.txt"):
+    # 遞迴掃所有子目錄的 .txt
+    for f in HISTORIES_DIR.rglob("*.txt"):
         if _normalize(f.stem) == target:
-            print(f"[history] 模糊匹配：'{name}' → 沿用既有檔 '{f.name}'", flush=True)
+            print(f"[history] 模糊匹配：'{name}' → 沿用既有檔 '{f.relative_to(HISTORIES_DIR)}'", flush=True)
             return f
 
-    # 找不到 → 用精確路徑（會建新檔）
-    return exact
+    # 找不到 → 用今日子目錄（建新檔）
+    return today_path
 
 
 def _load_customer_history(name):
@@ -332,15 +387,22 @@ def _load_customer_history(name):
 # ============================================================
 
 def _profile_file_path(name):
-    """回傳 profile.json 完整路徑"""
-    return HISTORIES_DIR / f"{_sanitize_filename(name)}.profile.json"
+    """回傳 profile.json 完整路徑（跟著 .txt 走 — 同目錄）"""
+    # 跟對應的 .txt 同目錄存
+    txt_path = _resolve_history_file(name)
+    return txt_path.parent / f"{_sanitize_filename(name)}.profile.json"
 
 
 def _resolve_profile_file(name):
-    """找 name 對應的 .profile.json（fuzzy match 同 history）"""
-    exact = _profile_file_path(name)
-    if exact.exists():
-        return exact
+    """找 name 對應的 .profile.json（同 history fuzzy match）"""
+    expected = _profile_file_path(name)
+    if expected.exists():
+        return expected
+
+    # 平級舊檔
+    legacy = HISTORIES_DIR / f"{_sanitize_filename(name)}.profile.json"
+    if legacy.exists():
+        return legacy
 
     def _normalize(s):
         s = re.sub(r'[\s　]+', '', s)
@@ -348,14 +410,14 @@ def _resolve_profile_file(name):
 
     target = _normalize(_sanitize_filename(name))
     if not target:
-        return exact
+        return expected
 
     suffix = ".profile.json"
-    for f in HISTORIES_DIR.glob(f"*{suffix}"):
+    for f in HISTORIES_DIR.rglob(f"*{suffix}"):
         bare = f.name[:-len(suffix)]
         if _normalize(bare) == target:
             return f
-    return exact
+    return expected
 
 
 def _load_profile(name):
@@ -390,6 +452,88 @@ def _strip_json_codeblock(text):
         text = re.sub(r'^```(?:json)?\s*\n', '', text)
         text = re.sub(r'\n?```\s*$', '', text)
     return text.strip()
+
+
+# ============================================================
+# Profile schema 固定化（避免 LLM 抽取時欄位漂移，方便之後 aggregate）
+# ============================================================
+PROFILE_SCHEMA_DEFAULTS = {
+    "name": "",
+    "core_facts": {
+        "occupation": None,
+        "location": None,
+        "schedule": None,
+        "age": None,
+        "gender": None,
+        "marital_status": None,
+        "personality_traits": [],
+    },
+    "shared_disclosures": [],     # [{speaker, fact, timestamp?}]
+    "interests": [],
+    "family_relationships": [],
+    "milestones": [],
+    "current_stage": "",
+    "topic_hooks_remaining": [],
+    "trust_score": 0,             # 0-10，由話題深度推測
+    "ai_suspicion_flags": [],     # 對方曾質疑 AI 的時刻 [{timestamp, quote}]
+    "first_seen": "",             # ISO timestamp 首次見面
+    "last_updated": "",           # ISO timestamp 最近更新
+    "total_turns": 0,             # 累積對話輪數
+}
+
+
+def _validate_and_normalize_profile(profile, name=""):
+    """補齊預設欄位 + type 校驗，避免欄位漂移。
+
+    如果 LLM 多輸出未知欄位，保留（不刪）但放在末尾。
+    """
+    if not isinstance(profile, dict):
+        return None
+
+    result = {}
+    # 1. 依 schema 順序補齊欄位
+    for key, default in PROFILE_SCHEMA_DEFAULTS.items():
+        val = profile.get(key, default)
+
+        if isinstance(default, dict):
+            # 內層 dict（如 core_facts）也要補齊
+            normalized = dict(default)
+            if isinstance(val, dict):
+                for sub_key, sub_default in default.items():
+                    sub_val = val.get(sub_key, sub_default)
+                    # type check
+                    if isinstance(sub_default, list) and not isinstance(sub_val, list):
+                        sub_val = [sub_val] if sub_val else []
+                    normalized[sub_key] = sub_val
+                # 保留 LLM 多輸出的 sub key
+                for sub_key, sub_val in val.items():
+                    if sub_key not in default:
+                        normalized[sub_key] = sub_val
+            result[key] = normalized
+        elif isinstance(default, list) and not isinstance(val, list):
+            result[key] = [val] if val else []
+        elif isinstance(default, int) and not isinstance(val, (int, float)):
+            try:
+                result[key] = int(val) if val else 0
+            except (TypeError, ValueError):
+                result[key] = 0
+        else:
+            result[key] = val
+
+    # 2. 自動補 metadata
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    if not result["first_seen"]:
+        result["first_seen"] = now_iso
+    result["last_updated"] = now_iso
+    if name and not result["name"]:
+        result["name"] = name
+
+    # 3. 保留 LLM 多輸出的未知欄位（不刪）
+    for key, val in profile.items():
+        if key not in PROFILE_SCHEMA_DEFAULTS and key not in result:
+            result[key] = val
+
+    return result
 
 
 def _extract_profile_from_history(name, history):
@@ -446,6 +590,8 @@ def _extract_profile_from_history(name, history):
         )
         text = _strip_json_codeblock(resp.content[0].text)
         profile = json.loads(text)
+        # 🔴 schema 校驗：補齊缺漏欄位、補 metadata
+        profile = _validate_and_normalize_profile(profile, name=name)
         print(f"[profile] {name} 首次抽取完成（{len(profile.get('shared_disclosures') or [])} 筆 disclosures）", flush=True)
         return profile
     except Exception as e:
@@ -521,6 +667,14 @@ def _update_profile_incrementally(name, old_profile, new_messages):
                 new_core[key] = old_val
         new_profile["core_facts"] = new_core
 
+        # 🔴 schema 校驗 + 累計輪數
+        new_profile = _validate_and_normalize_profile(new_profile, name=name)
+        # total_turns 累加（此次更新算 1 輪）
+        new_profile["total_turns"] = (old_profile.get("total_turns") or 0) + 1
+        # 保留 first_seen
+        if old_profile.get("first_seen"):
+            new_profile["first_seen"] = old_profile["first_seen"]
+
         return new_profile
     except Exception as e:
         print(f"[profile] 增量更新 {name} 失敗：{e}，沿用舊 profile", flush=True)
@@ -583,6 +737,197 @@ def _ensure_profile(name, history):
         if profile:
             _save_profile(name, profile)
     return profile
+
+
+# ============================================================
+# Profile 更新 queue + worker（高並發 + rate limit 友善）
+# ============================================================
+import queue as _queue_mod
+import threading as _threading
+
+# 全新觀眾累積到多少條 history 才觸發首次抽 profile
+MIN_TURNS_FOR_FIRST_PROFILE = 5
+
+_PROFILE_TASK_QUEUE = _queue_mod.Queue(maxsize=200)
+_PROFILE_WORKER_COUNT = 2
+_PROFILE_WORKER_STARTED = False
+_PROFILE_WORKER_LOCK = _threading.Lock()
+
+
+def _profile_worker_loop():
+    """worker thread：從 queue 取任務 → 抽/更新 profile → critic 驗證 → 存檔"""
+    while True:
+        try:
+            task = _PROFILE_TASK_QUEUE.get(timeout=60)
+        except _queue_mod.Empty:
+            continue
+        if task is None:  # poison pill
+            _PROFILE_TASK_QUEUE.task_done()
+            break
+
+        name = task["name"]
+        history_snapshot = task["history"]
+        round_msgs = task["round_msgs"]
+        all_profiles_ref = task["all_profiles"]
+
+        try:
+            current_profile = all_profiles_ref.get(name)
+
+            if current_profile:
+                # 已有 profile → 增量更新
+                updated = _update_profile_incrementally(name, current_profile, round_msgs)
+                action = "增量更新"
+            elif len(history_snapshot) >= MIN_TURNS_FOR_FIRST_PROFILE:
+                # 全新觀眾累積夠了 → 首次抽
+                print(f"[profile-worker] {name} 累積 {len(history_snapshot)} 條，首次抽 profile...", flush=True)
+                updated = _extract_profile_from_history(name, history_snapshot)
+                action = "首次抽取"
+            else:
+                # 資料太少，跳過
+                _PROFILE_TASK_QUEUE.task_done()
+                continue
+
+            if updated:
+                all_profiles_ref[name] = updated
+                _save_profile(name, updated)
+                disc_n = len((updated.get("shared_disclosures") or []))
+                print(f"[profile-worker] {name} {action}完成（{disc_n} 筆 disclosures）", flush=True)
+                _emit_event(
+                    "profile_first_extract" if action == "首次抽取" else "profile_updated",
+                    customer=name,
+                    data={"disclosures": disc_n, "action": action},
+                )
+        except Exception as e:
+            err = str(e)
+            # rate limit retry：簡單退避（worker 級，不卡其他 task）
+            if "rate" in err.lower() or "429" in err:
+                print(f"[profile-worker] {name} 撞 rate limit，退避 30 秒後重排：{err[:100]}", flush=True)
+                _emit_event("rate_limit", customer=name, data={"err": err[:200]})
+                time.sleep(30)
+                try:
+                    _PROFILE_TASK_QUEUE.put_nowait(task)
+                except _queue_mod.Full:
+                    print(f"[profile-worker] queue 滿，丟棄 {name} 的 retry", flush=True)
+            else:
+                print(f"[profile-worker] {name} 處理失敗：{err[:200]}", flush=True)
+        finally:
+            _PROFILE_TASK_QUEUE.task_done()
+
+
+def _ensure_profile_workers_started():
+    """lazy 啟動 worker（避免 module import 時就跑）"""
+    global _PROFILE_WORKER_STARTED
+    with _PROFILE_WORKER_LOCK:
+        if _PROFILE_WORKER_STARTED:
+            return
+        for i in range(_PROFILE_WORKER_COUNT):
+            t = _threading.Thread(target=_profile_worker_loop, daemon=True, name=f"profile-worker-{i}")
+            t.start()
+        _PROFILE_WORKER_STARTED = True
+        print(f"[profile-worker] {_PROFILE_WORKER_COUNT} 個 worker 啟動", flush=True)
+
+
+# ============================================================
+# 識破偵測：對方說「你是 AI / 機器人 / 不是真人」→ 標記 + Telegram alert
+# ============================================================
+_AI_SUSPICION_KEYWORDS = (
+    "你是ai", "你是 ai", "你是AI", "你是 AI",
+    "機器人", "机器人",
+    "不是真人", "不是真的人",
+    "你是程式", "你是机器", "你是機器",
+    "chatgpt", "ChatGPT", "claude",
+    "你是AI吧", "你是机器吧", "你是機器吧",
+    "假的吧", "你假的", "ai回的",
+    "ai 写的", "AI 寫的", "AI寫的", "ai写的",
+    "回應太快", "回应太快",
+)
+
+
+def _detect_ai_suspicion(messages):
+    """偵測對方訊息中是否有「懷疑 AI」的關鍵字。
+
+    回傳：(suspected_bool, matched_quote 或 None)
+    """
+    for msg_text in messages:
+        low = msg_text.lower().replace(" ", "")
+        for kw in _AI_SUSPICION_KEYWORDS:
+            kw_norm = kw.lower().replace(" ", "")
+            if kw_norm in low:
+                return True, msg_text
+    return False, None
+
+
+def _send_telegram_alert(text):
+    """透過 Telegram bot 發送 alert 給用戶（venezapauleen143 user id 8362721681）"""
+    try:
+        import urllib.request
+        import urllib.parse
+        # 從 .env 拿 token（小牛馬 bot 共用）
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if not token:
+            return False
+        chat_id = "8362721681"  # 于晏哥
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except Exception as e:
+        print(f"[alert] Telegram 失敗: {e}", flush=True)
+        return False
+
+
+def _emit_event(event_type, customer="", data=None):
+    """關鍵事件寫進 events.jsonl，供之後 aggregate 分析
+
+    欄位：timestamp / event_type / customer / data
+    Event types:
+      - customer_seen: 首次見到該客戶
+      - new_messages: 偵測到新對方訊息
+      - reply_sent: AI 已回覆
+      - profile_first_extract: 首次抽 profile 完成
+      - profile_updated: 增量更新 profile 完成
+      - ocr_failed: OCR 異常
+      - ai_suspicion: 對方疑似識破 AI
+      - rate_limit: 撞 rate limit
+    """
+    try:
+        events_dir = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/logs")
+        events_dir.mkdir(parents=True, exist_ok=True)
+        # 按日切檔，每日一個 events_YYYY-MM-DD.jsonl
+        today = datetime.now().strftime("%Y-%m-%d")
+        events_file = events_dir / f"events_{today}.jsonl"
+        record = {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "type": event_type,
+            "customer": customer,
+            "data": data or {},
+        }
+        with io.open(events_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"[event] write failed: {e}", flush=True)
+
+
+def _enqueue_profile_task(name, history, round_msgs, all_profiles):
+    """把 profile 任務丟進 queue（非阻塞，queue 滿就丟棄並 log）"""
+    _ensure_profile_workers_started()
+    # snapshot history（避免 worker 處理時 history 已經變動）
+    history_snapshot = list(history)
+    task = {
+        "name": name,
+        "history": history_snapshot,
+        "round_msgs": round_msgs,
+        "all_profiles": all_profiles,
+    }
+    try:
+        _PROFILE_TASK_QUEUE.put_nowait(task)
+    except _queue_mod.Full:
+        print(f"[profile-worker] ⚠️ queue 滿（>200），丟棄 {name} 的更新", flush=True)
 
 
 def _get_first_chat_date(name):
@@ -1015,8 +1360,21 @@ def _send_with_realistic_delay(reply, regions, name="unknown", history=None):
             _append_to_history_file(name, "me", part)
 
         if i < len(parts) - 1:
-            inter = get_inter_message_delay()
-            time.sleep(inter)
+            # 🔴 段間延遲 = 基礎延遲 + 「下一段字數比例」打字時間
+            # 模擬真人：邊想（基礎）+ 邊打字（字數越多打越久）
+            base = get_inter_message_delay()
+            next_part = parts[i + 1] if i + 1 < len(parts) else ""
+            # 排除圖片標記（{send_xxx}）的字數計算
+            if not (next_part.startswith("{") and next_part.endswith("}")):
+                # 每字 0.3-0.5 秒（手機打字速度）
+                typing_time = len(next_part) * random.uniform(0.3, 0.5)
+                # 上限 30 秒（避免長段卡死）
+                typing_time = min(typing_time, 30)
+            else:
+                typing_time = 0
+            total_delay = base + typing_time
+            print(f"[Reply] 段間延遲 {total_delay:.1f}s（基礎 {base:.1f}s + 打字 {typing_time:.1f}s）", flush=True)
+            time.sleep(total_delay)
 
 # ============================================================
 # GPU 記憶體清理
@@ -1030,7 +1388,61 @@ def _cleanup_gpu():
     except Exception:
         pass
 
-atexit.register(_cleanup_gpu)
+
+def _drain_profile_queue(timeout_sec=30):
+    """關閉前等 profile queue 處理完（最多 timeout 秒）"""
+    if not _PROFILE_WORKER_STARTED:
+        return
+    start = time.time()
+    while not _PROFILE_TASK_QUEUE.empty() and (time.time() - start) < timeout_sec:
+        remaining = _PROFILE_TASK_QUEUE.qsize()
+        if remaining > 0:
+            print(f"[Cleanup] 等 profile queue 清空（剩 {remaining} 個任務）...", flush=True)
+        time.sleep(2)
+    if _PROFILE_TASK_QUEUE.empty():
+        print("[Cleanup] profile queue 已清空", flush=True)
+    else:
+        print(f"[Cleanup] profile queue 還有 {_PROFILE_TASK_QUEUE.qsize()} 個任務未處理（timeout）", flush=True)
+
+
+def _graceful_shutdown():
+    """關閉時：先 drain queue，再清 GPU"""
+    _drain_profile_queue()
+    _cleanup_gpu()
+
+
+atexit.register(_graceful_shutdown)
+
+
+# ============================================================
+# Startup recovery: 啟動時掃描既有觀眾資料，印 status
+# ============================================================
+def _print_startup_recovery():
+    """印 startup state（從 histories/ 推算累積 active sessions）"""
+    try:
+        if not HISTORIES_DIR.exists():
+            return
+        txt_files = list(HISTORIES_DIR.rglob("*.txt"))
+        json_files = list(HISTORIES_DIR.rglob("*.profile.json"))
+        print(f"\n[Startup] 累積觀眾資料：", flush=True)
+        print(f"  - 對話 .txt: {len(txt_files)} 個", flush=True)
+        print(f"  - profile .json: {len(json_files)} 個", flush=True)
+        # 統計各 stage 分佈（從 profile 取 current_stage）
+        stage_count = {}
+        for jf in json_files:
+            try:
+                with io.open(jf, "r", encoding="utf-8") as f:
+                    p = json.load(f)
+                stage = (p.get("current_stage") or "未知")[:30]
+                stage_count[stage] = stage_count.get(stage, 0) + 1
+            except Exception:
+                continue
+        if stage_count:
+            print(f"  - stage 分佈：", flush=True)
+            for stage, n in sorted(stage_count.items(), key=lambda x: -x[1])[:10]:
+                print(f"      {n}x {stage}", flush=True)
+    except Exception as e:
+        print(f"[Startup] recovery 摘要失敗：{e}", flush=True)
 
 # ============================================================
 # 優雅停止機制
@@ -1041,8 +1453,8 @@ _should_stop = False
 def _signal_handler(signum, frame):
     global _should_stop
     _should_stop = True
-    print(f"\n[STOP] 收到信號 {signum}，準備停止...", flush=True)
-    _cleanup_gpu()
+    print(f"\n[STOP] 收到信號 {signum}，準備停止（drain queue 後）...", flush=True)
+    _graceful_shutdown()
 
 signal.signal(signal.SIGINT, _signal_handler)
 if hasattr(signal, "SIGBREAK"):
@@ -1172,8 +1584,25 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
         print(f"[Customer] 名字過濾：'{name}' → '{clean_name}'", flush=True)
         name = clean_name
 
-    chat_img = grab_chat_area(regions, monitor)
-    current_messages = ocr_extract_messages(chat_img)
+    # 🔴 OCR 異常容錯：失敗 retry 1 次 + 仍失敗就 skip 該客戶（避免 crash）
+    current_messages = None
+    for ocr_attempt in range(2):
+        try:
+            chat_img = grab_chat_area(regions, monitor)
+            current_messages = ocr_extract_messages(chat_img)
+            break
+        except Exception as e:
+            err_str = str(e)[:200]
+            if ocr_attempt == 0:
+                print(f"[Customer] OCR 失敗（嘗試 1/2），retry：{err_str}", flush=True)
+                time.sleep(1.0)
+            else:
+                print(f"[Customer] ⚠️ OCR 連續失敗，跳過此客戶：{err_str}", flush=True)
+                _emit_event("ocr_failed", customer=name, data={"err": err_str})
+                return regions
+    if current_messages is None:
+        return regions
+
     raw_count = len(current_messages)
     # 🆕 過濾 OCR 雜訊（LINE 系統訊息、按鈕、海報等）
     current_messages = [m for m in current_messages if not _is_ocr_noise(m["text"])]
@@ -1189,12 +1618,19 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
             print(f"[Customer] {name} 載入 {len(loaded)} 條歷史（從 .txt）", flush=True)
         else:
             print(f"[Customer] {name} 全新觀眾", flush=True)
+        _emit_event("customer_seen", customer=name, data={"prior_history_len": len(loaded)})
         all_histories[name] = loaded
-        # 🔴 首次見觀眾 → 確保有 profile（沒有就抽，保證 100% 記憶）
-        if loaded:
-            all_profiles[name] = _ensure_profile(name, loaded)
+        # 🔴 lazy 載入 profile：cache 命中直接用，沒 profile 不阻塞主流程，丟進背景 queue 抽
+        cached_profile = _load_profile(name) if loaded else None
+        if cached_profile:
+            all_profiles[name] = cached_profile
+            print(f"[Customer] {name} profile 已 cache 命中（{len(cached_profile.get('shared_disclosures') or [])} 筆）", flush=True)
         else:
             all_profiles[name] = None
+            # 有 history（≥ MIN_TURNS_FOR_FIRST_PROFILE）就背景觸發首次抽
+            if loaded and len(loaded) >= MIN_TURNS_FOR_FIRST_PROFILE:
+                print(f"[Customer] {name} 無 profile，背景排程首次抽（不阻塞）", flush=True)
+                _enqueue_profile_task(name, loaded, [], all_profiles)
     history = all_histories[name]
     profile = all_profiles.get(name)
 
@@ -1207,15 +1643,24 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
             if m["sender"] == "them":
                 _append_to_history_file(name, "them", m["text"])
     else:
-        last_known = history[-1]
-        last_text = last_known["text"]
+        # 🔴 fallback 升級：先用 history[-1] 找 cutoff，找不到再往前 history[-5:] 重試
+        # 解決：LINE 視窗滾動時 OCR 抓不到 history[-1] → 不會 fallback 全部當新訊息（重複回舊）
         match_idx = -1
-        for i in range(len(current_messages) - 1, -1, -1):
-            ratio = SequenceMatcher(None, current_messages[i]["text"], last_text).ratio()
-            if ratio > 0.6:
-                match_idx = i
+        matched_via = None
+        for hist_offset in range(1, min(6, len(history) + 1)):
+            cand_text = history[-hist_offset]["text"]
+            for i in range(len(current_messages) - 1, -1, -1):
+                ratio = SequenceMatcher(None, current_messages[i]["text"], cand_text).ratio()
+                if ratio > 0.6:
+                    match_idx = i
+                    matched_via = hist_offset
+                    break
+            if match_idx >= 0:
                 break
+
         if match_idx >= 0 and match_idx < len(current_messages) - 1:
+            if matched_via and matched_via > 1:
+                print(f"[Customer] cutoff 用 history[-{matched_via}] 對到（[-1] 在視窗外）", flush=True)
             new_msgs = current_messages[match_idx + 1:]
             new_them = [m["text"] for m in new_msgs if m["sender"] == "them"]
             for m in new_msgs:
@@ -1224,14 +1669,36 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
             for m in new_msgs:
                 _append_to_history_file(name, m["sender"], m["text"])
         else:
-            new_them = [m["text"] for m in current_messages if m["sender"] == "them"]
-            # 找不到匹配時用全部對方訊息（不寫檔避免重複）
+            # history[-5:] 都對不上 → 真的找不到 → 只取最後 1 條當新訊息（保守）
+            # 比之前「全部當新訊息」安全，避免重複回舊訊息
+            print(f"[Customer] ⚠️ history[-5:] 都對不上 OCR，保守取最後 1 條對方訊息", flush=True)
+            them_msgs = [m for m in current_messages if m["sender"] == "them"]
+            new_them = [them_msgs[-1]["text"]] if them_msgs else []
 
     if not new_them:
         print(f"[Customer] 沒有新的對方訊息，跳過", flush=True)
         return regions
 
     print(f"[Customer] 新訊息: {new_them}", flush=True)
+
+    # 🔴 識破偵測：對方說「你是 AI / 機器人」→ 標記 profile + Telegram alert
+    suspected, suspect_quote = _detect_ai_suspicion(new_them)
+    if suspected:
+        print(f"[Customer] ⚠️⚠️ {name} 疑似識破 AI！對方說：「{suspect_quote}」", flush=True)
+        _emit_event("ai_suspicion", customer=name, data={"quote": suspect_quote})
+        # 標記 profile
+        cur_profile = all_profiles.get(name)
+        if cur_profile:
+            flags = cur_profile.get("ai_suspicion_flags") or []
+            flags.append({
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "quote": suspect_quote,
+            })
+            cur_profile["ai_suspicion_flags"] = flags
+            _save_profile(name, cur_profile)
+        # Telegram alert
+        alert_text = f"⚠️ <b>{name}</b> 疑似識破 AI\n\n對方說：「{suspect_quote}」\n\n時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        _send_telegram_alert(alert_text)
 
     # 純貼圖 → Vision
     if is_only_sticker(new_them):
@@ -1274,24 +1741,19 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
         return regions
 
     print(f"[Customer] 回覆: {reply[:80]}", flush=True)
+    _emit_event("new_messages", customer=name, data={"new_them_count": len(new_them), "day_n": day_n})
     # 🔴 送一段寫一段（history + .txt 由 _send_with_realistic_delay 內部即時寫入）
     _send_with_realistic_delay(reply, regions, name=name, history=history)
+    _emit_event("reply_sent", customer=name, data={"reply_len": len(reply), "segments": reply.count("|||") + 1, "day_n": day_n})
 
-    # 🔴 增量更新 profile（拿這輪新對方訊息 + Angela 回覆，背景 thread 跑不阻塞）
-    if profile:
-        round_msgs = [{"sender": "them", "text": t} for t in new_them]
-        round_msgs.append({"sender": "me", "text": reply})
-        try:
-            import threading
-            def _bg_update():
-                updated = _update_profile_incrementally(name, profile, round_msgs)
-                if updated:
-                    all_profiles[name] = updated
-                    _save_profile(name, updated)
-                    print(f"[Customer] {name} profile 增量更新完成（{len(updated.get('shared_disclosures') or [])} 筆）", flush=True)
-            threading.Thread(target=_bg_update, daemon=True).start()
-        except Exception as e:
-            print(f"[Customer] profile 增量更新失敗：{e}", flush=True)
+    # 🔴 profile 處理（背景 queue，不阻塞主流程）
+    # 邏輯：
+    #   - 已有 profile → 增量更新
+    #   - 沒 profile 但 history >= MIN_TURNS_FOR_FIRST_PROFILE → 首次抽
+    #   - history < 閾值 → 跳過（資料太少抽不出實質事實）
+    round_msgs = [{"sender": "them", "text": t} for t in new_them]
+    round_msgs.append({"sender": "me", "text": reply})
+    _enqueue_profile_task(name, history, round_msgs, all_profiles)
 
     # ============================================================
     # 🆕 Stay-and-watch：送完 reply 後不要立刻離開，再 OCR 看有沒有新訊息
@@ -1423,12 +1885,20 @@ def main(stop_time, monitor=None):
     all_profiles = {}  # 🔴 結構化 profile cache（保證 100% 記憶）
     POLL_INTERVAL = 10
 
+    # 🔴 startup recovery 印 status
+    _print_startup_recovery()
+
     print(f"\n[Monitor] 開始監控未讀訊息...", flush=True)
     print(f"[Monitor] 停止方式：touch {STOP_FILE}", flush=True)
 
     from 反詐_locate import set_active_box, find_line_window
     import win32gui as _w32g
     BOXES = list(BOX_PERSONA.keys())
+
+    # 🔴 GPU 記憶體週期釋放（每 GPU_CLEAN_INTERVAL 個主迴圈跑一次）
+    GPU_CLEAN_INTERVAL = 50  # ~ 50 × 10 秒 POLL = 約每 8 分鐘清一次
+    STATUS_PRINT_INTERVAL = 6  # ~ 6 × 10 秒 = 約每 1 分鐘印 status
+    _loop_counter = 0
 
     while is_before_stop_time(stop_time):
         if should_stop():
@@ -1536,6 +2006,41 @@ def main(stop_time, monitor=None):
                 print(f"[ERR] 排程器失敗: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
+
+        # 🔴 status snapshot 每分鐘印一次
+        _loop_counter += 1
+        if _loop_counter % STATUS_PRINT_INTERVAL == 0:
+            try:
+                active_n = len(all_histories)
+                profile_n = sum(1 for p in all_profiles.values() if p)
+                # day 分佈
+                day_dist = {}
+                for cn in all_histories:
+                    try:
+                        dn = _calculate_day_n(cn)
+                        day_dist[dn] = day_dist.get(dn, 0) + 1
+                    except Exception:
+                        continue
+                # AI 識破累計
+                susp_n = sum(
+                    len((p.get("ai_suspicion_flags") or []))
+                    for p in all_profiles.values() if p
+                )
+                queue_n = _PROFILE_TASK_QUEUE.qsize() if _PROFILE_WORKER_STARTED else 0
+                day_str = " ".join(f"day{d}:{n}" for d, n in sorted(day_dist.items()))
+                print(f"[Status] active={active_n} profile={profile_n} suspicion={susp_n} queue={queue_n} | {day_str}", flush=True)
+            except Exception as e:
+                print(f"[Status] 失敗：{e}", flush=True)
+
+        # 🔴 GPU 記憶體週期釋放（避免 PaddleOCR 長時間 leak）
+        if _loop_counter % GPU_CLEAN_INTERVAL == 0:
+            try:
+                gc.collect()
+                import paddle
+                paddle.device.cuda.empty_cache()
+                print(f"[GPU] 週期釋放（loop #{_loop_counter}）", flush=True)
+            except Exception:
+                pass
 
         for _ in range(POLL_INTERVAL):
             if should_stop():
