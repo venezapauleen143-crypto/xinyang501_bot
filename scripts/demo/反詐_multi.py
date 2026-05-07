@@ -93,7 +93,8 @@ sys.path.insert(0, str(SCRIPT_DIR.parent))
 load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
 client = anthropic.Anthropic()
 TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
-DEFAULT_PERSONA = "C:/Users/blue_/claude-telegram-bot/scripts/demo/反詐_persona.txt"
+# 🔴 舊版 DEFAULT_PERSONA（指向已搬走的 .txt）已棄用，由 PERSONA_CONFIG 取代
+# 真正的 DEFAULT_PERSONA 在 PERSONA_CONFIG 區塊（值 = "Angela"）
 TIME_SETTINGS_PATH = "C:/Users/blue_/claude-telegram-bot/scripts/demo/反詐_時段設定.json"
 
 # 全域時段設定（main() 開頭載入）
@@ -1107,24 +1108,39 @@ SILENCE_THRESHOLD = {
 # 深夜不主動發（裝睡）
 QUIET_HOURS = (23, 7)   # 23:00 - 07:00 不主動發
 
-# 主動發訊息話術庫（依階段+類型）
-GREETING_MESSAGES = {
-    "morning": ["morning☺", "早安~ 起來啦?", "早安喇~ 今日忙嗎"],
-    "lunch": ["lunch time~", "在吃飯嗎😆", "午飯食緊咩呀"],
-    "night": ["準備休息咯~", "好啦我去沖涼了，晚安🌙", "晚安喇~ 明天聊"],
+# 🔴 主動發訊息話術庫（按 persona 分開，避免語腔污染）
+# 每個 persona 有自己的早安/午餐/晚安/關心/Day5+ 話術
+PROACTIVE_MESSAGES = {
+    "Angela": {
+        "morning": ["morning☺", "早安~ 起來啦?", "早安喇~ 今日忙嗎"],
+        "lunch": ["lunch time~", "在吃飯嗎😆", "午飯食緊咩呀"],
+        "night": ["準備休息咯~", "好啦我去沖涼了，晚安🌙", "晚安喇~ 明天聊"],
+        "concern": ["在嗎？🫣", "忙到沒看訊息嗎？😬", "怎麼那麼久沒回我", "Hello~"],
+        "day5_plus": [
+            "剛處理完店鋪訂單😬",
+            "今晚利潤還不錯~",
+            "店鋪剛接到訂單，你那邊在忙啥",
+        ],
+    },
+    "Ruby": {
+        "morning": ["早安呀", "早安~", "早安唷", "早安❤️"],
+        "lunch": ["午餐吃ㄌ嗎", "在吃飯ㄇ哈哈", "我等等吃午餐"],
+        "night": ["晚安😴", "我先休息ㄌ", "晚安❤️ 早點休息ㄛ"],
+        "concern": ["在嗎～", "怎麼這麼久沒回我哈哈", "Hello~", "你還活著嗎🥹"],
+        # Ruby 沒副業 → Day5+ 改成日常分享
+        "day5_plus": [
+            "剛跟同事吃完飯",
+            "我先洗澡先",
+            "今天上班好燒腦😔",
+        ],
+    },
 }
-CONCERN_MESSAGES = [
-    "在嗎？🫣",
-    "忙到沒看訊息嗎？😬",
-    "怎麼那麼久沒回我",
-    "Hello~",
-]
-# Day 5+ 偶爾秀店鋪
-DAY5_PLUS_MESSAGES = [
-    "剛處理完店鋪訂單😬",
-    "今晚利潤還不錯~",
-    "店鋪剛接到訂單，你那邊在忙啥",
-]
+
+
+def _get_proactive_messages(persona, key):
+    """取該 persona 的指定類型話術（fallback 到 Angela）"""
+    p_msgs = PROACTIVE_MESSAGES.get(persona) or PROACTIVE_MESSAGES["Angela"]
+    return p_msgs.get(key) or PROACTIVE_MESSAGES["Angela"].get(key, [])
 
 
 def _scan_all_customers(persona):
@@ -1258,7 +1274,7 @@ def _check_proactive_trigger(persona, name):
         in_slot = (s <= h < e) if s <= e else (h >= s or h < e)
         if in_slot and not _was_greeting_sent_today(persona, name, gtype):
             day_n = _calculate_day_n(persona, name)
-            msg = random.choice(GREETING_MESSAGES[gtype])
+            msg = random.choice(_get_proactive_messages(persona, gtype))
             return True, msg, f"時段問候 {gtype}（Day {day_n}）"
 
     if last_sender == "them":
@@ -1274,9 +1290,9 @@ def _check_proactive_trigger(persona, name):
         if hours_silent >= threshold:
             day_n = _calculate_day_n(persona, name)
             if day_n >= 5 and random.random() < 0.4:
-                msg = random.choice(DAY5_PLUS_MESSAGES)
+                msg = random.choice(_get_proactive_messages(persona, "day5_plus"))
                 return True, msg, f"Day {day_n} 副業伏筆（沉默 {hours_silent:.1f} 小時）"
-            msg = random.choice(CONCERN_MESSAGES)
+            msg = random.choice(_get_proactive_messages(persona, "concern"))
             return True, msg, f"沉默關心（{hours_silent:.1f} 小時 ≥ {threshold} 小時）"
 
     return False, "", "不需主動發"
