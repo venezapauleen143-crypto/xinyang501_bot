@@ -1405,7 +1405,7 @@ def _calculate_day_n(persona, name):
 STAGE_HINTS_BY_PERSONA = {
     "Angela": {
         "1-2":  "剛認識/寒暄階段。重點：親切但不黏人，留懸念（如『去沖涼喇 明天再聊』）。不要急著深入。",
-        "3-4":  "關係加深階段。重點：互換家庭背景、製造『巧合』（星座/食物/位置）、表現專一（『Bumble 我刪了』）。",
+        "3-4":  "關係加深階段。重點：互換家庭背景、製造『巧合』（星座/食物/位置）、表現專一（『其他軟體都沒在用了』）。",
         "5-6":  "埋下副業伏筆。可以隨口提『去處理店鋪訂單』。對方好奇 → 簡單描述跨境電商。不要主動解釋細節。",
         "7-8":  "副業細節+情感升溫。可以秀利潤（『半個月 14 萬』）、規劃見面、暗示好感。",
         "9+":   "情感確認階段。表達對對方好感、規劃未來、用感情包裝（『等你賺到請我吃大餐』）。",
@@ -1435,7 +1435,7 @@ def _build_stage_hint(persona, day_n):
         stage = stages["9+"]
     return (
         f"\n\n=== 當前對話階段 ===\n"
-        f"你跟對方認識 **Day {day_n}**（從你們在 Bumble 開始算）。\n"
+        f"你跟對方認識 **Day {day_n}**（從你們最初聯絡那天起算）。\n"
         f"階段策略：{stage}\n"
         f"嚴禁跳階段：Day 1 不要突然提敏感話題，Day 9 才能講感情。"
     )
@@ -1736,10 +1736,96 @@ def find_unread_conversations(monitor=None):
 
 
 # ============================================================
+# Per-Customer Scheduler — 解 Head-of-Line blocking
+# 每個 customer 獨立計時，不會因第一個 sleep 19 分鐘卡死後面所有
+# ============================================================
+class PendingCustomerScheduler:
+    """每個未讀 customer 獨立計時器（FIFO 公平 + TTL 清理）
+
+    Key 設計：(persona, conv["center"])
+      - 同對話短期內 center 穩定 → 同 key
+      - 對方又傳訊息浮頂 → center 變 → 新 key → 重新計時（業界做法 = re-trigger）
+
+    狀態欄位：
+      first_seen: monotonic time（不受系統時間調整影響）
+      target_delay: 抽到的思考延遲（5-20 分鐘）
+      conv: 完整 conv dict（{"y", "center"}）
+      persona: 該 customer 屬於哪個 persona
+    """
+    def __init__(self):
+        self._pending = {}  # {(persona, center_tuple): state}
+        self._lock = _threading.Lock()
+
+    @staticmethod
+    def _key(persona, conv):
+        # center 可能是 list 或 tuple，統一成 tuple
+        c = conv.get("center")
+        c_tuple = tuple(c) if c else None
+        return (persona, c_tuple)
+
+    def register_if_new(self, persona, conv, target_delay):
+        """新 customer 註冊計時器，已存在的不動。回傳 True=新註冊"""
+        key = self._key(persona, conv)
+        with self._lock:
+            if key in self._pending:
+                return False
+            self._pending[key] = {
+                "first_seen": time.monotonic(),
+                "target_delay": target_delay,
+                "conv": conv,
+                "persona": persona,
+            }
+        return True
+
+    def get_ready(self):
+        """回傳所有「等夠了」的 customer，按 first_seen 排序（FIFO 公平）"""
+        now = time.monotonic()
+        with self._lock:
+            ready = [
+                (k, v) for k, v in self._pending.items()
+                if (now - v["first_seen"]) >= v["target_delay"]
+            ]
+        ready.sort(key=lambda x: x[1]["first_seen"])
+        return ready
+
+    def remove(self, key):
+        """處理完該 customer，清掉 pending"""
+        with self._lock:
+            self._pending.pop(key, None)
+
+    def cleanup_expired(self, ttl_factor=5):
+        """TTL 清理：超過 target_delay × ttl_factor 還沒處理 → 對方應該已封鎖/刪聊天，丟棄"""
+        now = time.monotonic()
+        with self._lock:
+            expired = [
+                k for k, v in self._pending.items()
+                if (now - v["first_seen"]) > v["target_delay"] * ttl_factor
+            ]
+            for k in expired:
+                state = self._pending.pop(k)
+                print(f"[Sched] TTL 過期清掉 {k}（等了 {now - state['first_seen']:.0f}s）", flush=True)
+
+    def stats(self):
+        with self._lock:
+            return {
+                "pending_count": len(self._pending),
+                "by_persona": {p: sum(1 for k in self._pending if k[0] == p) for p in set(k[0] for k in self._pending)},
+            }
+
+
+# 全域 scheduler 單例
+_PENDING_SCHEDULER = PendingCustomerScheduler()
+
+
+# ============================================================
 # 處理單一客戶（演示版：簡化、純自然對話、無業務邏輯）
 # ============================================================
 def handle_one_customer(persona, conv, regions, system_prompt, all_histories, all_profiles, monitor=None):
     """處理單一觀眾的對話（針對特定 persona）
+
+    ⚠️ 此函式假設「思考延遲已經在外部 PendingCustomerScheduler 等過了」
+    → 不再做 think_delay sleep（避免 head-of-line blocking）
+    → 直接點進去處理
 
     all_histories / all_profiles: 該 persona 自己的 dict（兩層 dict 的內層）
     """
@@ -1751,13 +1837,8 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
 
     cx, cy = conv["center"]
 
-    # 🔴 思考延遲（在點進去之前，避免「秒讀延遲回」破綻）
-    # LINE 點進對話會立刻已讀 → 對方看到「秒讀」+「90 秒後才回」會覺得故意冷處理
-    # 改成在外面 sleep → 對方看到「過幾分鐘才已讀 + 立刻回覆」 → 自然像真人
-    think_delay = get_current_delay()
-    print(f"[Customer] 偵測到未讀，等 {think_delay:.1f} 秒再點進去（避免秒讀）...", flush=True)
-    if not interruptible_sleep(think_delay):
-        return regions  # 中斷
+    if should_stop():
+        return regions
 
     print(f"\n[Customer] 點擊未讀對話 at ({cx}, {cy})", flush=True)
     pyautogui.click(cx, cy)
@@ -2119,7 +2200,10 @@ def main(stop_time, monitor=None):
         if should_stop():
             break
 
-        # 🔴 遍歷 active personas（每個 persona 對應自己的 sandbox）
+        # ============================================================
+        # 🔴 Per-Customer Scheduler 模型（解 Head-of-Line blocking）
+        # 每輪：① 偵測 unread → 註冊新 timer  ② 找 ready 的處理 1 個  ③ TTL 清理
+        # ============================================================
         for persona_name, persona_cfg in get_active_personas().items():
             if should_stop():
                 break
@@ -2132,54 +2216,71 @@ def main(stop_time, monitor=None):
 
                 line = find_line_window()
                 if not line:
-                    print(f"[Multi/{persona_name}] 找不到 sandbox={sandbox} 的 LINE 視窗，跳過", flush=True)
                     continue
                 hwnd = line[0]
                 try:
                     _w32g.SetForegroundWindow(hwnd)
-                except Exception as e:
-                    print(f"[Multi/{persona_name}] SetForegroundWindow 失敗: {e}", flush=True)
+                except Exception:
+                    pass
                 time.sleep(1.0)
-                print(f"\n[Multi/{persona_name}] === 處理 sandbox={sandbox} (hwnd={hwnd}) ===", flush=True)
 
-                processed_count = 0
-                MAX_PER_BOX = 15
-                while processed_count < MAX_PER_BOX:
-                    if should_stop():
-                        break
-
-                    regions, unread_list = find_unread_conversations(monitor)
-                    if not unread_list:
-                        if processed_count == 0:
-                            print(f"[Multi/{persona_name}] 無未讀", flush=True)
-                        else:
-                            print(f"[Multi/{persona_name}] 本輪完畢（共 {processed_count} 個）", flush=True)
-                        break
-
-                    if processed_count == 0:
-                        print(f"[Multi/{persona_name}] 偵測到 {len(unread_list)} 個未讀對話", flush=True)
-
-                    conv = unread_list[0]
-                    regions = handle_one_customer(
-                        persona_name, conv, regions, persona_prompt,
-                        all_histories[persona_name], all_profiles[persona_name],
-                        monitor,
-                    )
-
-                    if should_stop():
-                        break
-
-                    pyautogui.press("escape")
-                    time.sleep(0.5)
-                    processed_count += 1
-                else:
-                    print(f"[Multi/{persona_name}] 達單輪上限 {MAX_PER_BOX}", flush=True)
+                # ① 偵測所有 unread → 為新 customer 註冊 timer（不 sleep）
+                regions, unread_list = find_unread_conversations(monitor)
+                newly_registered = 0
+                for conv in unread_list:
+                    delay = get_current_delay()
+                    if _PENDING_SCHEDULER.register_if_new(persona_name, conv, delay):
+                        newly_registered += 1
+                        print(f"[Sched/{persona_name}] 新未讀 註冊 timer 等 {delay:.0f}s 後處理 (center={conv.get('center')})", flush=True)
+                if newly_registered > 0:
+                    stats = _PENDING_SCHEDULER.stats()
+                    print(f"[Sched] 全域 pending: {stats['pending_count']} 個（{stats['by_persona']}）", flush=True)
 
             except Exception as e:
-                print(f"[ERR/{persona_name}]: {e}", flush=True)
+                print(f"[ERR/{persona_name}] 偵測階段失敗: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
                 time.sleep(2)
+
+        # ② 找 ready 的 customer（已等夠的）→ 處理 1 個（FIFO 公平）
+        ready = _PENDING_SCHEDULER.get_ready()
+        if ready:
+            key, state = ready[0]   # 一輪處理 1 個（避免占螢幕太久）
+            persona_name = state["persona"]
+            conv = state["conv"]
+            try:
+                # 切到該 persona 的 sandbox
+                sandbox = PERSONA_CONFIG[persona_name]["sandbox"]
+                set_active_box(sandbox)
+                line = find_line_window()
+                if line:
+                    try:
+                        _w32g.SetForegroundWindow(line[0])
+                    except Exception:
+                        pass
+                    time.sleep(0.5)
+
+                regions = locate_line_regions(monitor)
+                persona_prompt = persona_prompt_cache.get(persona_name)
+                print(f"[Sched/{persona_name}] ✅ 處理 ready customer (等了 {time.monotonic() - state['first_seen']:.0f}s, queue 還有 {len(ready)-1} 個)", flush=True)
+
+                handle_one_customer(
+                    persona_name, conv, regions, persona_prompt,
+                    all_histories[persona_name], all_profiles[persona_name],
+                    monitor,
+                )
+                pyautogui.press("escape")
+                time.sleep(0.5)
+            except Exception as e:
+                print(f"[ERR/{persona_name}] 處理 customer 失敗: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+                time.sleep(2)
+            finally:
+                _PENDING_SCHEDULER.remove(key)
+
+        # ③ TTL 清理：超過 target_delay × 5 還沒處理 → 對方應該封鎖/刪聊天
+        _PENDING_SCHEDULER.cleanup_expired(ttl_factor=5)
 
         # ============================================================
         # 🆕 排程器：每輪 box 處理完後，檢查是否該主動發訊息給某些觀眾

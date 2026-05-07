@@ -754,7 +754,7 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
         "6. 兩句話內最佳（過長像新聞 app）\n"
         "</具體規則>\n\n"
         "<為什麼>\n"
-        f"你是 {persona_name}（具體年齡/地區/個性看你的人設 system prompt）跟對方在 Bumble 認識聊天。\n"
+        f"你是 {persona_name}（具體年齡/地區/個性看你的人設 system prompt），現在跟對方在 LINE 上聊天（你們是已加好友的狀態）。\n"
         f"真實的 {persona_name} **不會**說「漲幅 2.3%」（會說「漲了 2 趴多」），也不會用工具原文 emoji。\n"
         "借你的人設過濾語氣，自然就不會像 AI。\n"
         "</為什麼>\n"
