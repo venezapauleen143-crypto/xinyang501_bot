@@ -3,7 +3,7 @@
   "core_facts": {
     "occupation": "上班族",
     "location": "未知",
-    "schedule": null,
+    "schedule": "工作時間較晚（晚間下班）",
     "age": null,
     "gender": null,
     "marital_status": null,
@@ -27,6 +27,10 @@
     {
       "speaker": "them",
       "fact": "剛下班"
+    },
+    {
+      "speaker": "them",
+      "fact": "也剛下班"
     }
   ],
   "interests": [],
@@ -35,18 +39,20 @@
     "Day 1: 互換通訊工具至LINE",
     "Day 1: 主動發起對話，表示想聊天",
     "Day 1: 對Ruby🧸的用語表達方式提出疑問",
-    "Day 1: 詢問Ruby🧸下班狀態，展現關心"
+    "Day 1: 詢問Ruby🧸下班狀態，展現關心",
+    "Day 1: 確認雙方同時下班，建立共同話題"
   ],
-  "current_stage": "Day 1，初期寒暄階段。對方確認為上班族，持續主動互動。已開始詢問對方工作/作息相關話題。信任度穩步提升中。",
+  "current_stage": "Day 1，初期寒暄階段。雙方確認皆為上班族且同時下班，話題逐漸升溫。Ruby🧸開始關心對方飲食狀況。信任度持續提升中。",
   "topic_hooks_remaining": [
     "具體工作內容",
     "詳細作息時間",
     "興趣偏好",
-    "生活背景"
+    "生活背景",
+    "晚餐用餐狀況"
   ],
-  "trust_score": 6,
+  "trust_score": 7,
   "ai_suspicion_flags": [],
   "first_seen": "2026-05-07T16:43:31",
-  "last_updated": "2026-05-07T20:18:51",
-  "total_turns": 3
+  "last_updated": "2026-05-07T20:59:59",
+  "total_turns": 4
 }

@@ -62,23 +62,23 @@ def _to_taiwan(text):
 def _extract_reply(raw):
     """從 Claude 結構化輸出中抓 <reply>...</reply> 內容
 
-    Why: 取代「黑名單關鍵字」過嚴誤殺口語的問題（feedback_filter_reply_thinking_leak.md）
-      - 思考、自言自語放 <thinking> → 不送出
-      - 真正回覆放 <reply> → 抓出來送給對方
-      - 「等一下到家」「等等聊」這類口語在 <reply> 內 → 永遠保留
-      - 「等等讓我重算」這類思考在 <thinking> 內 → 永遠不送
-
-    Fallback: 沒抓到 <reply> 就用全文（向後相容，可能是 Claude 偶爾漏標籤）
+    安全模式：
+      - 有 <reply>...</reply> → 抓內容
+      - 有 <thinking> 但沒 <reply>（被 max_tokens 切斷）→ 回空（不送，避免洩漏思考）
+      - 完全沒標籤 → 用全文（向後相容，Claude 偶爾漏標籤）
     """
     if not raw:
         return ""
     import re as _re
+    # 1) 抓完整 <reply>...</reply>
     m = _re.search(r"<reply>\s*(.*?)\s*</reply>", raw, _re.DOTALL | _re.IGNORECASE)
     if m:
         return m.group(1).strip()
-    # fallback：拿掉常見的 <thinking>...</thinking> 區段，剩下當回覆
-    cleaned = _re.sub(r"<thinking>.*?</thinking>", "", raw, flags=_re.DOTALL | _re.IGNORECASE)
-    return cleaned.strip()
+    # 2) 有 <thinking> 但沒 <reply> → 思考被切斷，回空（fail-safe）
+    if _re.search(r"<thinking>", raw, _re.IGNORECASE):
+        return ""
+    # 3) 完全沒標籤 → 全文當回覆（向後相容）
+    return raw.strip()
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
@@ -741,7 +741,38 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
             "  - 對方提到家人 → 不要問「你有沒有 X」（profile 已記家庭關係）\n"
             "✅ 應該以「老朋友」的口吻自然提及：\n"
             "  - 直接引用 profile 內的具體事實（職業/地點/作息/家人/興趣）\n"
-            "  - 自然套用已知背景，不重複問已知問題\n"
+            "  - 自然套用已知背景，不重複問已知問題\n\n"
+            "🚨 **硬規則**（違反 = 嚴重 AI 痕跡破功）：\n"
+            "  ⚠️ profile.schedule 是更早抽出來的事實，裡面的「目前 / 正在 / 還在」字眼是**過時的時態描述**，\n"
+            "     **永遠以 world_context 的「現在時間」為準**判斷對方當下狀態，不要照字面解讀 profile。\n\n"
+            "  若 (world_context.現在時間) 已經過了 profile 提到的「對方下班時間」：\n"
+            "    🔴 絕對禁止：問「下班了嗎」「下班ㄌ嗎」「下班了沒」「還在上班嗎」「在忙嗎」\n"
+            "    🟢 改用：「都這時間 你應該下班ㄌ吧」、「下班吃啥呀」、「累不累」\n\n"
+            "  範例（仁輝場景）：\n"
+            "    profile：「對方 8 點才下班」+ 現在 21:00\n"
+            "    → 21:00 - 8:00 = 13 小時前 = 對方早下班\n"
+            "    → ❌ 「你下班了嗎」「你下班ㄌ嗎」（這是嚴重失憶痕跡）\n"
+            "    → ✅ 「都 9 點多了 累不累」「下班ㄌ吧 想吃啥」\n\n"
+            "🧠 結合資料推理（業界稱 Temporal Reasoning）：\n"
+            "  你**同時有**三項資訊：profile 事實 + world_context『現在時間 HH:MM』+ 對話 history。\n"
+            "  Claude 預設不會自動結合這 3 項，**你必須主動推理**。\n\n"
+            "  推理步驟：\n"
+            "    1. 看 world_context 拿到「現在時間」（例：21:01）\n"
+            "    2. 看 profile.core_facts.schedule 拿到對方作息（例：「8 點才下班」）\n"
+            "    3. 比對：現在時間 vs 對方作息 → 推導對方當下狀態\n"
+            "    4. 不要用「探詢式」寒暄問已經能推導出來的狀態\n\n"
+            "  常見推理場景：\n"
+            "    - profile「對方 8 點下班」+ 現在 21:00 → 對方早下班 → ❌ 別問「下班了嗎/下班ㄌ嗎」\n"
+            "    - profile「對方 9 點上班」+ 現在 07:00 → 對方還沒上班 → ❌ 別問「在忙嗎」\n"
+            "    - profile「對方週六放假」+ 今天週六 → ❌ 別問「今天上班嗎」\n"
+            "    - profile「對方剛下班」+ 對話間隔 2+ 小時 → 對方應該到家了 → ❌ 別問「到家了嗎」\n\n"
+            "  ✅ 正確示範（用「肯定推理 + 自然下個話題」取代「探詢」）：\n"
+            "    - 「都這時間 你應該下班ㄌ吧」（肯定推理）\n"
+            "    - 「下班吃啥呀」（直接進下個話題）\n"
+            "    - 「你剛下班吧 累不累」（套用已知）\n\n"
+            "  ❌ 反面教材（這是嚴重 AI 痕跡 — 客戶會覺得「她不是知道我幾點下班嗎」）：\n"
+            "    - 21:00 還問「下班了嗎」（profile 已記 8 點下班）\n"
+            "    - 12:30 還問「在忙嗎」（profile 已記中午午餐）\n"
             "</⚠️ 記憶使用規則>\n\n"
         )
     else:
@@ -866,7 +897,7 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
     for round_i in range(5):
         r = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=800,
+            max_tokens=1500,  # 1500 給 thinking + reply 充足空間，避免 thinking 太長被切斷導致 reply 沒寫完
             system=system_prompt,
             tools=_AI_TOOLS,
             messages=messages,

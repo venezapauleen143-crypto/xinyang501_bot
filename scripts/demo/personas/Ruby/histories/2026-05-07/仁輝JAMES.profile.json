@@ -55,6 +55,18 @@
     {
       "speaker": "Ruby",
       "fact": "比對方早下班一點點"
+    },
+    {
+      "speaker": "them",
+      "fact": "詢問Ruby是否吃飯了"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "已經到家，準備找東西吃"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "反問對方是否下班了"
     }
   ],
   "interests": [],
@@ -64,9 +76,10 @@
     "Day 1: 透露工作狀況",
     "Day 1: 透露下班時間為8點",
     "Day 1: 討論下班後飲食話題，展現互動關心",
-    "Day 1: 對Ruby的工作內容表示好奇，互動加深"
+    "Day 1: 對Ruby的工作內容表示好奇，互動加深",
+    "Day 1: 繼續關心Ruby的飲食狀況，互動持續進行中"
   ],
-  "current_stage": "Day 1，Ruby與對方互動升溫，開始深入了解彼此工作狀況，對方展現關心與好奇心",
+  "current_stage": "Day 1，Ruby與對方持續互動，對方持續展現關心Ruby的飲食狀況，互動仍在升溫中",
   "topic_hooks_remaining": [
     "下班吃什麼好料",
     "晚上吃什麼",
@@ -76,6 +89,6 @@
   "trust_score": 8,
   "ai_suspicion_flags": [],
   "first_seen": "2026-05-07T18:51:26",
-  "last_updated": "2026-05-07T20:16:46",
-  "total_turns": 4
+  "last_updated": "2026-05-07T21:01:13",
+  "total_turns": 5
 }
