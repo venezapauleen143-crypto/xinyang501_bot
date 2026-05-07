@@ -2006,6 +2006,30 @@ def main(stop_time, monitor=None):
     print(f"模式：反詐演示（demo 沙盤）", flush=True)
     print("=" * 50, flush=True)
 
+    # 🔴 啟動前自動跑 audit（找 persona 隔離 violation，有 P0 拒絕啟動）
+    try:
+        import subprocess as _sp
+        audit_script = Path("C:/Users/blue_/.claude/scripts/audit/audit.py")
+        if audit_script.exists():
+            print("\n[Audit] 啟動前 persona 隔離稽核...", flush=True)
+            r = _sp.run(
+                [sys.executable, str(audit_script), "--config", "反詐demo_persona"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=30,
+            )
+            if r.returncode == 0:
+                print("[Audit] ✅ 0 P0 violation，啟動", flush=True)
+            else:
+                print(r.stdout, flush=True)
+                print("\n[Audit] ❌ 偵測到 P0 violation，拒絕啟動。請先修 violation。", flush=True)
+                print("[Audit] 跳過 audit 啟動：python 反詐_multi.py <time> --skip-audit", flush=True)
+                if "--skip-audit" not in sys.argv:
+                    return False
+        else:
+            print(f"[Audit] ⚠️ audit script 不存在（{audit_script}），跳過稽核", flush=True)
+    except Exception as e:
+        print(f"[Audit] ⚠️ audit 跑失敗: {e}（跳過繼續啟動）", flush=True)
+
     # 載入時段延遲設定
     _load_time_settings(TIME_SETTINGS_PATH)
 
