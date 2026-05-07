@@ -109,12 +109,16 @@ PERSONA_CONFIG = {
     "Angela": {
         "sandbox": "demo",
         "nickname": "Angela",
+        "self_location": "Hong Kong",   # 該 persona 自己的所在地（查天氣用）
+        "self_location_zh": "香港",
         "root": SCRIPT_DIR / "personas" / "Angela",
         "active": True,
     },
     "Ruby": {
         "sandbox": "demo_ruby",
         "nickname": "Ruby🧸",
+        "self_location": "Taipei",
+        "self_location_zh": "台北",
         "root": SCRIPT_DIR / "personas" / "Ruby",
         "active": False,  # 🔴 沙盤未建好前先停用，code 已 ready
     },
@@ -227,12 +231,17 @@ def _detect_opponent_location(name, history):
     return None
 
 
-def _get_world_context(opponent_location=None):
-    """組今天的世界資訊：日期、Angela 香港天氣、對方所在地天氣、香港當日新聞。
+def _get_world_context(persona=DEFAULT_PERSONA, opponent_location=None):
+    """組今天的世界資訊：日期、自己所在地天氣、對方所在地天氣、新聞
 
-    用 30 分鐘快取避免每次對話都重複查 API。
+    每個 persona 自己的所在地不同（Angela 香港 / Ruby 台北），cache key 含 persona
     """
-    cache_key = (opponent_location or "_none_", datetime.now().strftime("%Y%m%d-%H"))
+    cfg = PERSONA_CONFIG.get(persona, PERSONA_CONFIG[DEFAULT_PERSONA])
+    self_loc_en = cfg.get("self_location", "Hong Kong")
+    self_loc_zh = cfg.get("self_location_zh", "香港")
+    nick = cfg.get("nickname", persona)
+
+    cache_key = (persona, opponent_location or "_none_", datetime.now().strftime("%Y%m%d-%H"))
     if cache_key in _WORLD_CONTEXT_CACHE:
         cached, ts = _WORLD_CONTEXT_CACHE[cache_key]
         if (time.time() - ts) < _WORLD_CONTEXT_TTL:
@@ -243,22 +252,19 @@ def _get_world_context(opponent_location=None):
     weekday_zh = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][now.weekday()]
     parts.append(
         f"📅 今天：{now.strftime('%Y-%m-%d')} {weekday_zh}，**現在時間 {now.strftime('%H:%M')}**\n"
-        f"⚠️ 對方訊息中提到的時間（如「8點半下班」「12點開會」）是對方的『行程時間』，"
-        f"不是「現在時間」。要分清楚。"
+        f"⚠️ 對方訊息中提到的時間是對方的『行程時間』，不是「現在時間」。要分清楚。"
     )
 
-    # Angela 所在地（香港）天氣
-    hk_weather = _safe_call_tool("fetch_weather", "Hong Kong")
-    if hk_weather:
-        parts.append(f"🌤 Angela 所在地（香港）天氣：\n{hk_weather[:300]}")
+    # 自己所在地天氣（依 persona 不同）
+    self_weather = _safe_call_tool("fetch_weather", self_loc_en)
+    if self_weather:
+        parts.append(f"🌤 {nick} 所在地（{self_loc_zh}）天氣：\n{self_weather[:300]}")
 
-    # 對方所在地天氣（如果偵測到）
     if opponent_location:
         opp_weather = _safe_call_tool("fetch_weather", opponent_location)
         if opp_weather:
             parts.append(f"🌤 對方所在地（{opponent_location}）天氣：\n{opp_weather[:300]}")
 
-    # 全球當日新聞 top 3
     global_news = _safe_call_tool("fetch_global_news", count=3)
     if global_news:
         parts.append(f"📰 今日要聞：\n{global_news[:600]}")
@@ -616,12 +622,13 @@ def _extract_profile_from_history(persona, name, history):
         history_text_lines.append(f"{label} {msg['text']}")
     history_text = "\n".join(history_text_lines)
 
+    nick = persona_nickname(persona)
     prompt = (
-        f"你是對話分析師。以下是 Angela 跟對方（{name}）的完整聊天記錄。"
+        f"你是對話分析師。以下是 {nick} 跟對方（{name}）的完整聊天記錄。"
         f"請從中**精確抽出**對方揭露的所有事實，輸出嚴格的 JSON。\n\n"
         f"<對話記錄>\n{history_text}\n</對話記錄>\n\n"
         f"<抽取規則>\n"
-        f"1. **只抽對方真的說過的事**，Angela 說的不算對方的事實\n"
+        f"1. **只抽對方真的說過的事**，{nick} 說的不算對方的事實\n"
         f"2. **不要推測**：對方沒說職業就不要寫 occupation\n"
         f"3. **每筆 disclosure** 格式：speaker=\"them\"、fact=「對方說過的事實」\n"
         f"4. 興趣/家人/工作/作息/個性等任何揭露都列進去\n"
@@ -1816,7 +1823,7 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
     day_n = _calculate_day_n(persona, name)
     stage_hint = _build_stage_hint(day_n)
     opponent_location = _detect_opponent_location(name, history)
-    world_context = _get_world_context(opponent_location)
+    world_context = _get_world_context(persona, opponent_location)
     print(f"[Customer/{persona}] {name} 對話 Day {day_n}, 對方所在地: {opponent_location or '未知'}", flush=True)
     augmented_prompt = (
         system_prompt + stage_hint +
@@ -1826,7 +1833,7 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
     if profile_text:
         print(f"[Customer/{persona}] {name} profile 注入（{len((profile or {}).get('shared_disclosures') or [])} 筆事實）", flush=True)
 
-    reply = generate_reply(augmented_prompt, history, new_them, profile_text=profile_text)
+    reply = generate_reply(augmented_prompt, history, new_them, profile_text=profile_text, persona_name=persona_nickname(persona))
     if not reply or len(reply) <= 1:
         time.sleep(0.5)
         return regions
@@ -1901,7 +1908,7 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
         # 用 cache 裡最新的 profile（背景 thread 可能已經更新完）
         latest_profile = all_profiles.get(name) or profile
         latest_profile_text = _format_profile_for_prompt(latest_profile) if latest_profile else ""
-        reply2 = generate_reply(augmented_prompt, history, new_them2, profile_text=latest_profile_text)
+        reply2 = generate_reply(augmented_prompt, history, new_them2, profile_text=latest_profile_text, persona_name=persona_nickname(persona))
         if not reply2 or len(reply2) <= 1:
             break
         reply2 = filter_reply(reply2)

@@ -1,1 +1,2 @@
 {"ts": "2026-05-07T12:43:26", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
+{"ts": "2026-05-07T12:59:12", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
