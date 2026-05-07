@@ -1,0 +1,6 @@
+{"ts": "2026-05-07T11:23:59", "type": "customer_seen", "customer": "仁輝JAMES", "data": {"prior_history_len": 209}}
+{"ts": "2026-05-07T11:24:07", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 3}}
+{"ts": "2026-05-07T11:24:25", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 18, "segments": 2, "day_n": 3}}
+{"ts": "2026-05-07T11:24:57", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 45, "action": "增量更新"}}
+{"ts": "2026-05-07T11:33:51", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 3}}
+{"ts": "2026-05-07T11:34:07", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 27, "segments": 2, "day_n": 3}}

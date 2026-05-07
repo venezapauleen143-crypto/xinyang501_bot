@@ -37,7 +37,17 @@ except Exception:
 if __name__ == "__main__":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-    # 🔴 log rotation: 把 stdout/stderr 同步寫到 logs/反詐_multi.log（100MB × 5 份）
+import win32gui
+import pyautogui
+import pyperclip
+from datetime import datetime
+from dotenv import load_dotenv
+from pathlib import Path
+import anthropic
+
+# 🔴 log rotation: 把 stdout/stderr 同步寫到 logs/反詐_multi.log（100MB × 5 份）
+# 放在 Path import 之後，避免 NameError
+if __name__ == "__main__":
     import logging
     from logging.handlers import RotatingFileHandler
     LOGS_DIR = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/logs")
@@ -76,14 +86,6 @@ if __name__ == "__main__":
     sys.stdout = _TeeStream(sys.stdout, _log_handler)
     sys.stderr = _TeeStream(sys.stderr, _log_handler)
 
-import win32gui
-import pyautogui
-import pyperclip
-from datetime import datetime
-from dotenv import load_dotenv
-from pathlib import Path
-import anthropic
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR.parent))
@@ -99,13 +101,79 @@ _TIME_SETTINGS = None
 
 
 # ============================================================
-# 對話歷史持久化（每觀眾一個 .txt，使用 LINE 匯出格式）
+# Persona 隔離架構（多人設徹底分開：histories / images / logs 各自獨立）
 # ============================================================
-HISTORIES_DIR = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/histories")
-HISTORIES_DIR.mkdir(parents=True, exist_ok=True)
+SCRIPT_DIR = Path(__file__).resolve().parent
 
-# 圖片庫目錄（每個分類一個子資料夾，放 .jpg/.png）
-IMAGES_DIR = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/images")
+PERSONA_CONFIG = {
+    "Angela": {
+        "sandbox": "demo",
+        "nickname": "Angela",
+        "root": SCRIPT_DIR / "personas" / "Angela",
+        "active": True,
+    },
+    "Ruby": {
+        "sandbox": "demo_ruby",
+        "nickname": "Ruby🧸",
+        "root": SCRIPT_DIR / "personas" / "Ruby",
+        "active": False,  # 🔴 沙盤未建好前先停用，code 已 ready
+    },
+}
+
+DEFAULT_PERSONA = "Angela"
+
+
+def get_active_personas():
+    """回傳啟用中的 personas（dict[persona_name → config]）"""
+    return {k: v for k, v in PERSONA_CONFIG.items() if v.get("active", False)}
+
+
+def persona_root(persona: str) -> Path:
+    p = PERSONA_CONFIG[persona]["root"]
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def persona_histories_dir(persona: str) -> Path:
+    p = persona_root(persona) / "histories"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def persona_images_dir(persona: str) -> Path:
+    p = persona_root(persona) / "images"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def persona_logs_dir(persona: str) -> Path:
+    p = persona_root(persona) / "logs"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def persona_nickname(persona: str) -> str:
+    return PERSONA_CONFIG[persona]["nickname"]
+
+
+def persona_persona_file(persona: str) -> Path:
+    return persona_root(persona) / "persona.txt"
+
+
+def get_persona_for_sandbox(sandbox: str) -> str:
+    """sandbox name → persona name（反向查找）"""
+    for name, cfg in PERSONA_CONFIG.items():
+        if cfg["sandbox"] == sandbox:
+            return name
+    return DEFAULT_PERSONA
+
+
+# 確保所有 active persona 的目錄都存在
+for _p in PERSONA_CONFIG:
+    persona_root(_p)
+    persona_histories_dir(_p)
+    persona_images_dir(_p)
+    persona_logs_dir(_p)
 
 # ============================================================
 # 即時資訊工具（從 claude_tools.py 借）
@@ -200,11 +268,11 @@ def _get_world_context(opponent_location=None):
     return context
 
 
-def _resolve_image_tag(tag):
-    """從 {send_xxx} 標記找對應圖片，回傳隨機一張的路徑（找不到回 None）"""
+def _resolve_image_tag(persona, tag):
+    """從 {send_xxx} 標記找對應圖片（從該 persona 的 images/ 目錄）"""
     # tag 形如 "send_自拍"、"send_食物"
     category = tag.replace("send_", "", 1).strip()
-    cat_dir = IMAGES_DIR / category
+    cat_dir = persona_images_dir(persona) / category
     if not cat_dir.exists():
         return None
     images = list(cat_dir.glob("*.jpg")) + list(cat_dir.glob("*.jpeg")) + list(cat_dir.glob("*.png"))
@@ -212,8 +280,8 @@ def _resolve_image_tag(tag):
         return None
     return str(random.choice(images))
 
-# Angela 帳號的 LINE 暱稱（自己改 LINE 暱稱時來改這個常數）
-PERSONA_NICKNAME = "Angela"
+# 🔴 PERSONA_NICKNAME 已移除，請用 persona_nickname(persona) 動態取
+# 每個 persona 的 LINE 暱稱在 PERSONA_CONFIG 設定
 
 # 黑名單關鍵字：LINE 名稱開頭含這些 → bot 不處理、也不主動發
 # 演講當下某觀眾搗亂時，把他 LINE 改名「黑名單 XXX」即可停止 AI 對他的所有動作
@@ -261,34 +329,35 @@ def _sanitize_filename(name):
     return re.sub(r'[/\\:*?"<>|\r\n\t]', '_', name).strip() or "unknown"
 
 
-def _today_subdir():
-    """今日的子目錄路徑（histories/YYYY-MM-DD/）"""
+def _today_subdir(persona):
+    """該 persona 今日的子目錄（personas/{persona}/histories/YYYY-MM-DD/）"""
     today = datetime.now().strftime("%Y-%m-%d")
-    p = HISTORIES_DIR / today
+    p = persona_histories_dir(persona) / today
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
-def _history_file_path(name):
-    """回傳該觀眾的 .txt 完整路徑（新檔放今日子目錄）"""
-    return _today_subdir() / f"{_sanitize_filename(name)}.txt"
+def _history_file_path(persona, name):
+    """該 persona × 該觀眾的 .txt 路徑（新檔放今日子目錄）"""
+    return _today_subdir(persona) / f"{_sanitize_filename(name)}.txt"
 
 
-def _resolve_history_file(name):
-    """找 name 對應的 .txt 檔。
+def _resolve_history_file(persona, name):
+    """找 name 在 persona 內對應的 .txt 檔。
 
-    搜尋順序：
+    搜尋順序（只在該 persona 的 histories/ 內找，不會跨 persona）：
       1. 今日子目錄精確
       2. 平級舊檔精確（向後相容）
-      3. 全目錄遞迴 fuzzy match（忽略空格繁簡）
+      3. 該 persona 全目錄遞迴 fuzzy match
       4. 都沒有 → 回今日子目錄路徑（會建新檔）
     """
-    today_path = _history_file_path(name)
+    histories_root = persona_histories_dir(persona)
+    today_path = _history_file_path(persona, name)
     if today_path.exists():
         return today_path
 
-    # 平級舊檔（向後相容 5/6 之前的檔案）
-    legacy = HISTORIES_DIR / f"{_sanitize_filename(name)}.txt"
+    # 平級舊檔（向後相容）
+    legacy = histories_root / f"{_sanitize_filename(name)}.txt"
     if legacy.exists():
         return legacy
 
@@ -301,17 +370,17 @@ def _resolve_history_file(name):
     if not target:
         return today_path
 
-    # 遞迴掃所有子目錄的 .txt
-    for f in HISTORIES_DIR.rglob("*.txt"):
+    # 遞迴掃該 persona 的所有子目錄
+    for f in histories_root.rglob("*.txt"):
         if _normalize(f.stem) == target:
-            print(f"[history] 模糊匹配：'{name}' → 沿用既有檔 '{f.relative_to(HISTORIES_DIR)}'", flush=True)
+            print(f"[history/{persona}] 模糊匹配：'{name}' → 沿用既有檔 '{f.relative_to(histories_root)}'", flush=True)
             return f
 
     # 找不到 → 用今日子目錄（建新檔）
     return today_path
 
 
-def _load_customer_history(name):
+def _load_customer_history(persona, name):
     """從 .txt 讀對應觀眾的歷史，回傳 history list（{text, sender, y} 格式）。
 
     使用 LINE 匯出格式：
@@ -321,7 +390,7 @@ def _load_customer_history(name):
 
     判斷誰是 me/them：發送者 == 客戶名（檔名）→ them，否則 → me
     """
-    path = _resolve_history_file(name)
+    path = _resolve_history_file(persona, name)
     if not path.exists():
         return []
 
@@ -386,21 +455,20 @@ def _load_customer_history(name):
 # 業界主流 2026：MemMachine / Memori 都用這架構，可達 80%+ token 節省
 # ============================================================
 
-def _profile_file_path(name):
-    """回傳 profile.json 完整路徑（跟著 .txt 走 — 同目錄）"""
-    # 跟對應的 .txt 同目錄存
-    txt_path = _resolve_history_file(name)
+def _profile_file_path(persona, name):
+    """該 persona × 該觀眾的 profile.json 路徑（跟對應 .txt 同目錄）"""
+    txt_path = _resolve_history_file(persona, name)
     return txt_path.parent / f"{_sanitize_filename(name)}.profile.json"
 
 
-def _resolve_profile_file(name):
-    """找 name 對應的 .profile.json（同 history fuzzy match）"""
-    expected = _profile_file_path(name)
+def _resolve_profile_file(persona, name):
+    """找該 persona 的 name 對應的 .profile.json（fuzzy match 在該 persona 內）"""
+    histories_root = persona_histories_dir(persona)
+    expected = _profile_file_path(persona, name)
     if expected.exists():
         return expected
 
-    # 平級舊檔
-    legacy = HISTORIES_DIR / f"{_sanitize_filename(name)}.profile.json"
+    legacy = histories_root / f"{_sanitize_filename(name)}.profile.json"
     if legacy.exists():
         return legacy
 
@@ -413,35 +481,35 @@ def _resolve_profile_file(name):
         return expected
 
     suffix = ".profile.json"
-    for f in HISTORIES_DIR.rglob(f"*{suffix}"):
+    for f in histories_root.rglob(f"*{suffix}"):
         bare = f.name[:-len(suffix)]
         if _normalize(bare) == target:
             return f
     return expected
 
 
-def _load_profile(name):
+def _load_profile(persona, name):
     """載入 profile.json，沒有回 None"""
-    path = _resolve_profile_file(name)
+    path = _resolve_profile_file(persona, name)
     if not path.exists():
         return None
     try:
         with io.open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"[profile] 讀取 {path.name} 失敗：{e}", flush=True)
+        print(f"[profile/{persona}] 讀取 {path.name} 失敗：{e}", flush=True)
         return None
 
 
-def _save_profile(name, profile):
+def _save_profile(persona, name, profile):
     """存 profile.json"""
-    path = _resolve_profile_file(name)
+    path = _resolve_profile_file(persona, name)
     try:
         with io.open(path, "w", encoding="utf-8") as f:
             json.dump(profile, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
-        print(f"[profile] 寫入 {path.name} 失敗：{e}", flush=True)
+        print(f"[profile/{persona}] 寫入 {path.name} 失敗：{e}", flush=True)
         return False
 
 
@@ -536,14 +604,15 @@ def _validate_and_normalize_profile(profile, name=""):
     return result
 
 
-def _extract_profile_from_history(name, history):
+def _extract_profile_from_history(persona, name, history):
     """用 Haiku 4.5 從整個 history 抽結構化 profile（首次見觀眾時用）"""
     if not history:
         return None
 
+    me_label = f"[{persona_nickname(persona)}]"
     history_text_lines = []
     for msg in history:
-        label = "[對方]" if msg["sender"] == "them" else "[Angela]"
+        label = "[對方]" if msg["sender"] == "them" else me_label
         history_text_lines.append(f"{label} {msg['text']}")
     history_text = "\n".join(history_text_lines)
 
@@ -593,14 +662,14 @@ def _extract_profile_from_history(name, history):
         profile = json.loads(text)
         # 🔴 schema 校驗：補齊缺漏欄位、補 metadata
         profile = _validate_and_normalize_profile(profile, name=name)
-        print(f"[profile] {name} 首次抽取完成（{len(profile.get('shared_disclosures') or [])} 筆 disclosures）", flush=True)
+        print(f"[profile/{persona}] {name} 首次抽取完成（{len(profile.get('shared_disclosures') or [])} 筆 disclosures）", flush=True)
         return profile
     except Exception as e:
-        print(f"[profile] 首次抽取 {name} 失敗：{e}", flush=True)
+        print(f"[profile/{persona}] 首次抽取 {name} 失敗：{e}", flush=True)
         return None
 
 
-def _update_profile_incrementally(name, old_profile, new_messages):
+def _update_profile_incrementally(persona, name, old_profile, new_messages):
     """每輪 reply 後增量更新 profile（只送舊 profile + 最新對話 → Haiku）
 
     含 critic 驗證：舊 profile 的 disclosures / core_facts 不能消失
@@ -610,16 +679,17 @@ def _update_profile_incrementally(name, old_profile, new_messages):
     if not new_messages:
         return old_profile
 
+    me_label = f"[{persona_nickname(persona)}]"
     new_text_lines = []
     for msg in new_messages:
-        label = "[對方]" if msg["sender"] == "them" else "[Angela]"
+        label = "[對方]" if msg["sender"] == "them" else me_label
         new_text_lines.append(f"{label} {msg['text']}")
     new_text = "\n".join(new_text_lines)
 
     old_profile_json = json.dumps(old_profile, ensure_ascii=False, indent=2)
 
     prompt = (
-        f"你是對話分析師。Angela 跟對方（{name}）有最新一輪對話。請**更新** profile（只加新事實，舊的全保留）。\n\n"
+        f"你是對話分析師。{persona_nickname(persona)} 跟對方（{name}）有最新一輪對話。請**更新** profile（只加新事實，舊的全保留）。\n\n"
         f"<舊 profile>\n{old_profile_json}\n</舊 profile>\n\n"
         f"<最新對話>\n{new_text}\n</最新對話>\n\n"
         f"<更新規則>\n"
@@ -650,7 +720,7 @@ def _update_profile_incrementally(name, old_profile, new_messages):
         new_facts = {d.get("fact") for d in new_disclosures if d.get("fact")}
         missing = old_facts - new_facts
         if missing:
-            print(f"[profile] ⚠️ critic 偵測到漏掉舊 disclosures：{missing}，merge 回去", flush=True)
+            print(f"[profile/{persona}] ⚠️ critic 偵測到漏掉舊 disclosures：{missing}，merge 回去", flush=True)
             existing = new_facts
             for d in old_disclosures:
                 if d.get("fact") and d.get("fact") not in existing:
@@ -665,7 +735,7 @@ def _update_profile_incrementally(name, old_profile, new_messages):
             new_val = new_core.get(key)
             if old_val and old_val not in (None, "", "未知", "null") and \
                (not new_val or new_val in (None, "", "未知", "null")):
-                print(f"[profile] ⚠️ critic 偵測到 core_facts.{key} 從 '{old_val}' 變空，還原", flush=True)
+                print(f"[profile/{persona}] ⚠️ critic 偵測到 core_facts.{key} 從 '{old_val}' 變空，還原", flush=True)
                 new_core[key] = old_val
         new_profile["core_facts"] = new_core
 
@@ -679,7 +749,7 @@ def _update_profile_incrementally(name, old_profile, new_messages):
 
         return new_profile
     except Exception as e:
-        print(f"[profile] 增量更新 {name} 失敗：{e}，沿用舊 profile", flush=True)
+        print(f"[profile/{persona}] 增量更新 {name} 失敗：{e}，沿用舊 profile", flush=True)
         return old_profile
 
 
@@ -730,14 +800,14 @@ def _format_profile_for_prompt(profile):
     return "\n".join(parts)
 
 
-def _ensure_profile(name, history):
+def _ensure_profile(persona, name, history):
     """保證該觀眾有 profile：沒有就抽，並存檔。回傳 profile dict 或 None。"""
-    profile = _load_profile(name)
+    profile = _load_profile(persona, name)
     if profile is None and history:
-        print(f"[profile] {name} 首次見，從 {len(history)} 條 history 抽 profile...", flush=True)
-        profile = _extract_profile_from_history(name, history)
+        print(f"[profile/{persona}] {name} 首次見，從 {len(history)} 條 history 抽 profile...", flush=True)
+        profile = _extract_profile_from_history(persona, name, history)
         if profile:
-            _save_profile(name, profile)
+            _save_profile(persona, name, profile)
     return profile
 
 
@@ -767,22 +837,23 @@ def _profile_worker_loop():
             _PROFILE_TASK_QUEUE.task_done()
             break
 
+        persona = task.get("persona", DEFAULT_PERSONA)
         name = task["name"]
         history_snapshot = task["history"]
         round_msgs = task["round_msgs"]
-        all_profiles_ref = task["all_profiles"]
+        all_profiles_ref = task["all_profiles"]  # 已經是該 persona 的 dict
 
         try:
             current_profile = all_profiles_ref.get(name)
 
             if current_profile:
                 # 已有 profile → 增量更新
-                updated = _update_profile_incrementally(name, current_profile, round_msgs)
+                updated = _update_profile_incrementally(persona, name, current_profile, round_msgs)
                 action = "增量更新"
             elif len(history_snapshot) >= MIN_TURNS_FOR_FIRST_PROFILE:
                 # 全新觀眾累積夠了 → 首次抽
-                print(f"[profile-worker] {name} 累積 {len(history_snapshot)} 條，首次抽 profile...", flush=True)
-                updated = _extract_profile_from_history(name, history_snapshot)
+                print(f"[profile-worker/{persona}] {name} 累積 {len(history_snapshot)} 條，首次抽 profile...", flush=True)
+                updated = _extract_profile_from_history(persona, name, history_snapshot)
                 action = "首次抽取"
             else:
                 # 資料太少，跳過
@@ -791,43 +862,41 @@ def _profile_worker_loop():
 
             if updated:
                 all_profiles_ref[name] = updated
-                _save_profile(name, updated)
+                _save_profile(persona, name, updated)
                 disc_n = len((updated.get("shared_disclosures") or []))
-                print(f"[profile-worker] {name} {action}完成（{disc_n} 筆 disclosures）", flush=True)
+                print(f"[profile-worker/{persona}] {name} {action}完成（{disc_n} 筆 disclosures）", flush=True)
                 _emit_event(
+                    persona,
                     "profile_first_extract" if action == "首次抽取" else "profile_updated",
                     customer=name,
                     data={"disclosures": disc_n, "action": action},
                 )
         except Exception as e:
             err = str(e)
-            # rate limit retry：簡單退避（worker 級，不卡其他 task）
             if "rate" in err.lower() or "429" in err:
-                print(f"[profile-worker] {name} 撞 rate limit，退避 30 秒後重排：{err[:100]}", flush=True)
-                _emit_event("rate_limit", customer=name, data={"err": err[:200]})
+                print(f"[profile-worker/{persona}] {name} 撞 rate limit，退避 30 秒後重排：{err[:100]}", flush=True)
+                _emit_event(persona, "rate_limit", customer=name, data={"err": err[:200]})
                 time.sleep(30)
                 try:
                     _PROFILE_TASK_QUEUE.put_nowait(task)
                 except _queue_mod.Full:
-                    print(f"[profile-worker] queue 滿，丟棄 {name} 的 retry", flush=True)
-                    _write_dead_letter(name, "queue_full_after_rate_limit", task, err)
+                    print(f"[profile-worker/{persona}] queue 滿，丟棄 {name} 的 retry", flush=True)
+                    _write_dead_letter(persona, name, "queue_full_after_rate_limit", task, err)
             else:
-                print(f"[profile-worker] {name} 處理失敗：{err[:200]}", flush=True)
-                # 🔴 dead letter queue：非 rate_limit 失敗寫盤，避免 silent drop
-                _write_dead_letter(name, "worker_exception", task, err)
-                _emit_event("profile_failed", customer=name, data={"err": err[:200]})
+                print(f"[profile-worker/{persona}] {name} 處理失敗：{err[:200]}", flush=True)
+                _write_dead_letter(persona, name, "worker_exception", task, err)
+                _emit_event(persona, "profile_failed", customer=name, data={"err": err[:200]})
         finally:
             _PROFILE_TASK_QUEUE.task_done()
 
 
-def _write_dead_letter(name, reason, task, err):
-    """profile worker 失敗的任務寫到 logs/profile_failures.jsonl，方便事後追"""
+def _write_dead_letter(persona, name, reason, task, err):
+    """profile worker 失敗的任務寫到 persona logs/profile_failures.jsonl"""
     try:
-        logs_dir = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/logs")
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        f = logs_dir / "profile_failures.jsonl"
+        f = persona_logs_dir(persona) / "profile_failures.jsonl"
         record = {
             "ts": datetime.now().isoformat(timespec="seconds"),
+            "persona": persona,
             "customer": name,
             "reason": reason,
             "err": str(err)[:500],
@@ -837,7 +906,7 @@ def _write_dead_letter(name, reason, task, err):
         with io.open(f, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
     except Exception:
-        pass  # dead letter 自己也失敗就放棄
+        pass
 
 
 def _ensure_profile_workers_started():
@@ -906,7 +975,7 @@ _EVENT_LAST_FLUSH = [time.time()]  # list 包起來避免 closure 問題
 
 
 def _flush_event_buffer():
-    """把 buffer 內的 event 一次寫盤（thread-safe）"""
+    """把 buffer 內的 event 一次寫盤（thread-safe，按 persona 分檔）"""
     with _EVENT_BUFFER_LOCK:
         if not _EVENT_BUFFER:
             return
@@ -914,30 +983,28 @@ def _flush_event_buffer():
         _EVENT_BUFFER.clear()
         _EVENT_LAST_FLUSH[0] = time.time()
 
-    # 釋放鎖後再寫盤（避免 IO 卡其他 emit）
-    try:
-        events_dir = Path("C:/Users/blue_/claude-telegram-bot/scripts/demo/logs")
-        events_dir.mkdir(parents=True, exist_ok=True)
-        # 按日切檔
-        today = datetime.now().strftime("%Y-%m-%d")
-        events_file = events_dir / f"events_{today}.jsonl"
-        with io.open(events_file, "a", encoding="utf-8") as f:
-            for record in records:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    except Exception as e:
-        print(f"[event] flush failed: {e}", flush=True)
+    # 按 persona 分組寫到各自 logs 目錄
+    by_persona = {}
+    for r in records:
+        p = r.get("persona", DEFAULT_PERSONA)
+        by_persona.setdefault(p, []).append(r)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    for p, recs in by_persona.items():
+        try:
+            events_file = persona_logs_dir(p) / f"events_{today}.jsonl"
+            with io.open(events_file, "a", encoding="utf-8") as f:
+                for record in recs:
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception as e:
+            print(f"[event/{p}] flush failed: {e}", flush=True)
 
 
-def _emit_event(event_type, customer="", data=None):
-    """關鍵事件 buffered append，10 條或 5 秒 flush 一次
-
-    Event types:
-      - customer_seen / new_messages / reply_sent
-      - profile_first_extract / profile_updated / profile_failed
-      - ocr_failed / ai_suspicion / rate_limit
-    """
+def _emit_event(persona, event_type, customer="", data=None):
+    """關鍵事件 buffered append，10 條或 5 秒 flush 一次（按 persona 分檔）"""
     record = {
         "ts": datetime.now().isoformat(timespec="seconds"),
+        "persona": persona,
         "type": event_type,
         "customer": customer,
         "data": data or {},
@@ -952,50 +1019,52 @@ def _emit_event(event_type, customer="", data=None):
         _flush_event_buffer()
 
 
-# 關閉前 flush 剩下的事件
 atexit.register(_flush_event_buffer)
 
 
-def _enqueue_profile_task(name, history, round_msgs, all_profiles):
-    """把 profile 任務丟進 queue（非阻塞，queue 滿就丟棄並 log）"""
+def _enqueue_profile_task(persona, name, history, round_msgs, all_profiles_per_persona):
+    """把 profile 任務丟進 queue（非阻塞，queue 滿就寫 dead letter）
+
+    all_profiles_per_persona: 該 persona 自己的 profile dict（不是頂層 dict）
+    """
     _ensure_profile_workers_started()
-    # snapshot history（避免 worker 處理時 history 已經變動）
     history_snapshot = list(history)
     task = {
+        "persona": persona,
         "name": name,
         "history": history_snapshot,
         "round_msgs": round_msgs,
-        "all_profiles": all_profiles,
+        "all_profiles": all_profiles_per_persona,
     }
     try:
         _PROFILE_TASK_QUEUE.put_nowait(task)
     except _queue_mod.Full:
-        print(f"[profile-worker] ⚠️ queue 滿（>200），丟棄 {name} 的更新", flush=True)
+        print(f"[profile-worker/{persona}] ⚠️ queue 滿（>200），丟棄 {name} 的更新", flush=True)
+        _write_dead_letter(persona, name, "queue_full_at_enqueue", task, "queue full")
 
 
 # 🔴 cache 首次見面日期（避免每次 status snapshot 都讀整個 .txt）
 _FIRST_CHAT_DATE_CACHE = {}
 
 
-def _get_first_chat_date(name):
-    """從 .txt 找最早的日期分隔行，回傳 datetime.date（含 cache）"""
-    if name in _FIRST_CHAT_DATE_CACHE:
-        return _FIRST_CHAT_DATE_CACHE[name]
+def _get_first_chat_date(persona, name):
+    """從 .txt 找最早的日期分隔行（含 cache，key=(persona,name)）"""
+    cache_key = (persona, name)
+    if cache_key in _FIRST_CHAT_DATE_CACHE:
+        return _FIRST_CHAT_DATE_CACHE[cache_key]
 
-    # 優先從 profile.first_seen 拿（已經 ISO 格式，不用讀 .txt）
-    profile = _load_profile(name)
+    profile = _load_profile(persona, name)
     if profile:
         first_seen = profile.get("first_seen")
         if first_seen:
             try:
                 d = datetime.fromisoformat(first_seen).date()
-                _FIRST_CHAT_DATE_CACHE[name] = d
+                _FIRST_CHAT_DATE_CACHE[cache_key] = d
                 return d
             except (ValueError, TypeError):
                 pass
 
-    # fallback：讀 .txt 第一行日期分隔
-    path = _resolve_history_file(name)
+    path = _resolve_history_file(persona, name)
     result = datetime.now().date()
     if path.exists():
         try:
@@ -1007,7 +1076,7 @@ def _get_first_chat_date(name):
                         break
         except Exception:
             pass
-    _FIRST_CHAT_DATE_CACHE[name] = result
+    _FIRST_CHAT_DATE_CACHE[cache_key] = result
     return result
 
 
@@ -1051,18 +1120,17 @@ DAY5_PLUS_MESSAGES = [
 ]
 
 
-def _scan_all_customers():
-    """掃描 histories/ 目錄，回傳所有觀眾名稱（從 .txt 檔名提取）"""
-    if not HISTORIES_DIR.exists():
+def _scan_all_customers(persona):
+    """掃描該 persona 的 histories/ 遞迴回傳所有觀眾名稱"""
+    histories_root = persona_histories_dir(persona)
+    if not histories_root.exists():
         return []
-    return [p.stem for p in HISTORIES_DIR.glob("*.txt") if p.is_file()]
+    return [p.stem for p in histories_root.rglob("*.txt") if p.is_file()]
 
 
-def _get_last_message_time(name):
-    """從 .txt 算最後一條訊息的時間（datetime），找不到回 None。
-    解析 LINE 匯出格式：日期分隔行 + HH:MM 訊息行。
-    """
-    path = _history_file_path(name)
+def _get_last_message_time(persona, name):
+    """從 .txt 算最後一條訊息的時間（datetime），找不到回 None"""
+    path = _resolve_history_file(persona, name)
     if not path.exists():
         return None
     last_date = None
@@ -1088,9 +1156,9 @@ def _get_last_message_time(name):
     return datetime.combine(last_date, datetime.min.time()).replace(hour=h, minute=mi)
 
 
-def _get_last_sender(name):
+def _get_last_sender(persona, name):
     """從 .txt 看最後一條訊息是誰發的（'me' or 'them'），找不到回 None"""
-    path = _history_file_path(name)
+    path = _resolve_history_file(persona, name)
     if not path.exists():
         return None
     last_sender = None
@@ -1123,9 +1191,9 @@ def _is_quiet_hour():
     return h >= qs or h < qe
 
 
-def _was_greeting_sent_today(name, greeting_type):
+def _was_greeting_sent_today(persona, name, greeting_type):
     """今天的這個時段問候是否已發過（看 .txt 內最後幾條 me 訊息）"""
-    path = _history_file_path(name)
+    path = _resolve_history_file(persona, name)
     if not path.exists():
         return False
     today_str = datetime.now().strftime('%Y.%m.%d')
@@ -1150,9 +1218,9 @@ def _was_greeting_sent_today(name, greeting_type):
         "night": ["晚安", "休息", "沖涼"],
     }
     keywords = keywords_for_type.get(greeting_type, [])
+    nickname = persona_nickname(persona)
     for msg in today_messages:
-        # 只看 Angela 發的（不 startswith 名字）
-        if not msg.split(" ", 1)[1].startswith(PERSONA_NICKNAME):
+        if not msg.split(" ", 1)[1].startswith(nickname):
             continue
         text = msg
         if any(kw in text for kw in keywords):
@@ -1160,43 +1228,32 @@ def _was_greeting_sent_today(name, greeting_type):
     return False
 
 
-def _check_proactive_trigger(name):
-    """檢查觀眾是否需要主動發訊息。
-
-    回傳：(should_send: bool, message: str, reason: str)
-        如果不需要 → (False, "", "")
-    """
-    # 0. 黑名單過濾（撞腳/黑名單/封鎖等前綴 → 跳過）
+def _check_proactive_trigger(persona, name):
+    """檢查觀眾是否需要主動發訊息（針對特定 persona）"""
     if name.startswith(_BLACKLIST_PREFIXES):
         return False, "", ""
-    # 1. 深夜不發
     if _is_quiet_hour():
         return False, "", "深夜時段"
 
-    last_msg_time = _get_last_message_time(name)
+    last_msg_time = _get_last_message_time(persona, name)
     if last_msg_time is None:
         return False, "", "沒有歷史"
 
-    last_sender = _get_last_sender(name)
+    last_sender = _get_last_sender(persona, name)
     now = datetime.now()
     hours_silent = (now - last_msg_time).total_seconds() / 3600
 
-    # 2. 最後一條是 Angela 自己發的、且很近（< 1 小時）→ 不重複發
     if last_sender == "me" and hours_silent < 1:
         return False, "", "剛發過訊息"
 
-    # 3. 觸發 A：時段問候（每天每段 1 次）
     h = now.hour
     for s, e, gtype in GREETING_SLOTS:
         in_slot = (s <= h < e) if s <= e else (h >= s or h < e)
-        if in_slot and not _was_greeting_sent_today(name, gtype):
-            # 只在「對方已經回過幾條 / 對話已經暖場」時才發問候
-            # 不對「全新觀眾（沒有任何對方訊息）」發
-            day_n = _calculate_day_n(name)
+        if in_slot and not _was_greeting_sent_today(persona, name, gtype):
+            day_n = _calculate_day_n(persona, name)
             msg = random.choice(GREETING_MESSAGES[gtype])
             return True, msg, f"時段問候 {gtype}（Day {day_n}）"
 
-    # 4. 觸發 B：沉默太久關心（最後一條是對方訊息，而且超過閾值）
     if last_sender == "them":
         if 9 <= h < 18:
             threshold = SILENCE_THRESHOLD["day"]
@@ -1208,8 +1265,7 @@ def _check_proactive_trigger(name):
             return False, "", "非主動時段"
 
         if hours_silent >= threshold:
-            day_n = _calculate_day_n(name)
-            # Day 5+ 有時用「處理店鋪」當理由
+            day_n = _calculate_day_n(persona, name)
             if day_n >= 5 and random.random() < 0.4:
                 msg = random.choice(DAY5_PLUS_MESSAGES)
                 return True, msg, f"Day {day_n} 副業伏筆（沉默 {hours_silent:.1f} 小時）"
@@ -1219,24 +1275,15 @@ def _check_proactive_trigger(name):
     return False, "", "不需主動發"
 
 
-def _send_proactive_message(name, message, monitor=None):
-    """主動發訊息給特定觀眾：用搜尋找好友 → 進入聊天室 → 送訊息 → 退出。
-
-    流程：
-        1. 切到聊天頁
-        2. 用搜尋框輸入觀眾名 → 點擊搜尋結果
-        3. 進入該聊天室
-        4. 用 send_reply 送訊息
-        5. 寫進 .txt
-        6. 按 Esc 退出
-    """
+def _send_proactive_message(persona, name, message, monitor=None):
+    """主動發訊息給特定觀眾（針對該 persona）"""
     from 反詐_locate import (
         locate_line_regions, switch_page, search_friend_and_scan,
         enter_chat_from_search,
     )
     from 反詐_chat import send_reply
 
-    print(f"[Proactive] 主動發給 {name}: {message[:50]}", flush=True)
+    print(f"[Proactive/{persona}] 主動發給 {name}: {message[:50]}", flush=True)
 
     try:
         # 1. 定位 + 切到聊天頁
@@ -1263,7 +1310,7 @@ def _send_proactive_message(name, message, monitor=None):
         print(f"[Proactive] → {message}", flush=True)
 
         # 5. 寫進 .txt
-        _append_to_history_file(name, "me", message)
+        _append_to_history_file(persona, name, "me", message)
 
         # 6. 退出
         time.sleep(1)
@@ -1272,7 +1319,7 @@ def _send_proactive_message(name, message, monitor=None):
 
         return True
     except Exception as e:
-        print(f"[Proactive] 主動發給 {name} 失敗: {e}", flush=True)
+        print(f"[Proactive/{persona}] 主動發給 {name} 失敗: {e}", flush=True)
         try:
             pyautogui.press("escape")
         except Exception:
@@ -1280,9 +1327,9 @@ def _send_proactive_message(name, message, monitor=None):
         return False
 
 
-def _calculate_day_n(name):
+def _calculate_day_n(persona, name):
     """計算當前是跟對方認識第幾天（從第一次對話算起）"""
-    first_date = _get_first_chat_date(name)
+    first_date = _get_first_chat_date(persona, name)
     today = datetime.now().date()
     return (today - first_date).days + 1
 
@@ -1313,10 +1360,10 @@ def _today_date_header():
     return f"{now.strftime('%Y.%m.%d')} {_WEEKDAY_TW[now.weekday()]}"
 
 
-def _append_to_history_file(name, sender, text):
+def _append_to_history_file(persona, name, sender, text):
     """即時把一條訊息 append 到觀眾的 .txt（LINE 匯出格式）"""
-    path = _resolve_history_file(name)
-    nickname = PERSONA_NICKNAME if sender == "me" else name
+    path = _resolve_history_file(persona, name)
+    nickname = persona_nickname(persona) if sender == "me" else name
     timestamp = datetime.now().strftime("%H:%M")
     today_header = _today_date_header()
 
@@ -1340,7 +1387,7 @@ def _append_to_history_file(name, sender, text):
                 f.write(f"{today_header}\n")
             f.write(f"{timestamp} {nickname} {text}\n")
     except Exception as e:
-        print(f"[history] 寫入 {path.name} 失敗：{e}", flush=True)
+        print(f"[history/{persona}] 寫入 {path.name} 失敗：{e}", flush=True)
 
 
 def _load_time_settings(path):
@@ -1384,45 +1431,36 @@ def get_inter_message_delay():
     return random.uniform(d[0], d[1])
 
 
-def _send_with_realistic_delay(reply, regions, name="unknown", history=None):
-    """分段送 reply（段間隨機 1-3 秒），送一段立刻寫一段（防 crash）。
+def _send_with_realistic_delay(reply, regions, persona=DEFAULT_PERSONA, name="unknown", history=None):
+    """分段送 reply（段間延遲 + 字數比例打字時間），送一段立刻寫一段。
 
-    ⚠️ 思考延遲已**移到 handle_one_customer 開頭**（點擊前），
-    避免「秒讀延遲回」破綻。這裡只保留「段間延遲」讓多條訊息看起來像真人一條一條打。
-
-    遇到 {send_xxx} 標記 → 從對應圖片庫隨機抽一張用 send_image 送。
-    history: 傳進來的 list，會被 append 每段送出的訊息（讓 main 流程不用再寫一次）
+    persona: 哪個人設（決定圖片庫位置 + 寫到哪個 .txt）
     """
     from 反詐_chat import send_reply, send_image
 
-    # 分段送（每段間 1-3 秒），送一段立刻寫一段
     parts = [p.strip() for p in reply.split("|||") if p.strip()]
     for i, part in enumerate(parts):
-        # 偵測 {send_xxx} 圖片標記
         m = re.match(r'^\{(send_[\w一-鿿]+)\}$', part)
         if m:
             tag = m.group(1)
-            img_path = _resolve_image_tag(tag)
+            img_path = _resolve_image_tag(persona, tag)
             if img_path:
                 send_image(img_path, regions)
-                print(f"[Reply] → 📷 {Path(img_path).name}（{tag}）", flush=True)
-                # 圖片也寫進歷史（用 [圖片:檔名] 標記，方便日後檢視）
+                print(f"[Reply/{persona}] → 📷 {Path(img_path).name}（{tag}）", flush=True)
                 img_marker = f"[圖片:{Path(img_path).name}]"
                 if history is not None:
                     history.append({"text": img_marker, "sender": "me", "y": 0})
-                _append_to_history_file(name, "me", img_marker)
+                _append_to_history_file(persona, name, "me", img_marker)
             else:
-                print(f"[Reply] ⚠ {tag} 找不到對應圖片，跳過", flush=True)
+                print(f"[Reply/{persona}] ⚠ {tag} 找不到對應圖片，跳過", flush=True)
         elif part.startswith("{") and part.endswith("}"):
-            # 其他未知佔位符 → 跳過（不寫檔）
-            print(f"[Reply] 跳過佔位符: {part}", flush=True)
+            print(f"[Reply/{persona}] 跳過佔位符: {part}", flush=True)
         else:
             send_reply(part, regions)
-            print(f"[Reply] → {part[:60]}", flush=True)
-            # 🔴 送出後立刻寫進歷史 + .txt（防 crash 丟資料）
+            print(f"[Reply/{persona}] → {part[:60]}", flush=True)
             if history is not None:
                 history.append({"text": part, "sender": "me", "y": 0})
-            _append_to_history_file(name, "me", part)
+            _append_to_history_file(persona, name, "me", part)
 
         if i < len(parts) - 1:
             # 🔴 段間延遲 = 基礎延遲 + 「下一段字數比例」打字時間
@@ -1443,7 +1481,7 @@ def _send_with_realistic_delay(reply, regions, name="unknown", history=None):
             else:
                 typing_time = 0
             total_delay = base + typing_time
-            print(f"[Reply] 段間延遲 {total_delay:.1f}s（基礎 {base:.1f}s + 打字 {typing_time:.1f}s）", flush=True)
+            print(f"[Reply/{persona}] 段間延遲 {total_delay:.1f}s（基礎 {base:.1f}s + 打字 {typing_time:.1f}s）", flush=True)
             time.sleep(total_delay)
 
 # ============================================================
@@ -1488,28 +1526,26 @@ atexit.register(_graceful_shutdown)
 # Startup recovery: 啟動時掃描既有觀眾資料，印 status
 # ============================================================
 def _print_startup_recovery():
-    """印 startup state（從 histories/ 推算累積 active sessions）"""
+    """印 startup state（按 persona 分組顯示累積資料）"""
     try:
-        if not HISTORIES_DIR.exists():
-            return
-        txt_files = list(HISTORIES_DIR.rglob("*.txt"))
-        json_files = list(HISTORIES_DIR.rglob("*.profile.json"))
-        print(f"\n[Startup] 累積觀眾資料：", flush=True)
-        print(f"  - 對話 .txt: {len(txt_files)} 個", flush=True)
-        print(f"  - profile .json: {len(json_files)} 個", flush=True)
-        # 統計各 stage 分佈（從 profile 取 current_stage）
-        stage_count = {}
-        for jf in json_files:
-            try:
-                with io.open(jf, "r", encoding="utf-8") as f:
-                    p = json.load(f)
-                stage = (p.get("current_stage") or "未知")[:30]
-                stage_count[stage] = stage_count.get(stage, 0) + 1
-            except Exception:
-                continue
-        if stage_count:
-            print(f"  - stage 分佈：", flush=True)
-            for stage, n in sorted(stage_count.items(), key=lambda x: -x[1])[:10]:
+        print(f"\n[Startup] 累積觀眾資料（按 persona）：", flush=True)
+        for persona_name, cfg in PERSONA_CONFIG.items():
+            histories_root = persona_histories_dir(persona_name)
+            txt_files = list(histories_root.rglob("*.txt"))
+            json_files = list(histories_root.rglob("*.profile.json"))
+            active_str = "active" if cfg.get("active") else "inactive"
+            print(f"  [{persona_name}] {active_str}: {len(txt_files)} txt / {len(json_files)} profile", flush=True)
+            # stage 分佈
+            stage_count = {}
+            for jf in json_files:
+                try:
+                    with io.open(jf, "r", encoding="utf-8") as f:
+                        p = json.load(f)
+                    stage = (p.get("current_stage") or "未知")[:30]
+                    stage_count[stage] = stage_count.get(stage, 0) + 1
+                except Exception:
+                    continue
+            for stage, n in sorted(stage_count.items(), key=lambda x: -x[1])[:5]:
                 print(f"      {n}x {stage}", flush=True)
     except Exception as e:
         print(f"[Startup] recovery 摘要失敗：{e}", flush=True)
@@ -1596,9 +1632,11 @@ def find_unread_conversations(monitor=None):
 # ============================================================
 # 處理單一客戶（演示版：簡化、純自然對話、無業務邏輯）
 # ============================================================
-def handle_one_customer(conv, regions, system_prompt, all_histories, all_profiles=None, monitor=None):
-    if all_profiles is None:
-        all_profiles = {}
+def handle_one_customer(persona, conv, regions, system_prompt, all_histories, all_profiles, monitor=None):
+    """處理單一觀眾的對話（針對特定 persona）
+
+    all_histories / all_profiles: 該 persona 自己的 dict（兩層 dict 的內層）
+    """
     from 反詐_locate import locate_line_regions, ocr_scan_panel, screenshot_line
     from 反詐_chat import (
         is_only_sticker, analyze_sticker,
@@ -1668,7 +1706,7 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
                 time.sleep(1.0)
             else:
                 print(f"[Customer] ⚠️ OCR 連續失敗，跳過此客戶：{err_str}", flush=True)
-                _emit_event("ocr_failed", customer=name, data={"err": err_str})
+                _emit_event(persona, "ocr_failed", customer=name, data={"err": err_str})
                 return regions
     if current_messages is None:
         return regions
@@ -1682,25 +1720,22 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
         print(f"[Customer] OCR 讀到 {len(current_messages)} 條訊息", flush=True)
 
     if name not in all_histories:
-        # 第一次見這個觀眾 → 從 .txt 載入歷史（如果有預先寫的 Bumble 對話會載入）
-        loaded = _load_customer_history(name)
+        loaded = _load_customer_history(persona, name)
         if loaded:
-            print(f"[Customer] {name} 載入 {len(loaded)} 條歷史（從 .txt）", flush=True)
+            print(f"[Customer/{persona}] {name} 載入 {len(loaded)} 條歷史", flush=True)
         else:
-            print(f"[Customer] {name} 全新觀眾", flush=True)
-        _emit_event("customer_seen", customer=name, data={"prior_history_len": len(loaded)})
+            print(f"[Customer/{persona}] {name} 全新觀眾", flush=True)
+        _emit_event(persona, "customer_seen", customer=name, data={"prior_history_len": len(loaded)})
         all_histories[name] = loaded
-        # 🔴 lazy 載入 profile：cache 命中直接用，沒 profile 不阻塞主流程，丟進背景 queue 抽
-        cached_profile = _load_profile(name) if loaded else None
+        cached_profile = _load_profile(persona, name) if loaded else None
         if cached_profile:
             all_profiles[name] = cached_profile
-            print(f"[Customer] {name} profile 已 cache 命中（{len(cached_profile.get('shared_disclosures') or [])} 筆）", flush=True)
+            print(f"[Customer/{persona}] {name} profile cache 命中（{len(cached_profile.get('shared_disclosures') or [])} 筆）", flush=True)
         else:
             all_profiles[name] = None
-            # 有 history（≥ MIN_TURNS_FOR_FIRST_PROFILE）就背景觸發首次抽
             if loaded and len(loaded) >= MIN_TURNS_FOR_FIRST_PROFILE:
-                print(f"[Customer] {name} 無 profile，背景排程首次抽（不阻塞）", flush=True)
-                _enqueue_profile_task(name, loaded, [], all_profiles)
+                print(f"[Customer/{persona}] {name} 無 profile，背景排程首次抽", flush=True)
+                _enqueue_profile_task(persona, name, loaded, [], all_profiles)
     history = all_histories[name]
     profile = all_profiles.get(name)
 
@@ -1708,10 +1743,9 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
         new_them = [m["text"] for m in current_messages if m["sender"] == "them"]
         for m in current_messages:
             history.append(m)
-        # 第一次處理 → 把 OCR 看到的所有對方訊息寫進 .txt
         for m in current_messages:
             if m["sender"] == "them":
-                _append_to_history_file(name, "them", m["text"])
+                _append_to_history_file(persona, name, "them", m["text"])
     else:
         # 🔴 fallback 升級：先用 history[-1] 找 cutoff，找不到再往前 history[-5:] 重試
         # 解決：LINE 視窗滾動時 OCR 抓不到 history[-1] → 不會 fallback 全部當新訊息（重複回舊）
@@ -1730,29 +1764,25 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
 
         if match_idx >= 0 and match_idx < len(current_messages) - 1:
             if matched_via and matched_via > 1:
-                print(f"[Customer] cutoff 用 history[-{matched_via}] 對到（[-1] 在視窗外）", flush=True)
+                print(f"[Customer/{persona}] cutoff 用 history[-{matched_via}] 對到", flush=True)
             new_msgs = current_messages[match_idx + 1:]
             new_them = [m["text"] for m in new_msgs if m["sender"] == "them"]
             for m in new_msgs:
                 history.append(m)
-            # 新訊息（含對方+自己）即時 append 到 .txt
             for m in new_msgs:
-                _append_to_history_file(name, m["sender"], m["text"])
+                _append_to_history_file(persona, name, m["sender"], m["text"])
         else:
-            # history[-5:] 都對不上 → 真的找不到 → 只取最後 1 條當新訊息（保守）
-            # 比之前「全部當新訊息」安全，避免重複回舊訊息
-            print(f"[Customer] ⚠️ history[-5:] 都對不上 OCR，保守取最後 1 條對方訊息", flush=True)
+            print(f"[Customer/{persona}] ⚠️ history[-5:] 都對不上 OCR，保守取最後 1 條對方訊息", flush=True)
             them_msgs = [m for m in current_messages if m["sender"] == "them"]
             new_them = [them_msgs[-1]["text"]] if them_msgs else []
 
     if not new_them:
-        print(f"[Customer] 沒有新的對方訊息，跳過", flush=True)
+        print(f"[Customer/{persona}] 沒有新的對方訊息，跳過", flush=True)
         return regions
 
-    print(f"[Customer] 新訊息: {new_them}", flush=True)
+    print(f"[Customer/{persona}] 新訊息: {new_them}", flush=True)
 
-    # 🔴 識破偵測：對方說「你是 AI / 機器人」→ console 警告 + 標記 profile（不發 Telegram）
-    # 加 fingerprint 去重：profile.ai_suspicion_flags 內已存的 quote 不重複觸發
+    # 識破偵測（fingerprint 去重）
     suspected, suspect_quote = _detect_ai_suspicion(new_them)
     if suspected:
         cur_profile = all_profiles.get(name)
@@ -1760,8 +1790,8 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
         if cur_profile:
             existing_quotes = {f.get("quote") for f in (cur_profile.get("ai_suspicion_flags") or []) if f.get("quote")}
         if suspect_quote not in existing_quotes:
-            print(f"[Customer] ⚠️⚠️ {name} 疑似識破 AI！對方說：「{suspect_quote}」", flush=True)
-            _emit_event("ai_suspicion", customer=name, data={"quote": suspect_quote})
+            print(f"[Customer/{persona}] ⚠️⚠️ {name} 疑似識破 AI！對方說：「{suspect_quote}」", flush=True)
+            _emit_event(persona, "ai_suspicion", customer=name, data={"quote": suspect_quote})
             if cur_profile:
                 flags = cur_profile.get("ai_suspicion_flags") or []
                 flags.append({
@@ -1769,37 +1799,32 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
                     "quote": suspect_quote,
                 })
                 cur_profile["ai_suspicion_flags"] = flags
-                _save_profile(name, cur_profile)
+                _save_profile(persona, name, cur_profile)
 
     # 純貼圖 → Vision
     if is_only_sticker(new_them):
         meaning = analyze_sticker(regions, monitor)
-        print(f"[Customer] 純貼圖 → Vision 解讀為「{meaning}」", flush=True)
+        print(f"[Customer/{persona}] 純貼圖 → Vision 解讀為「{meaning}」", flush=True)
         new_them = [f"[貼圖含意：{meaning}]"]
     else:
-        # 🆕 偵測對方是否傳了「真實照片」（不是貼圖、不是文字）
-        # 用 Haiku Vision 看 chat_area 底部，回傳照片描述
         from 反詐_chat import analyze_recent_photo
         photo_desc = analyze_recent_photo(regions, monitor)
         if photo_desc:
-            print(f"[Customer] 偵測到對方傳照片 → Vision 描述: {photo_desc}", flush=True)
-            # 把照片描述加進 new_them 讓 AI 看到
+            print(f"[Customer/{persona}] 偵測到對方傳照片 → Vision 描述: {photo_desc}", flush=True)
             new_them = list(new_them) + [f"[對方傳了一張照片：{photo_desc}]"]
 
-    # AI 生成回覆（注入階段感知 Day N + 今天的世界資訊）
-    day_n = _calculate_day_n(name)
+    day_n = _calculate_day_n(persona, name)
     stage_hint = _build_stage_hint(day_n)
     opponent_location = _detect_opponent_location(name, history)
     world_context = _get_world_context(opponent_location)
-    print(f"[Customer] {name} 對話 Day {day_n}, 對方所在地: {opponent_location or '未知'}", flush=True)
+    print(f"[Customer/{persona}] {name} 對話 Day {day_n}, 對方所在地: {opponent_location or '未知'}", flush=True)
     augmented_prompt = (
         system_prompt + stage_hint +
         "\n\n=== 今天的世界資訊（給你即時參考，避免破綻）===\n" + world_context
     )
-    # 🔴 渲染 profile 給 AI 看（保證記得對方所有事實）
     profile_text = _format_profile_for_prompt(profile) if profile else ""
     if profile_text:
-        print(f"[Customer] {name} profile 注入（{len((profile or {}).get('shared_disclosures') or [])} 筆事實）", flush=True)
+        print(f"[Customer/{persona}] {name} profile 注入（{len((profile or {}).get('shared_disclosures') or [])} 筆事實）", flush=True)
 
     reply = generate_reply(augmented_prompt, history, new_them, profile_text=profile_text)
     if not reply or len(reply) <= 1:
@@ -1808,23 +1833,17 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
 
     reply = filter_reply(reply)
     if not reply:
-        print(f"[Customer] 過濾後為空，跳過", flush=True)
+        print(f"[Customer/{persona}] 過濾後為空，跳過", flush=True)
         return regions
 
-    print(f"[Customer] 回覆: {reply[:80]}", flush=True)
-    _emit_event("new_messages", customer=name, data={"new_them_count": len(new_them), "day_n": day_n})
-    # 🔴 送一段寫一段（history + .txt 由 _send_with_realistic_delay 內部即時寫入）
-    _send_with_realistic_delay(reply, regions, name=name, history=history)
-    _emit_event("reply_sent", customer=name, data={"reply_len": len(reply), "segments": reply.count("|||") + 1, "day_n": day_n})
+    print(f"[Customer/{persona}] 回覆: {reply[:80]}", flush=True)
+    _emit_event(persona, "new_messages", customer=name, data={"new_them_count": len(new_them), "day_n": day_n})
+    _send_with_realistic_delay(reply, regions, persona=persona, name=name, history=history)
+    _emit_event(persona, "reply_sent", customer=name, data={"reply_len": len(reply), "segments": reply.count("|||") + 1, "day_n": day_n})
 
-    # 🔴 profile 處理（背景 queue，不阻塞主流程）
-    # 邏輯：
-    #   - 已有 profile → 增量更新
-    #   - 沒 profile 但 history >= MIN_TURNS_FOR_FIRST_PROFILE → 首次抽
-    #   - history < 閾值 → 跳過（資料太少抽不出實質事實）
     round_msgs = [{"sender": "them", "text": t} for t in new_them]
     round_msgs.append({"sender": "me", "text": reply})
-    _enqueue_profile_task(name, history, round_msgs, all_profiles)
+    _enqueue_profile_task(persona, name, history, round_msgs, all_profiles)
 
     # ============================================================
     # 🆕 Stay-and-watch：送完 reply 後不要立刻離開，再 OCR 看有沒有新訊息
@@ -1874,10 +1893,9 @@ def handle_one_customer(conv, regions, system_prompt, all_histories, all_profile
             break
 
         print(f"[Customer] 🆕 接續輪 {followup_round+1}: 對方插話 {len(new_them2)} 條 → 補回應", flush=True)
-        # 把新訊息加進 history + .txt
         for m in new_msgs2:
             history.append(m)
-            _append_to_history_file(name, m["sender"], m["text"])
+            _append_to_history_file(persona, name, m["sender"], m["text"])
 
         # 再生成 reply 接續回應（也帶 profile）
         # 用 cache 裡最新的 profile（背景 thread 可能已經更新完）
@@ -1922,19 +1940,18 @@ def main(stop_time, monitor=None):
     # 載入時段延遲設定
     _load_time_settings(TIME_SETTINGS_PATH)
 
-    BOX_PERSONA = {
-        "demo": "C:/Users/blue_/claude-telegram-bot/scripts/demo/反詐_persona.txt",
-    }
-
-    box_prompt_cache = {}
-    for _box, _persona_path in BOX_PERSONA.items():
+    # 🔴 載入所有 active persona 的 prompt
+    persona_prompt_cache = {}
+    for persona_name, cfg in get_active_personas().items():
         try:
-            box_prompt_cache[_box] = load_persona_prompt(_persona_path)
-            print(f"[Init] {_box} → 演示人設載入成功 ({len(box_prompt_cache[_box])} chars)", flush=True)
+            persona_prompt_cache[persona_name] = load_persona_prompt(persona_persona_file(persona_name))
+            print(f"[Init] persona={persona_name} (sandbox={cfg['sandbox']}, nick={cfg['nickname']}) 人設載入成功 ({len(persona_prompt_cache[persona_name])} chars)", flush=True)
         except Exception as e:
-            print(f"[Init] {_box} 載入人設失敗: {e}", flush=True)
+            print(f"[Init] persona={persona_name} 載入人設失敗: {e}", flush=True)
 
-    system_prompt = next(iter(box_prompt_cache.values())) if box_prompt_cache else ""
+    if not persona_prompt_cache:
+        print("[ERROR] 沒有任何 active persona，請檢查 PERSONA_CONFIG", flush=True)
+        return False
 
     line = find_line_window()
     if not line:
@@ -1952,19 +1969,18 @@ def main(stop_time, monitor=None):
         pass
     time.sleep(0.5)
 
-    all_histories = {}
-    all_profiles = {}  # 🔴 結構化 profile cache（保證 100% 記憶）
+    # 🔴 兩層 dict：{persona: {customer_name: ...}}，避免跨 persona 撞名
+    all_histories = {p: {} for p in persona_prompt_cache}
+    all_profiles = {p: {} for p in persona_prompt_cache}
     POLL_INTERVAL = 10
 
-    # 🔴 startup recovery 印 status
     _print_startup_recovery()
 
-    print(f"\n[Monitor] 開始監控未讀訊息...", flush=True)
+    print(f"\n[Monitor] 開始監控未讀訊息（active personas: {list(persona_prompt_cache.keys())}）...", flush=True)
     print(f"[Monitor] 停止方式：touch {STOP_FILE}", flush=True)
 
     from 反詐_locate import set_active_box, find_line_window
     import win32gui as _w32g
-    BOXES = list(BOX_PERSONA.keys())
 
     # 🔴 GPU 記憶體週期釋放（每 GPU_CLEAN_INTERVAL 個主迴圈跑一次）
     GPU_CLEAN_INTERVAL = 50  # ~ 50 × 10 秒 POLL = 約每 8 分鐘清一次
@@ -1975,27 +1991,28 @@ def main(stop_time, monitor=None):
         if should_stop():
             break
 
-        for box in BOXES:
+        # 🔴 遍歷 active personas（每個 persona 對應自己的 sandbox）
+        for persona_name, persona_cfg in get_active_personas().items():
             if should_stop():
                 break
             try:
-                set_active_box(box)
-                box_prompt = box_prompt_cache.get(box)
-                if not box_prompt:
-                    print(f"[Multi] box={box} 沒設定人設，跳過", flush=True)
+                sandbox = persona_cfg["sandbox"]
+                set_active_box(sandbox)
+                persona_prompt = persona_prompt_cache.get(persona_name)
+                if not persona_prompt:
                     continue
 
                 line = find_line_window()
                 if not line:
-                    print(f"[Multi] 找不到 box={box} 的 LINE 視窗，跳過", flush=True)
+                    print(f"[Multi/{persona_name}] 找不到 sandbox={sandbox} 的 LINE 視窗，跳過", flush=True)
                     continue
                 hwnd = line[0]
                 try:
                     _w32g.SetForegroundWindow(hwnd)
                 except Exception as e:
-                    print(f"[Multi] SetForegroundWindow {box} 失敗: {e}", flush=True)
+                    print(f"[Multi/{persona_name}] SetForegroundWindow 失敗: {e}", flush=True)
                 time.sleep(1.0)
-                print(f"\n[Multi] === 開始處理 box={box} → 反詐演示 (hwnd={hwnd}) ===", flush=True)
+                print(f"\n[Multi/{persona_name}] === 處理 sandbox={sandbox} (hwnd={hwnd}) ===", flush=True)
 
                 processed_count = 0
                 MAX_PER_BOX = 15
@@ -2006,17 +2023,19 @@ def main(stop_time, monitor=None):
                     regions, unread_list = find_unread_conversations(monitor)
                     if not unread_list:
                         if processed_count == 0:
-                            print(f"[Multi] box={box} 無未讀，跳下一個", flush=True)
+                            print(f"[Multi/{persona_name}] 無未讀", flush=True)
                         else:
-                            print(f"[Multi] box={box} 本輪處理完畢（共 {processed_count} 個）", flush=True)
+                            print(f"[Multi/{persona_name}] 本輪完畢（共 {processed_count} 個）", flush=True)
                         break
 
                     if processed_count == 0:
-                        print(f"[Multi] box={box} 偵測到 {len(unread_list)} 個未讀對話", flush=True)
+                        print(f"[Multi/{persona_name}] 偵測到 {len(unread_list)} 個未讀對話", flush=True)
 
                     conv = unread_list[0]
                     regions = handle_one_customer(
-                        conv, regions, box_prompt, all_histories, all_profiles, monitor
+                        persona_name, conv, regions, persona_prompt,
+                        all_histories[persona_name], all_profiles[persona_name],
+                        monitor,
                     )
 
                     if should_stop():
@@ -2026,10 +2045,10 @@ def main(stop_time, monitor=None):
                     time.sleep(0.5)
                     processed_count += 1
                 else:
-                    print(f"[Multi] box={box} 達單輪上限 {MAX_PER_BOX}，跳下一個", flush=True)
+                    print(f"[Multi/{persona_name}] 達單輪上限 {MAX_PER_BOX}", flush=True)
 
             except Exception as e:
-                print(f"[ERR] box={box}: {e}", flush=True)
+                print(f"[ERR/{persona_name}]: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
                 time.sleep(2)
@@ -2040,9 +2059,9 @@ def main(stop_time, monitor=None):
         # ============================================================
         if not should_stop():
             try:
-                # 為每個 box 執行排程器（目前只有 demo box）
-                for box in BOXES:
-                    set_active_box(box)
+                for persona_name, persona_cfg in get_active_personas().items():
+                    sandbox = persona_cfg["sandbox"]
+                    set_active_box(sandbox)
                     line2 = find_line_window()
                     if not line2:
                         continue
@@ -2052,54 +2071,56 @@ def main(stop_time, monitor=None):
                         pass
                     time.sleep(0.5)
 
-                    # 掃描所有觀眾
-                    all_customers = _scan_all_customers()
+                    all_customers = _scan_all_customers(persona_name)
                     if not all_customers:
                         continue
 
                     proactive_sent = 0
-                    MAX_PROACTIVE_PER_ROUND = 3   # 每輪最多主動發 3 個觀眾，避免一次太多
+                    MAX_PROACTIVE_PER_ROUND = 3
                     for cust_name in all_customers:
                         if proactive_sent >= MAX_PROACTIVE_PER_ROUND:
                             break
                         if should_stop():
                             break
-                        should_send, msg, reason = _check_proactive_trigger(cust_name)
+                        should_send, msg, reason = _check_proactive_trigger(persona_name, cust_name)
                         if not should_send:
                             continue
-                        print(f"[Proactive] {cust_name} 觸發：{reason}", flush=True)
-                        ok = _send_proactive_message(cust_name, msg, monitor)
+                        print(f"[Proactive/{persona_name}] {cust_name} 觸發：{reason}", flush=True)
+                        ok = _send_proactive_message(persona_name, cust_name, msg, monitor)
                         if ok:
                             proactive_sent += 1
-                            time.sleep(2)   # 主動發之間隔開一下
+                            time.sleep(2)
 
             except Exception as e:
                 print(f"[ERR] 排程器失敗: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
 
-        # 🔴 status snapshot 每分鐘印一次
+        # 🔴 status snapshot 每分鐘印一次（按 persona 分組）
         _loop_counter += 1
         if _loop_counter % STATUS_PRINT_INTERVAL == 0:
             try:
-                active_n = len(all_histories)
-                profile_n = sum(1 for p in all_profiles.values() if p)
-                # day 分佈
-                day_dist = {}
-                for cn in all_histories:
-                    try:
-                        dn = _calculate_day_n(cn)
-                        day_dist[dn] = day_dist.get(dn, 0) + 1
-                    except Exception:
-                        continue
-                # AI 識破累計
-                susp_n = sum(
-                    len((p.get("ai_suspicion_flags") or []))
-                    for p in all_profiles.values() if p
-                )
                 queue_n = _PROFILE_TASK_QUEUE.qsize() if _PROFILE_WORKER_STARTED else 0
-                day_str = " ".join(f"day{d}:{n}" for d, n in sorted(day_dist.items()))
-                print(f"[Status] active={active_n} profile={profile_n} suspicion={susp_n} queue={queue_n} | {day_str}", flush=True)
+                lines = [f"[Status] global queue={queue_n}"]
+                for persona_name in get_active_personas():
+                    p_hist = all_histories.get(persona_name) or {}
+                    p_prof = all_profiles.get(persona_name) or {}
+                    active_n = len(p_hist)
+                    profile_n = sum(1 for v in p_prof.values() if v)
+                    day_dist = {}
+                    for cn in p_hist:
+                        try:
+                            dn = _calculate_day_n(persona_name, cn)
+                            day_dist[dn] = day_dist.get(dn, 0) + 1
+                        except Exception:
+                            continue
+                    susp_n = sum(
+                        len((v.get("ai_suspicion_flags") or []))
+                        for v in p_prof.values() if v
+                    )
+                    day_str = " ".join(f"day{d}:{n}" for d, n in sorted(day_dist.items()))
+                    lines.append(f"  {persona_name}: active={active_n} profile={profile_n} suspicion={susp_n} | {day_str}")
+                print("\n".join(lines), flush=True)
             except Exception as e:
                 print(f"[Status] 失敗：{e}", flush=True)
 
@@ -2120,7 +2141,8 @@ def main(stop_time, monitor=None):
 
     reason = "收到停止信號" if _should_stop else "到達結束時間"
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 監控結束（{reason}）", flush=True)
-    print(f"共處理 {len(all_histories)} 個觀眾", flush=True)
+    total_n = sum(len(d) for d in all_histories.values())
+    print(f"共處理 {total_n} 個觀眾", flush=True)
     return True
 
 
