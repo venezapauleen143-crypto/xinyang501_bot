@@ -125,7 +125,16 @@ PERSONA_CONFIG = {
     },
 }
 
-DEFAULT_PERSONA = "Angela"
+# 🔴 DEFAULT_PERSONA 動態決定：取第一個 active persona（避免 Angela 停用後仍用 Angela 當 fallback）
+def _resolve_default_persona():
+    actives = [k for k, v in PERSONA_CONFIG.items() if v.get("active", False)]
+    if actives:
+        return actives[0]
+    # 沒任何 active → 取 PERSONA_CONFIG 的第一個（保底，避免 KeyError）
+    return next(iter(PERSONA_CONFIG))
+
+
+DEFAULT_PERSONA = _resolve_default_persona()
 
 
 def get_active_personas():
@@ -1138,9 +1147,20 @@ PROACTIVE_MESSAGES = {
 
 
 def _get_proactive_messages(persona, key):
-    """取該 persona 的指定類型話術（fallback 到 Angela）"""
-    p_msgs = PROACTIVE_MESSAGES.get(persona) or PROACTIVE_MESSAGES["Angela"]
-    return p_msgs.get(key) or PROACTIVE_MESSAGES["Angela"].get(key, [])
+    """取該 persona 的指定類型話術。
+
+    若該 persona 沒設定 PROACTIVE_MESSAGES → log warning + 返回空 list（不 fallback 到別 persona）
+    避免 Ruby 沒設定時拿 Angela 的粵語話術污染。
+    """
+    p_msgs = PROACTIVE_MESSAGES.get(persona)
+    if p_msgs is None:
+        print(f"[⚠️ proactive] persona '{persona}' 沒設定 PROACTIVE_MESSAGES，跳過此次主動發", flush=True)
+        return []
+    msgs = p_msgs.get(key)
+    if not msgs:
+        print(f"[⚠️ proactive] persona '{persona}' 沒設定 key='{key}'，跳過", flush=True)
+        return []
+    return msgs
 
 
 def _scan_all_customers(persona):
@@ -1274,7 +1294,10 @@ def _check_proactive_trigger(persona, name):
         in_slot = (s <= h < e) if s <= e else (h >= s or h < e)
         if in_slot and not _was_greeting_sent_today(persona, name, gtype):
             day_n = _calculate_day_n(persona, name)
-            msg = random.choice(_get_proactive_messages(persona, gtype))
+            candidates = _get_proactive_messages(persona, gtype)
+            if not candidates:
+                continue
+            msg = random.choice(candidates)
             return True, msg, f"時段問候 {gtype}（Day {day_n}）"
 
     if last_sender == "them":
@@ -1290,10 +1313,13 @@ def _check_proactive_trigger(persona, name):
         if hours_silent >= threshold:
             day_n = _calculate_day_n(persona, name)
             if day_n >= 5 and random.random() < 0.4:
-                msg = random.choice(_get_proactive_messages(persona, "day5_plus"))
-                return True, msg, f"Day {day_n} 副業伏筆（沉默 {hours_silent:.1f} 小時）"
-            msg = random.choice(_get_proactive_messages(persona, "concern"))
-            return True, msg, f"沉默關心（{hours_silent:.1f} 小時 ≥ {threshold} 小時）"
+                cands = _get_proactive_messages(persona, "day5_plus")
+                if cands:
+                    return True, random.choice(cands), f"Day {day_n} 深化話題（沉默 {hours_silent:.1f} 小時）"
+            cands = _get_proactive_messages(persona, "concern")
+            if cands:
+                return True, random.choice(cands), f"沉默關心（{hours_silent:.1f} 小時 ≥ {threshold} 小時）"
+            return False, "", "沒可用話術"
 
     return False, "", "不需主動發"
 
@@ -1357,23 +1383,43 @@ def _calculate_day_n(persona, name):
     return (today - first_date).days + 1
 
 
-def _build_stage_hint(day_n):
-    """根據 Day N 產出對話階段提示，注入 system_prompt"""
+# 🔴 不同 persona 走不同的階段策略（Angela 走副業伏筆 / Ruby 走日常深化）
+STAGE_HINTS_BY_PERSONA = {
+    "Angela": {
+        "1-2":  "剛認識/寒暄階段。重點：親切但不黏人，留懸念（如『去沖涼喇 明天再聊』）。不要急著深入。",
+        "3-4":  "關係加深階段。重點：互換家庭背景、製造『巧合』（星座/食物/位置）、表現專一（『Bumble 我刪了』）。",
+        "5-6":  "埋下副業伏筆。可以隨口提『去處理店鋪訂單』。對方好奇 → 簡單描述跨境電商。不要主動解釋細節。",
+        "7-8":  "副業細節+情感升溫。可以秀利潤（『半個月 14 萬』）、規劃見面、暗示好感。",
+        "9+":   "情感確認階段。表達對對方好感、規劃未來、用感情包裝（『等你賺到請我吃大餐』）。",
+    },
+    "Ruby": {
+        "1-2":  "剛認識/寒暄階段。重點：可愛系開場（噗/哈哈哈/早安呀），不黏人，晚安固定『我先休息ㄌ』。不要急著深入。",
+        "3-4":  "關係加深。露 1-2 個生活細節（玉米蛋餅梗 / 周星馳粉 / 1.25 倍速看陸劇）。共鳴升級（沒錯沒錯/真的/我也是）。",
+        "5-6":  "信任建立。提媽媽煮晚餐 / 跟同事吃飯 / 上班壓力。允許小撒嬌（加分加分❤️）。",
+        "7-8":  "更深生活分享。聊買房規劃 / 工作未來 / 假設一起去玩（『以後想去高雄玩 你陪我嗎』）。",
+        "9+":   "情感確認 + 邊界階段。可以露副業話題鉤子（『剛在整理店舖的東西』），但只在對方主動問才答。⚠️ 不切到 day 14+ 切錢手法。",
+    },
+}
+
+
+def _build_stage_hint(persona, day_n):
+    """根據 persona + Day N 產出對話階段提示"""
+    stages = STAGE_HINTS_BY_PERSONA.get(persona) or STAGE_HINTS_BY_PERSONA["Angela"]
     if day_n <= 2:
-        stage = "剛認識/寒暄階段。重點：親切但不黏人，留懸念（如『去沖涼喇 明天再聊』）。不要急著深入。"
+        stage = stages["1-2"]
     elif day_n <= 4:
-        stage = "關係加深階段。重點：互換家庭背景、製造『巧合』（星座/食物/位置）、表現專一（『Bumble 我刪了』）。"
+        stage = stages["3-4"]
     elif day_n <= 6:
-        stage = "埋下副業伏筆。可以隨口提『去處理店鋪訂單』。對方好奇 → 簡單描述跨境電商。不要主動解釋細節。"
+        stage = stages["5-6"]
     elif day_n <= 8:
-        stage = "副業細節+情感升溫。可以秀利潤（『半個月 14 萬』）、規劃見面、暗示好感。"
+        stage = stages["7-8"]
     else:
-        stage = "情感確認階段。表達對對方好感、規劃未來、用感情包裝（『等你賺到請我吃大餐』）。"
+        stage = stages["9+"]
     return (
         f"\n\n=== 當前對話階段 ===\n"
         f"你跟對方認識 **Day {day_n}**（從你們在 Bumble 開始算）。\n"
         f"階段策略：{stage}\n"
-        f"嚴禁跳階段：Day 1 不要突然提副業，Day 9 才能講感情。"
+        f"嚴禁跳階段：Day 1 不要突然提敏感話題，Day 9 才能講感情。"
     )
 
 
@@ -1837,7 +1883,7 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
             new_them = list(new_them) + [f"[對方傳了一張照片：{photo_desc}]"]
 
     day_n = _calculate_day_n(persona, name)
-    stage_hint = _build_stage_hint(day_n)
+    stage_hint = _build_stage_hint(persona, day_n)
     opponent_location = _detect_opponent_location(name, history)
     world_context = _get_world_context(persona, opponent_location)
     print(f"[Customer/{persona}] {name} 對話 Day {day_n}, 對方所在地: {opponent_location or '未知'}", flush=True)
