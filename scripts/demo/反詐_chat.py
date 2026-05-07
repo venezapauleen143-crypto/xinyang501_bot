@@ -38,6 +38,47 @@ import pyautogui
 import pyperclip
 import mss
 from PIL import Image
+
+# OpenCC 台灣化後處理（s2twp = 簡→台灣繁含詞彙）
+# Why: Sonnet 4.6 繁中訓練資料佔網路 0.5%，偶爾飄出簡體字 / 大陸詞彙（视频/软件/网络）
+# 不擋句法（「了再」「就行了」要靠 prompt 護欄）
+try:
+    from opencc import OpenCC
+    _CC_TW = OpenCC("s2twp")
+except ImportError:
+    _CC_TW = None
+
+
+def _to_taiwan(text):
+    """強制台灣化字級 — 不動 emoji / 注音文 / 拉長音"""
+    if not text or _CC_TW is None:
+        return text
+    try:
+        return _CC_TW.convert(text)
+    except Exception:
+        return text
+
+
+def _extract_reply(raw):
+    """從 Claude 結構化輸出中抓 <reply>...</reply> 內容
+
+    Why: 取代「黑名單關鍵字」過嚴誤殺口語的問題（feedback_filter_reply_thinking_leak.md）
+      - 思考、自言自語放 <thinking> → 不送出
+      - 真正回覆放 <reply> → 抓出來送給對方
+      - 「等一下到家」「等等聊」這類口語在 <reply> 內 → 永遠保留
+      - 「等等讓我重算」這類思考在 <thinking> 內 → 永遠不送
+
+    Fallback: 沒抓到 <reply> 就用全文（向後相容，可能是 Claude 偶爾漏標籤）
+    """
+    if not raw:
+        return ""
+    import re as _re
+    m = _re.search(r"<reply>\s*(.*?)\s*</reply>", raw, _re.DOTALL | _re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    # fallback：拿掉常見的 <thinking>...</thinking> 區段，剩下當回覆
+    cleaned = _re.sub(r"<thinking>.*?</thinking>", "", raw, flags=_re.DOTALL | _re.IGNORECASE)
+    return cleaned.strip()
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
@@ -759,14 +800,28 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
         "借你的人設過濾語氣，自然就不會像 AI。\n"
         "</為什麼>\n"
         "</工具使用規則>\n\n"
-        "【最重要】你的回覆會直接發送給對方看到，所以：\n"
-        "- 只寫要發送的文字，分析、判斷、註解全都不能有\n"
-        "- 不能出現任何 LINE 系統訊息（「聯絡卡片」「已讀」「未讀」「儲存另存新檔」「Keep筆記」「以下為尚未閱讀的訊息」）\n"
-        "- 多條訊息用 ||| 分隔\n\n"
-        "【絕對禁止輸出思考過程】：\n"
-        "- 禁止「等等」「讓我想想」「重新確認」這種自我驗證的話\n"
-        "- 禁止輸出 ---、=== 或任何分隔線\n"
-        "- 一次寫對的訊息，自然就好\n\n"
+        "【最重要 — 回覆格式（Structured Output，嚴格遵守）】：\n"
+        "你的回覆**必須用 XML 標籤分區**：\n"
+        "  - 思考、自言自語、記憶確認、解析 → 全部放 <thinking>...</thinking>\n"
+        "  - 真正要傳給對方的 LINE 訊息 → 放 <reply>...</reply>\n"
+        "  - 程式只取 <reply> 內的內容傳給對方，<thinking> 內絕對不會送出\n\n"
+        "✅ 正確範例：\n"
+        "<thinking>\n"
+        "對方問「你呢吃了吗」，看 profile 對方剛下班，等等讓我想想要回什麼，輕鬆口語就好\n"
+        "</thinking>\n"
+        "<reply>\n"
+        "還沒耶 你呢 ||| 等一下到家再吃\n"
+        "</reply>\n\n"
+        "❌ 錯誤（不要這樣）：\n"
+        "  - 把回覆寫到 <thinking> 內 → 對方收不到\n"
+        "  - 在 <reply> 標籤之外寫任何字\n"
+        "  - 整段不用標籤直接吐\n\n"
+        "<reply> 內容規則：\n"
+        "  - 只寫要發送的 LINE 訊息文字\n"
+        "  - 不能出現 LINE 系統訊息（「聯絡卡片」「已讀」「未讀」「儲存另存新檔」「Keep筆記」「以下為尚未閱讀的訊息」）\n"
+        "  - 多條訊息用 ||| 分隔\n"
+        "  - 「等一下」「等等」是台灣口語（「等一下到家」「等等聊」）— **可以正常使用**，我們只擋 <thinking> 內的思考\n"
+        "  - 禁止輸出 ---、=== 等分隔線\n\n"
         "🔴 ===== 反 AI 痕跡 5 大鐵則（違反等於暴露身分）=====\n\n"
         "<鐵則 1：禁止用空行分段>\n"
         "❌ 錯誤格式（AI 痕跡）：\n"
@@ -821,7 +876,7 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
         if r.stop_reason != "tool_use":
             for block in r.content:
                 if getattr(block, "type", None) == "text":
-                    return block.text.strip()
+                    return _to_taiwan(_extract_reply(block.text))
             return ""
 
         # 有呼叫工具 → 執行並把結果送回
@@ -843,7 +898,7 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
     # 5 輪後仍在 tool use → 取最後的 text（如果有）
     for block in r.content:
         if getattr(block, "type", None) == "text":
-            return block.text.strip()
+            return _to_taiwan(block.text.strip())
     return ""
 
 
@@ -868,23 +923,18 @@ def filter_reply(reply):
     filtered_lines = []
     for line in lines:
         line_stripped = line.strip()
-        # ② 行級過濾（既有 + 新增思考關鍵字）
+        # ② 只擋 LINE 系統訊息 + 明確分析格式（無口語誤殺風險）
+        # 思考過濾改由 generate_reply 的 <reply>/<thinking> XML 標籤處理
+        # 禁止再加單字黑名單（「等等」「等一下」是台灣口語）
         if any(kw in line_stripped for kw in [
-            # === 既有黑名單（保留）===
-            "客戶說", "尚未確認", "需要等", "讓我解析", "讓我判斷",
-            "看起来", "看起來", "不完整", "資料：", "资料：",
-            "姓名=", "生日=", "電話=", "編號=", "电话=",
-            "姓名＝", "生日＝", "電話＝", "編號＝",
-            "解析一下", "解析：", "判斷：", "分析：",
-            "缺少", "不完整", "有問題", "不對",
-            "-[", "- [",  # AI 列點分析格式
+            # LINE UI 文字（不該出現在 reply）
             "聯絡卡片", "已讀", "未讀", "儲存另存新檔", "Keep筆記",
             "以下為尚未閱讀", "contact_card", "send_image",
-            # === 新增（Sonnet 4.6 漏網的自我驗證/思考關鍵字）===
-            "等等", "等一下",
-            "重新計算", "重新算", "再算", "再確認",
-            "讓我重", "我需要重", "我來重",
-            "嗯，", "讓我想", "我想想", "稍等",
+            # 結構化分析格式（明顯非口語）
+            "姓名=", "生日=", "電話=", "編號=", "电话=",
+            "姓名＝", "生日＝", "電話＝", "編號＝",
+            "資料：", "资料：",
+            "-[", "- [",
         ]):
             continue
         filtered_lines.append(line)

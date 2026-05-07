@@ -1,35 +1,52 @@
 {
   "name": "佳莹",
   "core_facts": {
-    "occupation": null,
+    "occupation": "上班族",
     "location": "未知",
     "schedule": null,
     "age": null,
     "gender": null,
     "marital_status": null,
-    "personality_traits": []
+    "personality_traits": [
+      "主動且熱情"
+    ]
   },
   "shared_disclosures": [
     {
       "speaker": "them",
       "fact": "主動打招呼"
+    },
+    {
+      "speaker": "them",
+      "fact": "主動表示想跟Ruby🧸聊天"
+    },
+    {
+      "speaker": "them",
+      "fact": "詢問「我這裡拉」的意思"
+    },
+    {
+      "speaker": "them",
+      "fact": "剛下班"
     }
   ],
   "interests": [],
   "family_relationships": [],
   "milestones": [
-    "Day 1: 互換通訊工具至LINE"
+    "Day 1: 互換通訊工具至LINE",
+    "Day 1: 主動發起對話，表示想聊天",
+    "Day 1: 對Ruby🧸的用語表達方式提出疑問",
+    "Day 1: 詢問Ruby🧸下班狀態，展現關心"
   ],
-  "current_stage": "Day 1，初期寒暄階段。對方詢問Ruby🧸為何回覆較晚，但未揭露自身背景資訊",
+  "current_stage": "Day 1，初期寒暄階段。對方確認為上班族，持續主動互動。已開始詢問對方工作/作息相關話題。信任度穩步提升中。",
   "topic_hooks_remaining": [
-    "工作內容",
-    "作息時間",
+    "具體工作內容",
+    "詳細作息時間",
     "興趣偏好",
     "生活背景"
   ],
-  "trust_score": 0,
+  "trust_score": 6,
   "ai_suspicion_flags": [],
   "first_seen": "2026-05-07T16:43:31",
-  "last_updated": "2026-05-07T16:43:31",
-  "total_turns": 0
+  "last_updated": "2026-05-07T20:18:51",
+  "total_turns": 3
 }

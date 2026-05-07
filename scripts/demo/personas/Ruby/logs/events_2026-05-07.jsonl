@@ -23,3 +23,30 @@
 {"ts": "2026-05-07T17:20:52", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
 {"ts": "2026-05-07T17:22:21", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
 {"ts": "2026-05-07T17:23:41", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
+{"ts": "2026-05-07T18:51:16", "persona": "Ruby", "type": "customer_seen", "customer": "仁輝JAMES", "data": {"prior_history_len": 2}}
+{"ts": "2026-05-07T18:51:22", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T18:51:23", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 8, "segments": 1, "day_n": 1}}
+{"ts": "2026-05-07T18:51:26", "persona": "Ruby", "type": "profile_first_extract", "customer": "仁輝JAMES", "data": {"disclosures": 1, "action": "首次抽取"}}
+{"ts": "2026-05-07T18:52:07", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T18:52:21", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 21, "segments": 2, "day_n": 1}}
+{"ts": "2026-05-07T18:52:24", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 2, "action": "增量更新"}}
+{"ts": "2026-05-07T18:53:10", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T18:53:26", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 32, "segments": 2, "day_n": 1}}
+{"ts": "2026-05-07T18:53:28", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 3, "action": "增量更新"}}
+{"ts": "2026-05-07T18:55:03", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T18:55:24", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 39, "segments": 2, "day_n": 1}}
+{"ts": "2026-05-07T18:55:27", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 6, "action": "增量更新"}}
+{"ts": "2026-05-07T20:13:28", "persona": "Ruby", "type": "customer_seen", "customer": "佳莹", "data": {"prior_history_len": 7}}
+{"ts": "2026-05-07T20:13:38", "persona": "Ruby", "type": "new_messages", "customer": "佳莹", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T20:13:52", "persona": "Ruby", "type": "reply_sent", "customer": "佳莹", "data": {"reply_len": 19, "segments": 2, "day_n": 1}}
+{"ts": "2026-05-07T20:13:56", "persona": "Ruby", "type": "profile_updated", "customer": "佳莹", "data": {"disclosures": 2, "action": "增量更新"}}
+{"ts": "2026-05-07T20:15:18", "persona": "Ruby", "type": "new_messages", "customer": "佳莹", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T20:15:19", "persona": "Ruby", "type": "reply_sent", "customer": "佳莹", "data": {"reply_len": 21, "segments": 1, "day_n": 1}}
+{"ts": "2026-05-07T20:15:23", "persona": "Ruby", "type": "profile_updated", "customer": "佳莹", "data": {"disclosures": 3, "action": "增量更新"}}
+{"ts": "2026-05-07T20:16:17", "persona": "Ruby", "type": "customer_seen", "customer": "仁輝JAMES", "data": {"prior_history_len": 14}}
+{"ts": "2026-05-07T20:16:21", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T20:16:41", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 33, "segments": 2, "day_n": 1}}
+{"ts": "2026-05-07T20:16:46", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 11, "action": "增量更新"}}
+{"ts": "2026-05-07T20:18:46", "persona": "Ruby", "type": "new_messages", "customer": "佳莹", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T20:18:47", "persona": "Ruby", "type": "reply_sent", "customer": "佳莹", "data": {"reply_len": 8, "segments": 1, "day_n": 1}}
+{"ts": "2026-05-07T20:18:51", "persona": "Ruby", "type": "profile_updated", "customer": "佳莹", "data": {"disclosures": 4, "action": "增量更新"}}

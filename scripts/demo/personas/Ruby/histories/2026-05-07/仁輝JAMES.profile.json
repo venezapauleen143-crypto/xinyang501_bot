@@ -1,0 +1,81 @@
+{
+  "name": "仁輝JAMES",
+  "core_facts": {
+    "occupation": "上班族",
+    "location": "未知",
+    "schedule": "目前還在工作中，8點才下班",
+    "age": null,
+    "gender": null,
+    "marital_status": null,
+    "personality_traits": [
+      "關心他人"
+    ]
+  },
+  "shared_disclosures": [
+    {
+      "speaker": "them",
+      "fact": "向Ruby問候"
+    },
+    {
+      "speaker": "them",
+      "fact": "還在工作中"
+    },
+    {
+      "speaker": "them",
+      "fact": "8點才下班"
+    },
+    {
+      "speaker": "them",
+      "fact": "下班後還沒吃飯"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "剛下班準備回家"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "還沒吃飯"
+    },
+    {
+      "speaker": "them",
+      "fact": "詢問Ruby的工作內容"
+    },
+    {
+      "speaker": "them",
+      "fact": "認為Ruby下班時間比自己早"
+    },
+    {
+      "speaker": "them",
+      "fact": "提到下班後有很多東西能買"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "是上班族，面對電腦的工作"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "比對方早下班一點點"
+    }
+  ],
+  "interests": [],
+  "family_relationships": [],
+  "milestones": [
+    "Day 1: 初次互動",
+    "Day 1: 透露工作狀況",
+    "Day 1: 透露下班時間為8點",
+    "Day 1: 討論下班後飲食話題，展現互動關心",
+    "Day 1: 對Ruby的工作內容表示好奇，互動加深"
+  ],
+  "current_stage": "Day 1，Ruby與對方互動升溫，開始深入了解彼此工作狀況，對方展現關心與好奇心",
+  "topic_hooks_remaining": [
+    "下班吃什麼好料",
+    "晚上吃什麼",
+    "對方的工作內容",
+    "下班後購物"
+  ],
+  "trust_score": 8,
+  "ai_suspicion_flags": [],
+  "first_seen": "2026-05-07T18:51:26",
+  "last_updated": "2026-05-07T20:16:46",
+  "total_turns": 4
+}

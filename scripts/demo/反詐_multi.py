@@ -1815,87 +1815,40 @@ def is_before_stop_time(stop_time):
     stop_min = time_to_minutes(stop_time)
     return now_min < stop_min
 
-# ============================================================
-# 偵測聊天列表中有未讀標記的對話
-# ============================================================
-def find_unread_conversations(monitor=None):
-    """
-    切到聊天頁，用 line_locate.py 的 find_unread_badges 偵測綠色未讀標記。
-
-    回傳：(regions, unread_list)
-        regions: 當前定位
-        unread_list: [{"y": int, "center": (x, y)}] 有未讀的對話座標
-    """
-    from 反詐_locate import (
-        locate_line_regions, switch_page, find_unread_badges,
-    )
-
-    regions = locate_line_regions(monitor)
-
-    # 確保在聊天頁
-    if regions["current_page"] != "chat":
-        regions = switch_page(regions, "chat", monitor)
-
-    # 用定位腳本的像素偵測找綠色徽章（LINE16 方式）
-    unread_list = find_unread_badges(monitor)
-
-    return regions, unread_list
-
-
 def find_unread_with_metadata(monitor=None):
-    """進階版：把 unread badge 跟 conversation list 配對，補上 name + last_msg_time
+    """直接拿 DBSCAN 卡 + 卡綁徽章的結果，不再啟發式配對
+
+    新流程（2026-05-07，砍掉 LINE16 寫死掃描）：
+      1. locate_line_regions → DBSCAN 切卡（每張 1 筆，含 name/y/center/time_str）
+      2. find_unread_per_card → 對每張卡的右側檢查綠色 → has_unread
+      3. 過濾 has_unread=True → 拿 name/center/time_str 直接用
+
+    優點：
+      - name 跟卡 1:1 對應（不再巧合配對到錯名字）
+      - center 來自卡（不再寫死 y=157, 228 → LINE 動態重排序也對人）
+      - time_str 來自卡（不再啟發式猜）
 
     回傳：(regions, [{y, center, name, last_msg_time, last_msg_time_str}])
-        - name: 對話框暱稱 / 預覽 / 時間戳之一（OCR 抓到的）— 用 y 範圍配對
-        - last_msg_time: datetime（解析後）；無法解析回 None
-        - last_msg_time_str: 原始 OCR 文字
     """
     from datetime import datetime
-    regions, unread_list = find_unread_conversations(monitor)
-    page_content = regions.get("page_content") or {}
-    conversations = page_content.get("conversations") or []
+    from 反詐_locate import locate_line_regions, find_unread_per_card
+
+    regions = locate_line_regions(monitor)
+    cards = find_unread_per_card(regions, monitor)
 
     enriched = []
     now = datetime.now()
-    for u in unread_list:
-        u_y = u["y"]
-        # 找 y 最近的 conversation entries（容差 ±60 像素 = 對話框高度）
-        nearby = [c for c in conversations if abs(c.get("y", -9999) - u_y) < 60]
-
-        # 嘗試從 nearby 找出「暱稱」跟「時間戳」
-        # 啟發式：
-        #   - 時間戳特徵：含「上午/下午/星期/昨天」字眼 或 「HH:MM」格式
-        #   - 暱稱：剩下的取第一個（通常是真暱稱）
-        name = None
-        time_str = None
-        time_dt = None
-        import re as _re
-        for c in nearby:
-            text = (c.get("name") or "").strip()
-            if not text:
-                continue
-            # 是否像時間戳
-            looks_like_time = (
-                "上午" in text or "下午" in text or "星期" in text or
-                text == "昨天" or _re.match(r"^\d{1,2}[:/]\d{1,2}$", text) or
-                _re.match(r"^\d{1,2}月\d{1,2}日?$", text)
-            )
-            if looks_like_time and time_str is None:
-                time_str = text
-                time_dt = parse_line_timestamp(text, now)
-            elif name is None:
-                name = text
-
-        if name is None:
-            # fallback：用 y 當識別碼（OCR 沒抓到名字）
-            name = f"unknown_y{u_y}"
-
+    for c in cards:
+        if not c.get("has_unread"):
+            continue
+        time_str = c.get("time_str")
+        time_dt = parse_line_timestamp(time_str, now) if time_str else None
         enriched.append({
-            "y": u_y,
-            "center": u["center"],
-            "name": name,
+            "y": c["y"],
+            "center": c["center"],
+            "name": c["name"],
             "last_msg_time_str": time_str,
-            "last_msg_time": time_dt,  # datetime or None
+            "last_msg_time": time_dt,
         })
 
     return regions, enriched

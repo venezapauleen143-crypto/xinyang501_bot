@@ -116,8 +116,8 @@ CHAT_PAGE_TEMPLATE = {
     "tab_filter": {"x_ratio": 0.72, "label": "篩選"},
     # 搜尋欄
     "search_bar": {"y_ratio": 0.04, "h_ratio": 0.03},
-    # 聊天列表起始位置
-    "list_start_y_ratio": 0.08,
+    # 聊天列表起始位置（demo 沙盒不需要置頂保護，從 0 開始抓全部對話）
+    "list_start_y_ratio": 0.0,
     # 每個對話的行高比例
     "item_height_ratio": 0.075,
     # 未讀徽章 x 位置（line16.png，綠色圓形徽章在項目右側）
@@ -520,6 +520,97 @@ def ocr_scan_panel(panel_img):
     return items
 
 
+_TIMESTAMP_RE = re.compile(r"^\d{1,2}[:：/]\d{1,2}$|^\d{1,2}月\d{1,2}日?$")
+
+
+def _looks_like_timestamp(text):
+    """判斷 OCR 文字是否為 LINE 列表的時間戳
+
+    支援格式：上午/下午 H:MM、HH:MM、星期X、昨天、X月X日
+    用文字 pattern（不依賴 x 位置 → 換解析度也不會壞）
+    """
+    if not text:
+        return False
+    t = text.strip()
+    if "上午" in t or "下午" in t or "星期" in t:
+        return True
+    if t in ("昨天", "今天"):
+        return True
+    return bool(_TIMESTAMP_RE.match(t))
+
+
+def _group_into_cards(ocr_items):
+    """1D DBSCAN 分群：把 OCR boxes 切成「對話卡」群組
+
+    eps 動態 = median(text_height) × 1.6
+      - 卡內最大 Δy ~20，eps ~25 包得住
+      - 卡邊界 Δy ~33+，eps 切得開
+      - 換螢幕/視窗大小自動適應，不用重調
+
+    每卡內辨識：
+      - 時間戳：用 _looks_like_timestamp 判斷文字 pattern（不依賴 x）
+      - 客戶暱稱：剩下的 items 中 y 最小那筆
+      - 預覽文字：其他
+    """
+    if not ocr_items:
+        return []
+    try:
+        from sklearn.cluster import DBSCAN
+    except ImportError:
+        return _group_into_cards_fallback(ocr_items, gap=28)
+
+    heights = [it["h"] for it in ocr_items if it.get("h", 0) > 0]
+    eps = max(20.0, float(np.median(heights)) * 1.6) if heights else 25.0
+
+    y_arr = np.array([[it["y"]] for it in ocr_items])
+    labels = DBSCAN(eps=eps, min_samples=1).fit_predict(y_arr)
+
+    groups = {}
+    for it, lbl in zip(ocr_items, labels):
+        groups.setdefault(int(lbl), []).append(it)
+
+    cards = []
+    for g in sorted(groups.values(), key=lambda gr: min(it["y"] for it in gr)):
+        time_items = [it for it in g if _looks_like_timestamp(it["text"])]
+        text_items = [it for it in g if not _looks_like_timestamp(it["text"])]
+        if not text_items:
+            continue
+        text_items.sort(key=lambda it: it["y"])
+        cards.append({
+            "y": min(it["y"] for it in g),
+            "name": text_items[0]["text"],
+            "preview": " ".join(it["text"] for it in text_items[1:]),
+            "time_str": time_items[0]["text"] if time_items else None,
+        })
+    return cards
+
+
+def _group_into_cards_fallback(ocr_items, gap=28):
+    """sklearn 不在時的後備：sorted + 寫死閾值"""
+    items = sorted(ocr_items, key=lambda it: it["y"])
+    groups = [[items[0]]]
+    for it in items[1:]:
+        if it["y"] - groups[-1][-1]["y"] > gap:
+            groups.append([it])
+        else:
+            groups[-1].append(it)
+
+    cards = []
+    for g in groups:
+        time_items = [it for it in g if _looks_like_timestamp(it["text"])]
+        text_items = [it for it in g if not _looks_like_timestamp(it["text"])]
+        if not text_items:
+            continue
+        text_items.sort(key=lambda it: it["y"])
+        cards.append({
+            "y": min(it["y"] for it in g),
+            "name": text_items[0]["text"],
+            "preview": " ".join(it["text"] for it in text_items[1:]),
+            "time_str": time_items[0]["text"] if time_items else None,
+        })
+    return cards
+
+
 # ============================================================
 # 第二層 + 第一層混合：掃描各頁面的完整內容
 # ============================================================
@@ -627,50 +718,40 @@ def scan_chat_page(panel_img, panel_rect, mon, full_img_size, il, it):
         "tab_filter": {"label": "篩選", "center": to_abs(int(pw * template["tab_filter"]["x_ratio"]), int(ph * template["tab_bar"]["y_ratio"] + 12))},
     }
 
-    # 聊天列表（OCR 讀到的對話項目）
+    # 聊天列表：先用 DBSCAN 把 OCR boxes 切成「對話卡」（1 卡 1 筆），再過濾
     list_start_y = int(ph * template["list_start_y_ratio"])
-    conversations = []
     skip_keywords = ["全部", "群組", "社群", "篩選", "搜尋", "聊天", "訊息", "Keep"]
 
-    for item in ocr_items:
-        if item["y"] < list_start_y:
+    cards = _group_into_cards(ocr_items)
+    conversations = []
+    for card in cards:
+        if card["y"] < list_start_y:
             continue
-        text = item["text"]
-        if any(kw in text for kw in skip_keywords) or len(text) < 2:
+        name = card["name"]
+        if not name or len(name) < 2:
+            continue
+        if any(kw in name for kw in skip_keywords):
             continue
 
-        # 解析未讀數（數字在名稱旁邊）
         unread = 0
-        name = text
-        # 匹配 "名稱 (數字)" 格式
-        m = re.match(r"(.+?)\s*\((\d+)\)\s*$", text)
+        m = re.match(r"(.+?)\s*\((\d+)\)\s*$", name)
         if m:
             name = m.group(1)
-
-        # 檢查是否有獨立的數字（未讀數）
-        for other in ocr_items:
-            if abs(other["y"] - item["y"]) < 15 and other["text"].isdigit():
-                unread = int(other["text"])
+            unread = int(m.group(2))
 
         conversations.append({
             "name": name,
             "unread": unread,
-            "center": to_abs(pw // 2, item["y"] + 15),
-            "y": item["y"],
+            "center": to_abs(pw // 2, card["y"] + 30),  # 卡中心約頂部下移 30
+            "y": card["y"],
+            "preview": card["preview"],
+            "time_str": card["time_str"],
         })
-
-    # 去重（名稱相同的只保留第一個）
-    seen = set()
-    unique_convs = []
-    for c in conversations:
-        if c["name"] not in seen:
-            seen.add(c["name"])
-            unique_convs.append(c)
 
     return {
         "page": "chat",
         "tabs": tabs,
-        "conversations": unique_convs,
+        "conversations": conversations,
         "fixed_elements": {
             "search_bar": {"center": to_abs(pw // 2, int(ph * template["search_bar"]["y_ratio"]))},
         },
@@ -1119,6 +1200,68 @@ def find_unread_badges(monitor=None):
 
     _print(f"[line_locate] 綠色未讀徽章（LINE16 方式）: {len(result)} 個")
     return result
+
+
+def find_unread_per_card(regions, monitor=None):
+    """對每張 DBSCAN conversation 卡，檢查右側是否有綠徽章
+
+    取代 find_unread_badges 寫死位置掃描。徽章直接綁卡：
+      - name / center / time_str 都跟卡 1:1 對應
+      - 不需要啟發式配對 panel y vs 視窗 y
+      - LINE 動態重排序也不會點錯人
+
+    座標系（重點）：
+      - card['y']      = panel 內 y（OCR 結果，DBSCAN 切的）
+      - card['center'] = 螢幕絕對座標（scan_chat_page 用 to_abs 算的）
+      - 徽章區域 = 卡內右側 70-95% 寬度，y 範圍 = 卡中心 ± 18
+
+    回傳：[{name, y, center, time_str, preview, has_unread, green_count}]
+    """
+    full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+    arr = np.array(line_crop)
+
+    convs = (regions.get("page_content") or {}).get("conversations") or []
+    lp = regions.get("left_panel")
+    if not convs or not lp:
+        return []
+
+    # panel 在 LINE 視窗內的位置（從螢幕絕對轉成 LINE 視窗相對）
+    panel_x_win = (lp["left"] - mon["left"]) - il
+    panel_y_win = (lp["top"]  - mon["top"])  - it
+    panel_w = lp["right"] - lp["left"]
+
+    # 徽章區域：卡內右側 70-95% 寬度
+    bx_min = max(0, panel_x_win + int(panel_w * 0.70))
+    bx_max = min(arr.shape[1], panel_x_win + int(panel_w * 0.95))
+    color = UNREAD_BADGE["chat_badge_color"]
+
+    results = []
+    for c in convs:
+        # 卡中心 y（LINE 視窗內），跟 scan_chat_page 的 c['y']+30 公式對齊
+        cy_win = panel_y_win + c["y"] + 30
+        sy_min = max(0, cy_win - 18)
+        sy_max = min(arr.shape[0], cy_win + 18)
+
+        green = 0
+        for sx in range(bx_min, bx_max):
+            for sy in range(sy_min, sy_max):
+                r, g, b = int(arr[sy, sx, 0]), int(arr[sy, sx, 1]), int(arr[sy, sx, 2])
+                if r < color["r_max"] and g > color["g_min"] and b < color["b_max"]:
+                    green += 1
+
+        results.append({
+            "name": c["name"],
+            "y": c["y"],
+            "center": c["center"],
+            "time_str": c.get("time_str"),
+            "preview": c.get("preview"),
+            "has_unread": green > 15,
+            "green_count": green,
+        })
+
+    unread_n = sum(1 for r in results if r["has_unread"])
+    _print(f"[line_locate] 卡綁徽章偵測: {unread_n}/{len(results)} 卡有未讀")
+    return results
 
 
 def detect_unread(monitor=None):
