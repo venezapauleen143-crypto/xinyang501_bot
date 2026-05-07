@@ -17,3 +17,5 @@
 {"ts": "2026-05-07T16:08:32", "persona": "Angela", "type": "test_event", "customer": "test_user", "data": {"foo": "bar"}}
 {"ts": "2026-05-07T16:10:15", "persona": "Angela", "type": "test_event", "customer": "test_user", "data": {"foo": "angela"}}
 {"ts": "2026-05-07T16:10:18", "persona": "Angela", "type": "test_event", "customer": "test_user", "data": {"foo": "bar"}}
+{"ts": "2026-05-07T16:18:38", "persona": "Angela", "type": "test_event", "customer": "test_user", "data": {"foo": "angela"}}
+{"ts": "2026-05-07T16:18:41", "persona": "Angela", "type": "test_event", "customer": "test_user", "data": {"foo": "bar"}}

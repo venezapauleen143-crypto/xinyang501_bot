@@ -2243,13 +2243,13 @@ def main(stop_time, monitor=None):
                 time.sleep(2)
 
         # ② 找 ready 的 customer（已等夠的）→ 處理 1 個（FIFO 公平）
+        # 🔴 重要修補：不使用舊 conv["center"]（19 分鐘後 LINE 列表浮動可能失效）
+        # 改用「重新偵測當前 unread_list[0]」處理，避免點錯客戶
         ready = _PENDING_SCHEDULER.get_ready()
         if ready:
-            key, state = ready[0]   # 一輪處理 1 個（避免占螢幕太久）
+            key, state = ready[0]   # 一輪處理 1 個
             persona_name = state["persona"]
-            conv = state["conv"]
             try:
-                # 切到該 persona 的 sandbox
                 sandbox = PERSONA_CONFIG[persona_name]["sandbox"]
                 set_active_box(sandbox)
                 line = find_line_window()
@@ -2260,24 +2260,33 @@ def main(stop_time, monitor=None):
                         pass
                     time.sleep(0.5)
 
-                regions = locate_line_regions(monitor)
-                persona_prompt = persona_prompt_cache.get(persona_name)
-                print(f"[Sched/{persona_name}] ✅ 處理 ready customer (等了 {time.monotonic() - state['first_seen']:.0f}s, queue 還有 {len(ready)-1} 個)", flush=True)
+                # 🔴 重新偵測當前 unread（不用舊 conv）
+                regions, current_unread = find_unread_conversations(monitor)
+                if not current_unread:
+                    # 對方可能手動已讀 → 清掉這個 ready token
+                    print(f"[Sched/{persona_name}] ⚠️ ready 但 LINE 已無未讀（對方可能自己讀了），清掉 token", flush=True)
+                    _PENDING_SCHEDULER.remove(key)
+                else:
+                    # 取當下 unread_list[0]（最新位置 = LINE 浮頂的那個）
+                    fresh_conv = current_unread[0]
+                    persona_prompt = persona_prompt_cache.get(persona_name)
+                    elapsed = time.monotonic() - state["first_seen"]
+                    print(f"[Sched/{persona_name}] ✅ 處理 ready customer (等了 {elapsed:.0f}s, queue 還有 {len(ready)-1} 個, fresh center={fresh_conv.get('center')})", flush=True)
 
-                handle_one_customer(
-                    persona_name, conv, regions, persona_prompt,
-                    all_histories[persona_name], all_profiles[persona_name],
-                    monitor,
-                )
-                pyautogui.press("escape")
-                time.sleep(0.5)
+                    handle_one_customer(
+                        persona_name, fresh_conv, regions, persona_prompt,
+                        all_histories[persona_name], all_profiles[persona_name],
+                        monitor,
+                    )
+                    pyautogui.press("escape")
+                    time.sleep(0.5)
+                    _PENDING_SCHEDULER.remove(key)
             except Exception as e:
                 print(f"[ERR/{persona_name}] 處理 customer 失敗: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
                 time.sleep(2)
-            finally:
-                _PENDING_SCHEDULER.remove(key)
+                _PENDING_SCHEDULER.remove(key)  # 失敗也要清掉避免卡住
 
         # ③ TTL 清理：超過 target_delay × 5 還沒處理 → 對方應該封鎖/刪聊天
         _PENDING_SCHEDULER.cleanup_expired(ttl_factor=5)
