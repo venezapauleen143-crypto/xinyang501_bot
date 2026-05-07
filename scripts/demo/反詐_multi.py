@@ -545,6 +545,114 @@ def _save_profile(persona, name, profile):
         return False
 
 
+# ============================================================
+# Atomic write helper（避免 .json 半寫壞）
+# ============================================================
+def atomic_write_json(data, path):
+    """先寫 .tmp → os.replace 原子 rename，crash 也不會毀壞原檔"""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    try:
+        with io.open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(str(tmp), str(path))  # OS 保證原子操作
+        return True
+    except Exception as e:
+        print(f"[atomic_write] {path.name} 失敗: {e}", flush=True)
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return False
+
+
+def atomic_read_json(path, default=None):
+    """讀 JSON，檔案不存在/解析失敗回 default"""
+    path = Path(path)
+    if not path.exists():
+        return default
+    try:
+        with io.open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[atomic_read] {path.name} 失敗: {e}", flush=True)
+        return default
+
+
+# ============================================================
+# LINE 時間戳 parser（將「下午 4:43」「昨天」「星期 X」轉成 datetime）
+# ============================================================
+_WEEKDAY_NAMES = {
+    "星期一": 0, "星期二": 1, "星期三": 2, "星期四": 3,
+    "星期五": 4, "星期六": 5, "星期日": 6, "星期天": 6,
+}
+
+
+def parse_line_timestamp(time_str: str, now=None):
+    """LINE 列表時間戳 → datetime
+
+    支援：
+      「下午 4:43」「下午4:43」  → today 16:43
+      「上午 11:30」「11:30」     → today 11:30
+      「昨天」                     → yesterday 12:00 (粗估)
+      「星期一」「星期二」...      → 上週對應日 12:00
+      「2 月 15 日」「02/15」     → today.year-02-15 12:00
+      無法解析                    → None
+    """
+    from datetime import datetime, timedelta
+    if now is None:
+        now = datetime.now()
+    if not time_str:
+        return None
+    s = time_str.strip().replace(" ", "")
+
+    # ---- 上午/下午 HH:MM ----
+    import re
+    m = re.match(r"^(上午|下午)?(\d{1,2}):(\d{2})$", s)
+    if m:
+        ampm, hh, mm = m.group(1), int(m.group(2)), int(m.group(3))
+        if ampm == "下午" and hh < 12:
+            hh += 12
+        elif ampm == "上午" and hh == 12:
+            hh = 0
+        try:
+            return now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        except ValueError:
+            return None
+
+    # ---- 昨天 ----
+    if s == "昨天":
+        y = now - timedelta(days=1)
+        return y.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    # ---- 星期 X ----
+    if s.startswith("星期") and len(s) >= 3:
+        target = _WEEKDAY_NAMES.get(s[:3])
+        if target is not None:
+            current = now.weekday()
+            # 算最近的「上一個」星期 X（若今天就是 → 算上週）
+            days_back = (current - target) % 7
+            if days_back == 0:
+                days_back = 7
+            d = now - timedelta(days=days_back)
+            return d.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    # ---- 日期 02/15、2/15、2月15日 ----
+    m = re.match(r"^(\d{1,2})[月/](\d{1,2})日?$", s)
+    if m:
+        mo, dy = int(m.group(1)), int(m.group(2))
+        try:
+            d = datetime(now.year, mo, dy, 12, 0)
+            if d > now:  # 跨年（如現在 2026-01，列表顯示「12/15」是去年）
+                d = d.replace(year=now.year - 1)
+            return d
+        except ValueError:
+            return None
+
+    return None  # 無法解析
+
+
 def _strip_json_codeblock(text):
     """剝掉 LLM 偶爾包的 markdown code block"""
     text = text.strip()
@@ -1734,87 +1842,265 @@ def find_unread_conversations(monitor=None):
     return regions, unread_list
 
 
+def find_unread_with_metadata(monitor=None):
+    """進階版：把 unread badge 跟 conversation list 配對，補上 name + last_msg_time
+
+    回傳：(regions, [{y, center, name, last_msg_time, last_msg_time_str}])
+        - name: 對話框暱稱 / 預覽 / 時間戳之一（OCR 抓到的）— 用 y 範圍配對
+        - last_msg_time: datetime（解析後）；無法解析回 None
+        - last_msg_time_str: 原始 OCR 文字
+    """
+    from datetime import datetime
+    regions, unread_list = find_unread_conversations(monitor)
+    page_content = regions.get("page_content") or {}
+    conversations = page_content.get("conversations") or []
+
+    enriched = []
+    now = datetime.now()
+    for u in unread_list:
+        u_y = u["y"]
+        # 找 y 最近的 conversation entries（容差 ±60 像素 = 對話框高度）
+        nearby = [c for c in conversations if abs(c.get("y", -9999) - u_y) < 60]
+
+        # 嘗試從 nearby 找出「暱稱」跟「時間戳」
+        # 啟發式：
+        #   - 時間戳特徵：含「上午/下午/星期/昨天」字眼 或 「HH:MM」格式
+        #   - 暱稱：剩下的取第一個（通常是真暱稱）
+        name = None
+        time_str = None
+        time_dt = None
+        import re as _re
+        for c in nearby:
+            text = (c.get("name") or "").strip()
+            if not text:
+                continue
+            # 是否像時間戳
+            looks_like_time = (
+                "上午" in text or "下午" in text or "星期" in text or
+                text == "昨天" or _re.match(r"^\d{1,2}[:/]\d{1,2}$", text) or
+                _re.match(r"^\d{1,2}月\d{1,2}日?$", text)
+            )
+            if looks_like_time and time_str is None:
+                time_str = text
+                time_dt = parse_line_timestamp(text, now)
+            elif name is None:
+                name = text
+
+        if name is None:
+            # fallback：用 y 當識別碼（OCR 沒抓到名字）
+            name = f"unknown_y{u_y}"
+
+        enriched.append({
+            "y": u_y,
+            "center": u["center"],
+            "name": name,
+            "last_msg_time_str": time_str,
+            "last_msg_time": time_dt,  # datetime or None
+        })
+
+    return regions, enriched
+
+
 
 # ============================================================
 # Per-Customer Scheduler — 解 Head-of-Line blocking
 # 每個 customer 獨立計時，不會因第一個 sleep 19 分鐘卡死後面所有
 # ============================================================
 class PendingCustomerScheduler:
-    """每個未讀 customer 獨立計時器（FIFO 公平 + TTL 清理）
+    """事件驅動 Per-Customer Scheduler（業界 Outbox Pattern）
 
-    Key 設計：(persona, conv["center"])
-      - 同對話短期內 center 穩定 → 同 key
-      - 對方又傳訊息浮頂 → center 變 → 新 key → 重新計時（業界做法 = re-trigger）
+    Key 設計：(persona, name)
+      - name = LINE 列表偵測到的暱稱（OCR）
+      - 暱稱穩定 → 跨 LINE 列表浮動都能對應同 customer
 
-    狀態欄位：
-      first_seen: monotonic time（不受系統時間調整影響）
-      target_delay: 抽到的思考延遲（5-20 分鐘）
-      conv: 完整 conv dict（{"y", "center"}）
-      persona: 該 customer 屬於哪個 persona
+    Timer 邏輯：
+      first_seen: datetime（從 LINE 時間戳抓 = 對方真實傳訊息時間）
+                  fallback 用 datetime.now()（OCR 沒抓到時間戳時）
+      target_delay: 抽到的思考延遲（秒）
+      ready_at = first_seen + target_delay
+
+    Persistence：
+      pending_queue.json 寫進 personas/{persona}/
+      atomic write 防 crash 半寫壞
+      啟動時 load 回 in-memory state
     """
     def __init__(self):
-        self._pending = {}  # {(persona, center_tuple): state}
+        self._pending = {}  # {(persona, name): state}
         self._lock = _threading.Lock()
 
     @staticmethod
-    def _key(persona, conv):
-        # center 可能是 list 或 tuple，統一成 tuple
-        c = conv.get("center")
-        c_tuple = tuple(c) if c else None
-        return (persona, c_tuple)
+    def _key(persona, name):
+        return (persona, name)
 
-    def register_if_new(self, persona, conv, target_delay):
-        """新 customer 註冊計時器，已存在的不動。回傳 True=新註冊"""
-        key = self._key(persona, conv)
+    @staticmethod
+    def _persistence_path(persona):
+        return persona_root(persona) / "pending_queue.json"
+
+    def register_if_new(self, persona, name, last_msg_time, target_delay):
+        """事件驅動：新 customer 註冊計時器，已存在不動。
+        last_msg_time: datetime（對方傳訊息時間，從 LINE 列表抓）
+                       None 時 fallback 用 datetime.now()
+        target_delay: 秒
+        回傳 True=新註冊
+        """
+        from datetime import datetime
+        key = self._key(persona, name)
+        first_seen = last_msg_time if last_msg_time else datetime.now()
         with self._lock:
             if key in self._pending:
                 return False
             self._pending[key] = {
-                "first_seen": time.monotonic(),
-                "target_delay": target_delay,
-                "conv": conv,
                 "persona": persona,
+                "name": name,
+                "first_seen": first_seen,  # datetime
+                "target_delay": target_delay,
+                "ready_at": first_seen + _td_seconds(target_delay),
+                "first_detected": datetime.now(),
             }
+        self._persist(persona)
         return True
 
     def get_ready(self):
         """回傳所有「等夠了」的 customer，按 first_seen 排序（FIFO 公平）"""
-        now = time.monotonic()
+        from datetime import datetime
+        now = datetime.now()
         with self._lock:
             ready = [
                 (k, v) for k, v in self._pending.items()
-                if (now - v["first_seen"]) >= v["target_delay"]
+                if v["ready_at"] <= now
             ]
         ready.sort(key=lambda x: x[1]["first_seen"])
         return ready
 
     def remove(self, key):
         """處理完該 customer，清掉 pending"""
+        persona = key[0] if isinstance(key, tuple) and len(key) >= 1 else None
         with self._lock:
             self._pending.pop(key, None)
+        if persona:
+            self._persist(persona)
+
+    def remove_by_name(self, persona, name):
+        """用 (persona, name) 移除"""
+        self.remove(self._key(persona, name))
 
     def cleanup_expired(self, ttl_factor=5):
-        """TTL 清理：超過 target_delay × ttl_factor 還沒處理 → 對方應該已封鎖/刪聊天，丟棄"""
-        now = time.monotonic()
+        """TTL 清理：超過 target_delay × ttl_factor 還沒處理 → 丟棄"""
+        from datetime import datetime
+        now = datetime.now()
+        affected_personas = set()
         with self._lock:
-            expired = [
-                k for k, v in self._pending.items()
-                if (now - v["first_seen"]) > v["target_delay"] * ttl_factor
-            ]
+            expired = []
+            for k, v in self._pending.items():
+                age_seconds = (now - v["first_seen"]).total_seconds()
+                if age_seconds > v["target_delay"] * ttl_factor:
+                    expired.append(k)
             for k in expired:
                 state = self._pending.pop(k)
-                print(f"[Sched] TTL 過期清掉 {k}（等了 {now - state['first_seen']:.0f}s）", flush=True)
+                age = (now - state["first_seen"]).total_seconds()
+                print(f"[Sched] TTL 過期清掉 {k}（等了 {age:.0f}s）", flush=True)
+                affected_personas.add(state["persona"])
+        for p in affected_personas:
+            self._persist(p)
+
+    def get_active_names(self, persona):
+        """回傳該 persona 內所有 pending customer 的 name（用於 diff）"""
+        with self._lock:
+            return {k[1] for k in self._pending if k[0] == persona}
 
     def stats(self):
         with self._lock:
             return {
                 "pending_count": len(self._pending),
-                "by_persona": {p: sum(1 for k in self._pending if k[0] == p) for p in set(k[0] for k in self._pending)},
+                "by_persona": {p: sum(1 for k in self._pending if k[0] == p)
+                              for p in set(k[0] for k in self._pending)},
             }
+
+    def _persist(self, persona):
+        """寫盤該 persona 的 pending_queue.json（atomic）"""
+        try:
+            from datetime import datetime
+            with self._lock:
+                customers = []
+                for k, v in self._pending.items():
+                    if k[0] != persona:
+                        continue
+                    customers.append({
+                        "name": v["name"],
+                        "first_seen": v["first_seen"].isoformat(),
+                        "target_delay": v["target_delay"],
+                        "ready_at": v["ready_at"].isoformat(),
+                        "first_detected": v["first_detected"].isoformat(),
+                    })
+            data = {
+                "persona": persona,
+                "last_updated": datetime.now().isoformat(timespec="seconds"),
+                "customers": customers,
+            }
+            atomic_write_json(data, self._persistence_path(persona))
+        except Exception as e:
+            print(f"[Sched] persist {persona} 失敗: {e}", flush=True)
+
+    def load_from_disk(self, persona):
+        """啟動時從 pending_queue.json 載入 in-memory（crash recovery）"""
+        from datetime import datetime
+        path = self._persistence_path(persona)
+        data = atomic_read_json(path, default=None)
+        if not data or not data.get("customers"):
+            return 0
+        loaded = 0
+        with self._lock:
+            for c in data["customers"]:
+                try:
+                    name = c["name"]
+                    first_seen = datetime.fromisoformat(c["first_seen"])
+                    target_delay = c["target_delay"]
+                    ready_at = datetime.fromisoformat(c["ready_at"])
+                    first_detected = datetime.fromisoformat(c.get("first_detected", c["first_seen"]))
+                    self._pending[(persona, name)] = {
+                        "persona": persona,
+                        "name": name,
+                        "first_seen": first_seen,
+                        "target_delay": target_delay,
+                        "ready_at": ready_at,
+                        "first_detected": first_detected,
+                    }
+                    loaded += 1
+                except Exception as e:
+                    print(f"[Sched] load {persona}/{c.get('name')} 失敗: {e}", flush=True)
+        return loaded
+
+
+def _td_seconds(seconds):
+    """秒 → timedelta"""
+    from datetime import timedelta
+    return timedelta(seconds=seconds)
 
 
 # 全域 scheduler 單例
 _PENDING_SCHEDULER = PendingCustomerScheduler()
+
+# Event-driven diff 偵測：上一輪每個 persona 看到的 unread name 集合
+_LAST_SEEN_UNREAD = {}   # {persona: set(names)}
+
+# Backpressure：兩次回覆最少間隔（避免大量 ready 連續點擊被 LINE 風控）
+MIN_INTER_REPLY_SEC = 30
+_LAST_REPLY_TS = 0.0
+
+
+def _write_heartbeat(persona, stats=None):
+    """每輪寫 personas/{persona}/heartbeat.json，外部可監控腳本是否還活著"""
+    try:
+        from datetime import datetime
+        path = persona_root(persona) / "heartbeat.json"
+        data = {
+            "persona": persona,
+            "last_heartbeat": datetime.now().isoformat(timespec="seconds"),
+            "pending_count": (stats or {}).get("pending_count", 0),
+        }
+        atomic_write_json(data, path)
+    except Exception:
+        pass  # heartbeat 失敗不該阻塞主流程
 
 
 # ============================================================
@@ -2185,6 +2471,12 @@ def main(stop_time, monitor=None):
 
     _print_startup_recovery()
 
+    # 🔴 crash recovery：載入 pending_queue.json
+    for p in persona_prompt_cache:
+        loaded = _PENDING_SCHEDULER.load_from_disk(p)
+        if loaded > 0:
+            print(f"[Sched/{p}] 從 pending_queue.json 載回 {loaded} 個 pending customer", flush=True)
+
     print(f"\n[Monitor] 開始監控未讀訊息（active personas: {list(persona_prompt_cache.keys())}）...", flush=True)
     print(f"[Monitor] 停止方式：touch {STOP_FILE}", flush=True)
 
@@ -2201,8 +2493,10 @@ def main(stop_time, monitor=None):
             break
 
         # ============================================================
-        # 🔴 Per-Customer Scheduler 模型（解 Head-of-Line blocking）
-        # 每輪：① 偵測 unread → 註冊新 timer  ② 找 ready 的處理 1 個  ③ TTL 清理
+        # 🔴 Event-Driven Scheduler 模型（業界 Outbox + Stable Identifier + Wall-Clock）
+        # 每輪：① 偵測 unread → diff 找新增 → 用 LINE 時間戳註冊 timer
+        #       ② 找 ready 的 customer 用 name 找對應對話框處理（含 backpressure）
+        #       ③ TTL 清理
         # ============================================================
         for persona_name, persona_cfg in get_active_personas().items():
             if should_stop():
@@ -2224,17 +2518,38 @@ def main(stop_time, monitor=None):
                     pass
                 time.sleep(1.0)
 
-                # ① 偵測所有 unread → 為新 customer 註冊 timer（不 sleep）
-                regions, unread_list = find_unread_conversations(monitor)
-                newly_registered = 0
-                for conv in unread_list:
-                    delay = get_current_delay()
-                    if _PENDING_SCHEDULER.register_if_new(persona_name, conv, delay):
-                        newly_registered += 1
-                        print(f"[Sched/{persona_name}] 新未讀 註冊 timer 等 {delay:.0f}s 後處理 (center={conv.get('center')})", flush=True)
-                if newly_registered > 0:
+                # ① 偵測所有 unread + 抓暱稱 + 抓時間戳
+                regions, enriched_unread = find_unread_with_metadata(monitor)
+                current_names = {u["name"] for u in enriched_unread if u["name"]}
+
+                # diff: 新增的（事件驅動）
+                last_names = _LAST_SEEN_UNREAD.get(persona_name, set())
+                new_names = current_names - last_names
+                gone_names = last_names - current_names
+
+                # 處理新增：註冊 timer
+                for u in enriched_unread:
+                    name = u["name"]
+                    if name in new_names:
+                        delay = get_current_delay()
+                        last_msg_time = u.get("last_msg_time")  # datetime or None
+                        if _PENDING_SCHEDULER.register_if_new(persona_name, name, last_msg_time, delay):
+                            time_label = u.get("last_msg_time_str") or "未知時間"
+                            print(f"[Sched/{persona_name}] 新未讀 '{name}'（對方 {time_label} 傳的），等 {delay:.0f}s 後處理", flush=True)
+
+                # 處理消失：清掉 token（對方手動已讀 / 我們已處理）
+                for name in gone_names:
+                    _PENDING_SCHEDULER.remove_by_name(persona_name, name)
+                    print(f"[Sched/{persona_name}] '{name}' 已不在 LINE 未讀清單，清 token", flush=True)
+
+                _LAST_SEEN_UNREAD[persona_name] = current_names
+
+                if new_names or gone_names:
                     stats = _PENDING_SCHEDULER.stats()
                     print(f"[Sched] 全域 pending: {stats['pending_count']} 個（{stats['by_persona']}）", flush=True)
+
+                # 寫 heartbeat（每輪都寫，外部監控用）
+                _write_heartbeat(persona_name, stats=_PENDING_SCHEDULER.stats())
 
             except Exception as e:
                 print(f"[ERR/{persona_name}] 偵測階段失敗: {e}", flush=True)
@@ -2242,13 +2557,23 @@ def main(stop_time, monitor=None):
                 traceback.print_exc()
                 time.sleep(2)
 
-        # ② 找 ready 的 customer（已等夠的）→ 處理 1 個（FIFO 公平）
-        # 🔴 重要修補：不使用舊 conv["center"]（19 分鐘後 LINE 列表浮動可能失效）
-        # 改用「重新偵測當前 unread_list[0]」處理，避免點錯客戶
+        # ② 處理 ready 的 customer（用 name 找對話框 + backpressure）
         ready = _PENDING_SCHEDULER.get_ready()
-        if ready:
-            key, state = ready[0]   # 一輪處理 1 個
+        for key, state in ready:
+            if should_stop():
+                break
             persona_name = state["persona"]
+            target_name = state["name"]
+
+            # 🔴 Backpressure：兩次點擊最少間隔
+            global _LAST_REPLY_TS
+            now_mono = time.monotonic()
+            wait_left = MIN_INTER_REPLY_SEC - (now_mono - _LAST_REPLY_TS)
+            if wait_left > 0:
+                print(f"[Sched/{persona_name}] backpressure 等 {wait_left:.0f}s（防點擊過快）", flush=True)
+                if not interruptible_sleep(wait_left):
+                    break
+
             try:
                 sandbox = PERSONA_CONFIG[persona_name]["sandbox"]
                 set_active_box(sandbox)
@@ -2260,31 +2585,35 @@ def main(stop_time, monitor=None):
                         pass
                     time.sleep(0.5)
 
-                # 🔴 重新偵測當前 unread（不用舊 conv）
-                regions, current_unread = find_unread_conversations(monitor)
-                if not current_unread:
-                    # 對方可能手動已讀 → 清掉這個 ready token
-                    print(f"[Sched/{persona_name}] ⚠️ ready 但 LINE 已無未讀（對方可能自己讀了），清掉 token", flush=True)
-                    _PENDING_SCHEDULER.remove(key)
-                else:
-                    # 取當下 unread_list[0]（最新位置 = LINE 浮頂的那個）
-                    fresh_conv = current_unread[0]
-                    persona_prompt = persona_prompt_cache.get(persona_name)
-                    elapsed = time.monotonic() - state["first_seen"]
-                    print(f"[Sched/{persona_name}] ✅ 處理 ready customer (等了 {elapsed:.0f}s, queue 還有 {len(ready)-1} 個, fresh center={fresh_conv.get('center')})", flush=True)
+                # 重新掃 LINE，用 name 找對應對話框
+                regions, enriched_unread = find_unread_with_metadata(monitor)
+                target_conv = next((u for u in enriched_unread if u["name"] == target_name), None)
 
-                    handle_one_customer(
-                        persona_name, fresh_conv, regions, persona_prompt,
-                        all_histories[persona_name], all_profiles[persona_name],
-                        monitor,
-                    )
-                    pyautogui.press("escape")
-                    time.sleep(0.5)
+                if not target_conv:
+                    # 對方不在 LINE 未讀清單（已讀/封鎖）→ 清 token
+                    print(f"[Sched/{persona_name}] ⚠️ ready 但 '{target_name}' 不在 unread 清單，清 token", flush=True)
                     _PENDING_SCHEDULER.remove(key)
+                    continue
+
+                persona_prompt = persona_prompt_cache.get(persona_name)
+                from datetime import datetime
+                elapsed = (datetime.now() - state["first_seen"]).total_seconds()
+                print(f"[Sched/{persona_name}] ✅ 處理 '{target_name}'（等了 {elapsed:.0f}s，queue 還 {len(ready)-1} 個）", flush=True)
+
+                handle_one_customer(
+                    persona_name, target_conv, regions, persona_prompt,
+                    all_histories[persona_name], all_profiles[persona_name],
+                    monitor,
+                )
+                pyautogui.press("escape")
+                time.sleep(0.5)
+                _PENDING_SCHEDULER.remove(key)
+                _LAST_REPLY_TS = time.monotonic()
             except Exception as e:
-                print(f"[ERR/{persona_name}] 處理 customer 失敗: {e}", flush=True)
+                print(f"[ERR/{persona_name}] 處理 '{target_name}' 失敗: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
+                _PENDING_SCHEDULER.remove(key)
                 time.sleep(2)
                 _PENDING_SCHEDULER.remove(key)  # 失敗也要清掉避免卡住
 

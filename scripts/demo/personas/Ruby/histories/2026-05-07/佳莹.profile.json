@@ -1,0 +1,35 @@
+{
+  "name": "佳莹",
+  "core_facts": {
+    "occupation": null,
+    "location": "未知",
+    "schedule": null,
+    "age": null,
+    "gender": null,
+    "marital_status": null,
+    "personality_traits": []
+  },
+  "shared_disclosures": [
+    {
+      "speaker": "them",
+      "fact": "主動打招呼"
+    }
+  ],
+  "interests": [],
+  "family_relationships": [],
+  "milestones": [
+    "Day 1: 互換通訊工具至LINE"
+  ],
+  "current_stage": "Day 1，初期寒暄階段。對方詢問Ruby🧸為何回覆較晚，但未揭露自身背景資訊",
+  "topic_hooks_remaining": [
+    "工作內容",
+    "作息時間",
+    "興趣偏好",
+    "生活背景"
+  ],
+  "trust_score": 0,
+  "ai_suspicion_flags": [],
+  "first_seen": "2026-05-07T16:43:31",
+  "last_updated": "2026-05-07T16:43:31",
+  "total_turns": 0
+}

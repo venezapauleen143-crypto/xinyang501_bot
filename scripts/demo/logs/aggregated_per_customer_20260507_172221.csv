@@ -1,0 +1,2 @@
+﻿persona,name,occupation,location,schedule,age,gender,marital_status,interests_count,family_count,disclosures_count,milestones_count,current_stage,total_turns,trust_score,suspicion_count,first_seen,last_updated,file_path
+Ruby,佳莹,,未知,,,,,0,0,1,1,Day 1，初期寒暄階段。對方詢問Ruby🧸為何回覆較晚，但未揭露自身背景資訊,0,0,0,2026-05-07T16:43:31,2026-05-07T16:43:31,personas\Ruby\histories\2026-05-07\佳莹.profile.json
