@@ -110,18 +110,18 @@ PERSONA_CONFIG = {
     "Angela": {
         "sandbox": "demo",
         "nickname": "Angela",
-        "self_location": "Hong Kong",   # 該 persona 自己的所在地（查天氣用）
+        "self_location": "Hong Kong",
         "self_location_zh": "香港",
         "root": SCRIPT_DIR / "personas" / "Angela",
-        "active": True,
+        "active": False,  # 🔴 暫停用（用戶切到 Ruby 測試）
     },
     "Ruby": {
-        "sandbox": "demo_ruby",
+        "sandbox": "demo",  # 🔴 暫時用同 demo 沙盤（之後建 demo_ruby 再切回）
         "nickname": "Ruby🧸",
         "self_location": "Taipei",
         "self_location_zh": "台北",
         "root": SCRIPT_DIR / "personas" / "Ruby",
-        "active": False,  # 🔴 沙盤未建好前先停用，code 已 ready
+        "active": True,  # 🔴 啟用中
     },
 }
 
