@@ -2,3 +2,5 @@
 {"ts": "2026-05-07T12:59:12", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
 {"ts": "2026-05-07T13:05:33", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
 {"ts": "2026-05-07T13:16:49", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
+{"ts": "2026-05-07T13:47:03", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
+{"ts": "2026-05-07T14:03:09", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}

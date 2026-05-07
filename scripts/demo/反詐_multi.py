@@ -224,20 +224,32 @@ _TW_AREA_MAP = {
 }
 
 
+# 其他地區中→英對應（fetch_weather 需要英文 city name）
+_OTHER_AREA_MAP = {
+    "香港": "Hong Kong",
+    "上海": "Shanghai",
+    "北京": "Beijing",
+    "廣州": "Guangzhou",
+    "深圳": "Shenzhen",
+    "東京": "Tokyo",
+    "首爾": "Seoul",
+    "新加坡": "Singapore",
+}
+
+
 def _detect_opponent_location(name, history):
-    """從對方 LINE 名稱 + history 推測所在地（回傳城市名供查天氣）"""
+    """從對方 LINE 名稱 + history 推測所在地，**回傳英文城市名**（fetch_weather 用）"""
     text_to_scan = name + " " + " ".join(
         m.get("text", "") for m in history if m.get("sender") == "them"
     )
-    # 找台灣縣市
+    # 找台灣縣市（找中文 → 回英文）
     for tw_name, en_name in _TW_AREA_MAP.items():
         if tw_name in text_to_scan or tw_name.replace("台", "臺") in text_to_scan:
-            return tw_name
-    # 找其他地區
-    other_areas = ["香港", "上海", "北京", "廣州", "深圳", "東京", "首爾", "新加坡"]
-    for area in other_areas:
-        if area in text_to_scan:
-            return area
+            return en_name
+    # 找其他地區（找中文 → 回英文）
+    for zh_name, en_name in _OTHER_AREA_MAP.items():
+        if zh_name in text_to_scan:
+            return en_name
     return None
 
 
@@ -245,11 +257,15 @@ def _get_world_context(persona=DEFAULT_PERSONA, opponent_location=None):
     """組今天的世界資訊：日期、自己所在地天氣、對方所在地天氣、新聞
 
     每個 persona 自己的所在地不同（Angela 香港 / Ruby 台北），cache key 含 persona
+    invalid persona → 不 silent fallback Angela，而是 print warn + return ""
     """
-    cfg = PERSONA_CONFIG.get(persona, PERSONA_CONFIG[DEFAULT_PERSONA])
-    self_loc_en = cfg.get("self_location", "Hong Kong")
-    self_loc_zh = cfg.get("self_location_zh", "香港")
-    nick = cfg.get("nickname", persona)
+    cfg = PERSONA_CONFIG.get(persona)
+    if not cfg:
+        print(f"[WARN] _get_world_context: invalid persona '{persona}'，跳過世界資訊（避免 silent fallback）", flush=True)
+        return ""
+    self_loc_en = cfg.get("self_location") or "Hong Kong"
+    self_loc_zh = cfg.get("self_location_zh") or "香港"
+    nick = cfg.get("nickname") or persona
 
     cache_key = (persona, opponent_location or "_none_", datetime.now().strftime("%Y%m%d-%H"))
     if cache_key in _WORLD_CONTEXT_CACHE:
@@ -873,7 +889,8 @@ def _profile_worker_loop():
                 updated = _extract_profile_from_history(persona, name, history_snapshot)
                 action = "首次抽取"
             else:
-                # 資料太少，跳過
+                # 資料太少，跳過（加 log 方便事後追）
+                print(f"[profile-worker/{persona}] {name} history 不足 ({len(history_snapshot)}/{MIN_TURNS_FOR_FIRST_PROFILE})，跳過首次抽取", flush=True)
                 _PROFILE_TASK_QUEUE.task_done()
                 continue
 
@@ -1977,8 +1994,8 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
         if not reply2:
             break
 
-        print(f"[Customer] 接續輪 {followup_round+1} 回覆: {reply2[:80]}", flush=True)
-        _send_with_realistic_delay(reply2, regions, name=name, history=history)
+        print(f"[Customer/{persona}] 接續輪 {followup_round+1} 回覆: {reply2[:80]}", flush=True)
+        _send_with_realistic_delay(reply2, regions, persona=persona, name=name, history=history)
 
     time.sleep(0.5)
     return regions
