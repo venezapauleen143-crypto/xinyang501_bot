@@ -7,3 +7,7 @@
 {"ts": "2026-05-07T15:04:36", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
 {"ts": "2026-05-07T15:04:48", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
 {"ts": "2026-05-07T15:07:44", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}
+{"ts": "2026-05-07T15:31:57", "persona": "Ruby", "type": "customer_seen", "customer": "仁輝JAMES", "data": {"prior_history_len": 0}}
+{"ts": "2026-05-07T15:32:03", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 1}}
+{"ts": "2026-05-07T15:32:25", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 36, "segments": 2, "day_n": 1}}
+{"ts": "2026-05-07T15:39:47", "persona": "Ruby", "type": "test_event", "customer": "test_user", "data": {"foo": "ruby"}}

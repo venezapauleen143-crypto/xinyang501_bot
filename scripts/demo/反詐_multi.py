@@ -1369,7 +1369,8 @@ def _send_proactive_message(persona, name, message, monitor=None):
         # 用一半的時段延遲（30-90 秒 → 15-45 秒）
         think_delay = get_current_delay() * 0.5
         print(f"[Proactive] 主動發前等 {think_delay:.1f} 秒（模擬打字）", flush=True)
-        time.sleep(think_delay)
+        if not interruptible_sleep(think_delay):
+            return False  # 被中斷
 
         # 4. 送訊息（主動發通常很短，不分段）
         send_reply(message, regions)
@@ -1568,7 +1569,8 @@ def _send_with_realistic_delay(reply, regions, persona=DEFAULT_PERSONA, name="un
                 typing_time = 0
             total_delay = base + typing_time
             print(f"[Reply/{persona}] 段間延遲 {total_delay:.1f}s（基礎 {base:.1f}s + 打字 {typing_time:.1f}s）", flush=True)
-            time.sleep(total_delay)
+            if not interruptible_sleep(total_delay):
+                return  # 收到 stop signal，中止剩下段落
 
 # ============================================================
 # GPU 記憶體清理
@@ -1666,6 +1668,24 @@ def should_stop():
         return True
     return False
 
+
+def interruptible_sleep(seconds):
+    """可中斷的 sleep — 每秒 check should_stop，避免長 sleep 內 stop flag 不被偵測
+
+    回傳：True = 正常 sleep 完，False = 被中斷
+    """
+    if seconds <= 1:
+        time.sleep(seconds)
+        return not should_stop()
+    elapsed = 0.0
+    while elapsed < seconds:
+        if should_stop():
+            return False
+        chunk = min(1.0, seconds - elapsed)
+        time.sleep(chunk)
+        elapsed += chunk
+    return True
+
 # ============================================================
 # SOP 設定檔（從 line_auto_chat.py 引用）
 # ============================================================
@@ -1736,9 +1756,8 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
     # 改成在外面 sleep → 對方看到「過幾分鐘才已讀 + 立刻回覆」 → 自然像真人
     think_delay = get_current_delay()
     print(f"[Customer] 偵測到未讀，等 {think_delay:.1f} 秒再點進去（避免秒讀）...", flush=True)
-    time.sleep(think_delay)
-    if should_stop():
-        return regions
+    if not interruptible_sleep(think_delay):
+        return regions  # 中斷
 
     print(f"\n[Customer] 點擊未讀對話 at ({cx}, {cy})", flush=True)
     pyautogui.click(cx, cy)
@@ -1941,8 +1960,7 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
     WATCH_WAIT = 5  # 秒
 
     for followup_round in range(MAX_FOLLOWUP):
-        time.sleep(WATCH_WAIT)
-        if should_stop():
+        if not interruptible_sleep(WATCH_WAIT):
             break
 
         # 重新 OCR 看新訊息
