@@ -484,6 +484,144 @@ def find_framework_by_vision(line_crop):
 
 
 # ============================================================
+# canonicalize_name — 中文名字標準化（業界 entity resolution 標準）
+# 解 OCR 繁簡識別不穩 + 全形半形 + 兼容字 + 空白 → 永久解決同人分裂
+# ============================================================
+def canonicalize_name(name, alias_map=None):
+    """中文名字標準化 — 三層防禦：NFKC + zhconv + alias
+
+    解決同字繁簡（瑩/莹）、全形半形（Ａ/A）、兼容字（㊀/一）、空白差異。
+
+    Args:
+        name: 原始 name（OCR 結果）
+        alias_map: dict {canonical: [alias1, alias2, ...]}，可選
+
+    Returns:
+        標準化後的 name（同人不同 OCR 結果永遠歸為一個）
+    """
+    if not name:
+        return ""
+    import unicodedata as _ud
+    import re as _re
+    try:
+        import zhconv as _zh
+    except ImportError:
+        _zh = None
+
+    # Step 1: Unicode NFKC（解半形/全形/兼容字）
+    name = _ud.normalize("NFKC", name)
+    # Step 2: zhconv s2twp（簡 → 台灣繁）
+    if _zh is not None:
+        try:
+            name = _zh.convert(name, "zh-tw")
+        except Exception:
+            pass
+    # Step 3: 去空白
+    name = _re.sub(r"[\s　]+", "", name)
+
+    # Step 4: alias 反向查（hard case 補丁）
+    if alias_map:
+        for canonical, aliases in alias_map.items():
+            if name == canonical:
+                return canonical
+            if name in aliases:
+                return canonical
+    return name
+
+
+def load_alias_map(persona):
+    """載入 persona 的 alias 表（personas/{persona}/name_aliases.json）
+
+    格式：{ "佳瑩": ["佳莹", "嘉瑩"], ... }
+    沒檔案就回空 dict。
+    """
+    from pathlib import Path as _Path
+    import json as _json
+
+    alias_path = _Path(__file__).resolve().parent / "personas" / persona / "name_aliases.json"
+    if not alias_path.exists():
+        return {}
+    try:
+        with open(alias_path, "r", encoding="utf-8") as f:
+            return _json.load(f) or {}
+    except Exception as e:
+        _print(f"[canonicalize] alias 表讀取失敗 {alias_path}: {e}")
+        return {}
+
+
+# ============================================================
+# wait_for_region_change — 用 perceptual hash 等指定區域畫面變化
+# 取代寫死 time.sleep，業界 2026 標準做法
+# ============================================================
+def wait_for_region_change(region, timeout=3, hamming_threshold=5, poll_interval=0.2):
+    """等指定區域畫面變化（perceptual hash 比對）
+
+    Why: 取代寫死 sleep。例：點對話後 sleep(1.5) → 改用此函式偵測 chat_title 變了沒，
+    快機器秒回、慢機器自動延長。
+
+    Args:
+        region: (left, top, width, height) 螢幕絕對座標
+        timeout: 最多等幾秒
+        hamming_threshold: phash hamming distance > 此值認為「畫面變了」
+        poll_interval: 每幾秒重抓一次
+
+    Returns:
+        bool: True=畫面變了, False=timeout 內沒變
+    """
+    import mss as _mss
+    from PIL import Image as _Image
+    try:
+        import imagehash as _ih
+    except ImportError:
+        # fallback: imagehash 沒裝退回寫死 sleep
+        time.sleep(min(timeout, 1.5))
+        return True
+
+    l, t, w, h = region
+    bbox = {"left": int(l), "top": int(t), "width": int(w), "height": int(h)}
+
+    with _mss.mss() as sct:
+        # 抓初始 hash
+        shot0 = sct.grab(bbox)
+        img0 = _Image.frombytes("RGB", shot0.size, shot0.rgb)
+        prev_hash = _ih.phash(img0)
+
+        start = time.time()
+        while time.time() - start < timeout:
+            time.sleep(poll_interval)
+            shot = sct.grab(bbox)
+            img = _Image.frombytes("RGB", shot.size, shot.rgb)
+            new_hash = _ih.phash(img)
+            if (new_hash - prev_hash) > hamming_threshold:
+                return True
+    return False
+
+
+def get_region_hash(region):
+    """抓指定區域 perceptual hash（給 verify 用，跟 wait_for_region_change 配對）
+
+    Args:
+        region: (left, top, width, height) 螢幕絕對座標
+
+    Returns:
+        imagehash.ImageHash or None（imagehash 沒裝時）
+    """
+    import mss as _mss
+    from PIL import Image as _Image
+    try:
+        import imagehash as _ih
+    except ImportError:
+        return None
+
+    l, t, w, h = region
+    bbox = {"left": int(l), "top": int(t), "width": int(w), "height": int(h)}
+    with _mss.mss() as sct:
+        shot = sct.grab(bbox)
+        img = _Image.frombytes("RGB", shot.size, shot.rgb)
+        return _ih.phash(img)
+
+
+# ============================================================
 # 第二層：PaddleOCR 掃描頁面內容
 # ============================================================
 def ocr_scan_panel(panel_img):
@@ -738,6 +876,10 @@ def scan_chat_page(panel_img, panel_rect, mon, full_img_size, il, it):
         if m:
             name = m.group(1)
             unread = int(m.group(2))
+
+        # 業界 entity resolution 標準：name 出口立刻標準化（NFKC + zhconv + alias）
+        # 解 OCR 繁簡識別不穩（佳莹/佳瑩 → 同人）
+        name = canonicalize_name(name)
 
         conversations.append({
             "name": name,

@@ -1,0 +1,46 @@
+======================================================================
+LINE UIA 驗證腳本（純讀取，不影響 LINE）
+======================================================================
+
+[1/5] 找 LINE 視窗...
+  pywinauto 找到 3 個視窗標題含 LINE
+    - title='[#] LINE [#]'  class=Sandbox:demo:Qt663QWindowIcon  pid=18644
+    - title='[#] LINE [#]'  class=Sandbox:blue_1:Qt663QWindowIcon  pid=14576
+    - title='[#] LINE [#]'  class=Sandbox:blue_2:Qt663QWindowIcon  pid=1548
+  ✅ 用第一個視窗測試
+
+[2/5] 列舉 UIA tree（depth=4）...
+  ❌ print_control_identifiers 失敗：AttributeError: 'UIAWrapper' object has no attribute 'print_control_identifiers'
+
+[3/5] 關鍵元素檢查（list 出每類前 5 個）...
+  Window: 0 個
+  Pane: 8 個
+    - name=''
+    - name=''
+    - name=''
+    - name=''
+    - name=''
+  ListView (對話列表): 0 個
+  ListItem (對話卡): 0 個
+  Edit (輸入框): 0 個
+  Button (按鈕): 0 個
+  Text (文字): 0 個
+  Group: 0 個
+
+[4/5] 找特定對話 name（你 LINE 列表現在有的人）...
+  搜「仁輝」: ❌ IUIA.build_condition() got an unexpected keyword argument 'title_re'
+  搜「JAMES」: ❌ IUIA.build_condition() got an unexpected keyword argument 'title_re'
+  搜「佳莹」: ❌ IUIA.build_condition() got an unexpected keyword argument 'title_re'
+  搜「佳瑩」: ❌ IUIA.build_condition() got an unexpected keyword argument 'title_re'
+  搜「你好」: ❌ IUIA.build_condition() got an unexpected keyword argument 'title_re'
+  搜「有聲書」: ❌ IUIA.build_condition() got an unexpected keyword argument 'title_re'
+  搜「Keep筆記」: ❌ IUIA.build_condition() got an unexpected keyword argument 'title_re'
+
+[5/5] 性能測試...
+  列舉所有 descendants：0.03s（共 8 個元素）
+  ✅ 性能 OK
+
+======================================================================
+結論
+======================================================================
+  ❌ 結論判定失敗：IUIA.build_condition() got an unexpected keyword argument 'title_re'

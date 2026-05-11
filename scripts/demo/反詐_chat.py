@@ -74,8 +74,10 @@ def _extract_reply(raw):
     m = _re.search(r"<reply>\s*(.*?)\s*</reply>", raw, _re.DOTALL | _re.IGNORECASE)
     if m:
         return m.group(1).strip()
-    # 2) 有 <thinking> 但沒 <reply> → 思考被切斷，回空（fail-safe）
+    # 2) 有 <thinking> 但沒 <reply> → 思考被切斷
     if _re.search(r"<thinking>", raw, _re.IGNORECASE):
+        # 防 silent fail：log 出來讓上游知道為什麼空
+        print(f"[_extract_reply] ⚠️ <thinking> 沒收尾（可能 max_tokens 切斷），raw len={len(raw)}，預覽: {raw[:120]!r}", flush=True)
         return ""
     # 3) 完全沒標籤 → 全文當回覆（向後相容）
     return raw.strip()

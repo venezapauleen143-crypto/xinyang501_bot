@@ -393,10 +393,15 @@ def _resolve_history_file(persona, name):
     if legacy.exists():
         return legacy
 
-    # 正規化 fuzzy match
+    # 正規化 fuzzy match（NFKC + zhconv + 去空白 — 業界 entity resolution 標準）
     def _normalize(s):
-        s = re.sub(r'[\s　]+', '', s)
-        return s.lower()
+        try:
+            from 反詐_locate import canonicalize_name
+            return canonicalize_name(s).lower()
+        except Exception:
+            # fallback：保留舊邏輯（去空白 + 小寫）
+            s = re.sub(r'[\s　]+', '', s)
+            return s.lower()
 
     target = _normalize(_sanitize_filename(name))
     if not target:
@@ -505,8 +510,12 @@ def _resolve_profile_file(persona, name):
         return legacy
 
     def _normalize(s):
-        s = re.sub(r'[\s　]+', '', s)
-        return s.lower()
+        try:
+            from 反詐_locate import canonicalize_name
+            return canonicalize_name(s).lower()
+        except Exception:
+            s = re.sub(r'[\s　]+', '', s)
+            return s.lower()
 
     target = _normalize(_sanitize_filename(name))
     if not target:
@@ -2068,7 +2077,7 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
 
     all_histories / all_profiles: 該 persona 自己的 dict（兩層 dict 的內層）
     """
-    from 反詐_locate import locate_line_regions, ocr_scan_panel, screenshot_line
+    from 反詐_locate import locate_line_regions, ocr_scan_panel, screenshot_line, wait_for_region_change
     from 反詐_chat import (
         is_only_sticker, analyze_sticker,
     )
@@ -2079,9 +2088,30 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
     if should_stop():
         return regions
 
+    # 點擊前抓 chat_title region — 用於 hash 比對等待
+    ct_before = regions.get("chat_title", {}) if regions else {}
+    ct_bbox = None
+    if ct_before:
+        l = ct_before.get("left", 0)
+        t = ct_before.get("top", 0)
+        r = ct_before.get("right", 0)
+        b = ct_before.get("bottom", 0)
+        if r > l and b > t:
+            ct_bbox = (l, t, r - l, b - t)
+
     print(f"\n[Customer] 點擊未讀對話 at ({cx}, {cy})", flush=True)
     pyautogui.click(cx, cy)
-    time.sleep(1.5)
+
+    # 等 chat_title 畫面變化（perceptual hash 比對，取代寫死 sleep(1.5)）
+    # 快機器秒回、慢機器自動延長。沒抓到 region 或 imagehash 沒裝會 fallback sleep
+    if ct_bbox:
+        changed = wait_for_region_change(ct_bbox, timeout=2.5, hamming_threshold=5)
+        if not changed:
+            # 畫面沒變 → 可能 LINE 卡了或對話切失敗，加 0.5s 緩衝
+            time.sleep(0.5)
+    else:
+        # fallback：沒 region 退回寫死
+        time.sleep(1.5)
 
     regions = locate_line_regions(monitor)
     ct = regions.get("chat_title", {})
@@ -2253,12 +2283,13 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
 
     reply = generate_reply(augmented_prompt, history, new_them, profile_text=profile_text, persona_name=persona_nickname(persona))
     if not reply or len(reply) <= 1:
+        print(f"[Customer/{persona}] ⚠️ generate_reply 回空（thinking 被切斷或無內容），跳過 {name}", flush=True)
         time.sleep(0.5)
         return regions
 
     reply = filter_reply(reply)
     if not reply:
-        print(f"[Customer/{persona}] 過濾後為空，跳過", flush=True)
+        print(f"[Customer/{persona}] ⚠️ filter_reply 過濾後為空（只有系統訊息/分析格式），跳過 {name}", flush=True)
         return regions
 
     print(f"[Customer/{persona}] 回覆: {reply[:80]}", flush=True)
@@ -2327,9 +2358,11 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
         latest_profile_text = _format_profile_for_prompt(latest_profile) if latest_profile else ""
         reply2 = generate_reply(augmented_prompt, history, new_them2, profile_text=latest_profile_text, persona_name=persona_nickname(persona))
         if not reply2 or len(reply2) <= 1:
+            print(f"[Customer/{persona}] ⚠️ 接續輪 {followup_round+1} generate_reply 回空，離開", flush=True)
             break
         reply2 = filter_reply(reply2)
         if not reply2:
+            print(f"[Customer/{persona}] ⚠️ 接續輪 {followup_round+1} filter_reply 為空，離開", flush=True)
             break
 
         print(f"[Customer/{persona}] 接續輪 {followup_round+1} 回覆: {reply2[:80]}", flush=True)

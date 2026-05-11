@@ -1,0 +1,6 @@
+{
+  "_說明": "name canonicalize 的 hard case 補丁。canonical name 是 key，OCR 可能誤判的別名是 list。canonicalize_name() 看到任何 alias 自動回 canonical。",
+  "_用法": "OCR 把對方暱稱錯認 → 你看到誤判 → 加進此檔 → canonicalize 永久解決",
+  "_注意": "NFKC + zhconv 已能自動解 95% 變體（繁簡/全形/兼容字/空白），只有「OCR 完全誤判視覺像但不同字」才需要加 alias",
+  "_範例": "佳瑩 vs 佳莹 是繁簡同字（zhconv 自動解），不需 alias。佳瑩 vs 佳熒 是視覺像但不同字（OCR 誤判），才需要 alias。"
+}

@@ -1,5 +1,13 @@
 {
   "persona": "Ruby",
-  "last_updated": "2026-05-07T21:08:27",
-  "customers": []
+  "last_updated": "2026-05-11T15:24:05",
+  "customers": [
+    {
+      "name": "佳瑩",
+      "first_seen": "2026-05-11T15:18:00",
+      "target_delay": 1055.39124649929,
+      "ready_at": "2026-05-11T15:35:35.391246",
+      "first_detected": "2026-05-11T15:24:05.583815"
+    }
+  ]
 }
