@@ -1006,13 +1006,18 @@ def send_image(image_path, regions):
     win32clipboard.CloseClipboard()
 
     # 點輸入框 → 貼上 → 發送
+    # safe_click：失敗自動 retry + 寫 click_failures.jsonl（業界 RPA 標準）
+    # 不 verify_region（input_box focus 視覺變化太細微，hash 比對不穩）
+    from 反詐_locate import safe_click
+    from datetime import datetime as _dt
     ix, iy = regions["input_box"]["center"]
-    pyautogui.click(ix, iy)
-    time.sleep(0.3)
+    action_id = f"send_image_click_{_dt.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    safe_click(ix, iy, verify_region=None, action_id=action_id, max_retries=2,
+                post_click_delay=0.3)
     pyautogui.hotkey("ctrl", "v")
-    time.sleep(1.0)
+    time.sleep(1.0)  # 等貼上完成（圖片較大，保留）
     pyautogui.press("enter")
-    time.sleep(1.5)
+    time.sleep(1.5)  # 等 LINE 完成圖片送出（保留）
 
     print(f"[Image] 已發送圖片: {os.path.basename(abs_path)}", flush=True)
     return True
@@ -1022,15 +1027,22 @@ def send_image(image_path, regions):
 # 發送訊息（點輸入框 → 打字 → Enter）
 # ============================================================
 def send_reply(msg, regions):
-    """發送一條訊息"""
+    """發送一條訊息
+
+    用 safe_click 點 input_box：retry + 失敗寫 log，但不 verify_region
+    （input_box focus 變化太細微，hash 比對不穩；用 retry 解 click 偶爾失敗即可）
+    """
+    from 反詐_locate import safe_click
+    from datetime import datetime as _dt
     ix, iy = regions["input_box"]["center"]
-    pyautogui.click(ix, iy)
-    time.sleep(0.3)
+    action_id = f"send_reply_click_{_dt.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    safe_click(ix, iy, verify_region=None, action_id=action_id, max_retries=2,
+                post_click_delay=0.3)
     pyperclip.copy(msg)
     pyautogui.hotkey("ctrl", "v")
-    time.sleep(0.3)
+    time.sleep(0.3)  # 等貼上（業界允許 < 500ms post-paste pause）
     pyautogui.press("enter")
-    time.sleep(0.5)
+    time.sleep(0.5)  # 等送出（業界允許 < 500ms post-send pause）
 
 
 def send_multi_reply(reply_text, regions):

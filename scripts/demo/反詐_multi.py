@@ -201,6 +201,9 @@ _WORLD_CONTEXT_CACHE = {}
 # 解 2026-05-11 bug：失敗時沒冷卻 → 19 分鐘 13 次重複觸發
 _LAST_PROACTIVE_ATTEMPT = {}  # {(persona, name): unix_ts}
 PROACTIVE_COOLDOWN_SEC = 1800  # 30 分鐘
+
+# Fuzzy match log 去重：同對話只 log 一次「沿用既有檔」訊息（避免主迴圈每輪都印）
+_FUZZY_MATCH_LOGGED = set()  # {(persona, name, file_path)}
 _WORLD_CONTEXT_TTL = 1800  # 30 分鐘
 
 
@@ -415,7 +418,11 @@ def _resolve_history_file(persona, name):
     # 遞迴掃該 persona 的所有子目錄
     for f in histories_root.rglob("*.txt"):
         if _normalize(f.stem) == target:
-            print(f"[history/{persona}] 模糊匹配：'{name}' → 沿用既有檔 '{f.relative_to(histories_root)}'", flush=True)
+            # 同對話只 log 一次（避免主迴圈每輪都印導致 log 爆炸）
+            log_key = (persona, name, str(f))
+            if log_key not in _FUZZY_MATCH_LOGGED:
+                _FUZZY_MATCH_LOGGED.add(log_key)
+                print(f"[history/{persona}] 模糊匹配：'{name}' → 沿用既有檔 '{f.relative_to(histories_root)}'", flush=True)
             return f
 
     # 找不到 → 用今日子目錄（建新檔）
@@ -569,7 +576,7 @@ def atomic_write_json(data, path):
     tmp = path.with_suffix(path.suffix + ".tmp")
     try:
         with io.open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2)  # noqa: atomic-write-internal
         os.replace(str(tmp), str(path))  # OS 保證原子操作
         return True
     except Exception as e:
