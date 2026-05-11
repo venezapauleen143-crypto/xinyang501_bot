@@ -196,6 +196,11 @@ sys.path.insert(0, "C:/Users/blue_/claude-telegram-bot")
 
 # 全域 context 快取（30 分鐘 TTL，避免每次對話都查 API）
 _WORLD_CONTEXT_CACHE = {}
+
+# Proactive 主動發訊息 cooldown：嘗試後（無論成功失敗）30 分鐘不再對同客戶觸發
+# 解 2026-05-11 bug：失敗時沒冷卻 → 19 分鐘 13 次重複觸發
+_LAST_PROACTIVE_ATTEMPT = {}  # {(persona, name): unix_ts}
+PROACTIVE_COOLDOWN_SEC = 1800  # 30 分鐘
 _WORLD_CONTEXT_TTL = 1800  # 30 分鐘
 
 
@@ -1412,6 +1417,13 @@ def _check_proactive_trigger(persona, name):
     if _is_quiet_hour():
         return False, "", "深夜時段"
 
+    # Cooldown：嘗試發過（無論成功失敗）30 分鐘內不再對同客戶觸發
+    key = (persona, name)
+    last_attempt = _LAST_PROACTIVE_ATTEMPT.get(key, 0)
+    elapsed = time.time() - last_attempt
+    if elapsed < PROACTIVE_COOLDOWN_SEC:
+        return False, "", f"cooldown（上次嘗試 {elapsed/60:.1f} 分鐘前）"
+
     last_msg_time = _get_last_message_time(persona, name)
     if last_msg_time is None:
         return False, "", "沒有歷史"
@@ -1479,7 +1491,7 @@ def _send_proactive_message(persona, name, message, monitor=None):
         if friend_pos is None:
             print(f"[Proactive] 找不到 {name}，跳過", flush=True)
             return False
-        regions = enter_chat_from_search(regions, friend_pos, monitor)
+        regions = enter_chat_from_search(friend_pos, regions, monitor)
         time.sleep(1)
 
         # 3. 模擬「思考延遲」（短一點，主動發應該比較快）
@@ -2649,10 +2661,14 @@ def main(stop_time, monitor=None):
                         if not should_send:
                             continue
                         print(f"[Proactive/{persona_name}] {cust_name} 觸發：{reason}", flush=True)
+                        # 嘗試前先記 timestamp（無論成功失敗都 cooldown 30 分鐘，避免重複）
+                        _LAST_PROACTIVE_ATTEMPT[(persona_name, cust_name)] = time.time()
                         ok = _send_proactive_message(persona_name, cust_name, msg, monitor)
                         if ok:
                             proactive_sent += 1
                             time.sleep(2)
+                        else:
+                            print(f"[Proactive/{persona_name}] {cust_name} 失敗，{PROACTIVE_COOLDOWN_SEC//60} 分鐘內不再嘗試", flush=True)
 
             except Exception as e:
                 print(f"[ERR] 排程器失敗: {e}", flush=True)
