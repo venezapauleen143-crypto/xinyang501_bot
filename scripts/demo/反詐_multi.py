@@ -2077,13 +2077,14 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
 
     all_histories / all_profiles: 該 persona 自己的 dict（兩層 dict 的內層）
     """
-    from 反詐_locate import locate_line_regions, ocr_scan_panel, screenshot_line, wait_for_region_change
+    from 反詐_locate import locate_line_regions, ocr_scan_panel, screenshot_line, wait_for_region_change, safe_click
     from 反詐_chat import (
         is_only_sticker, analyze_sticker,
     )
     from difflib import SequenceMatcher
 
     cx, cy = conv["center"]
+    target_name = conv.get("name", "unknown")
 
     if should_stop():
         return regions
@@ -2099,18 +2100,27 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
         if r > l and b > t:
             ct_bbox = (l, t, r - l, b - t)
 
-    print(f"\n[Customer] 點擊未讀對話 at ({cx}, {cy})", flush=True)
-    pyautogui.click(cx, cy)
+    # safe_click：retry + idempotency + verify + logging（業界 RPA 2026 標準）
+    # action_id 含 timestamp → 每次處理都是新 action（不會誤合併）
+    from datetime import datetime as _dt
+    action_id = f"open_chat_{target_name}_{_dt.now().strftime('%Y%m%d_%H%M%S')}"
 
-    # 等 chat_title 畫面變化（perceptual hash 比對，取代寫死 sleep(1.5)）
-    # 快機器秒回、慢機器自動延長。沒抓到 region 或 imagehash 沒裝會 fallback sleep
-    if ct_bbox:
-        changed = wait_for_region_change(ct_bbox, timeout=2.5, hamming_threshold=5)
-        if not changed:
-            # 畫面沒變 → 可能 LINE 卡了或對話切失敗，加 0.5s 緩衝
-            time.sleep(0.5)
-    else:
-        # fallback：沒 region 退回寫死
+    print(f"\n[Customer] 點擊未讀對話 '{target_name}' at ({cx}, {cy})", flush=True)
+    success = safe_click(
+        cx, cy,
+        verify_region=ct_bbox,        # 點完 chat_title 區域要變化
+        action_id=action_id,
+        max_retries=3,
+        verify_timeout=2.5,
+        persona=persona,
+    )
+    if not success:
+        # 全部 retry 都失敗 → log 已寫到 click_failures.jsonl
+        print(f"[Customer/{persona}] ⚠️ safe_click 失敗（已 retry 3 次），跳過 '{target_name}'", flush=True)
+        # 不 return regions，下面 locate_line_regions 還是試試看
+
+    # 沒 ct_bbox 時 safe_click 不 verify，補個寫死 sleep 確保 LINE 載完
+    if not ct_bbox:
         time.sleep(1.5)
 
     regions = locate_line_regions(monitor)

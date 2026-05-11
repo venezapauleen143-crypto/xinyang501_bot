@@ -8,7 +8,8 @@
     "gender": null,
     "marital_status": null,
     "personality_traits": [
-      "主動且熱情"
+      "主動且熱情",
+      "幽默感"
     ]
   },
   "shared_disclosures": [
@@ -31,6 +32,14 @@
     {
       "speaker": "them",
       "fact": "也剛下班"
+    },
+    {
+      "speaker": "them",
+      "fact": "傍晚時段問早安（可能在開玩笑或作息混亂）"
+    },
+    {
+      "speaker": "them",
+      "fact": "使用「測試」一詞"
     }
   ],
   "interests": [],
@@ -40,9 +49,10 @@
     "Day 1: 主動發起對話，表示想聊天",
     "Day 1: 對Ruby🧸的用語表達方式提出疑問",
     "Day 1: 詢問Ruby🧸下班狀態，展現關心",
-    "Day 1: 確認雙方同時下班，建立共同話題"
+    "Day 1: 確認雙方同時下班，建立共同話題",
+    "Day 1: 傍晚時段打招呼，顯示幽默互動風格"
   ],
-  "current_stage": "Day 1，初期寒暄階段。雙方確認皆為上班族且同時下班，話題逐漸升溫。Ruby🧸開始關心對方飲食狀況。信任度持續提升中。",
+  "current_stage": "Day 1，初期寒暄階段。雙方開始展現幽默互動，佳莹以「早安」調侃展現輕鬆氛圍。信任度持續提升中。",
   "topic_hooks_remaining": [
     "具體工作內容",
     "詳細作息時間",
@@ -53,6 +63,6 @@
   "trust_score": 7,
   "ai_suspicion_flags": [],
   "first_seen": "2026-05-07T16:43:31",
-  "last_updated": "2026-05-07T20:59:59",
-  "total_turns": 4
+  "last_updated": "2026-05-11T17:45:17",
+  "total_turns": 5
 }

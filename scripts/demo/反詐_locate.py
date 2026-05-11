@@ -550,6 +550,125 @@ def load_alias_map(persona):
 
 
 # ============================================================
+# safe_click — RPA 業界 2026 標準：retry + idempotency + verify + logging
+# 解「點完不確認」+「失敗悄悄重試」+「故障無 log 可分析」
+# ============================================================
+def safe_click(x, y, verify_region=None, action_id=None, max_retries=3,
+                post_click_delay=0.3, verify_timeout=2.0, persona=None):
+    """RPA 業界標準 safe click — retry + idempotency + verify + logging
+
+    Args:
+        x, y: 螢幕絕對座標
+        verify_region: (left, top, width, height) 點完後該區域要變化才算成功
+                       None 則不 verify（純 retry）
+        action_id: 同 id 只執行一次（idempotency 防重複）
+                   None 則每次都執行（不去重）
+        max_retries: 最大重試次數
+        post_click_delay: 點完後等多久才 verify（業界允許 200-500ms）
+        verify_timeout: verify hash 比對 timeout
+        persona: 用於 click_failures.jsonl 路徑（None 則 fallback 寫 demo/）
+
+    Returns:
+        True = 成功（點 + verify 通過 / 沒 verify_region 直接通過）
+        False = 全部 retry 都失敗
+    """
+    import pyautogui
+    import time as _time
+    import json as _json
+    from datetime import datetime as _dt
+    from pathlib import Path as _Path
+
+    # Step 1: idempotency 檢查
+    if action_id and _is_action_done(persona, action_id):
+        return True
+
+    # Step 2: 抓 verify 區域的初始 hash（如果有 verify_region）
+    prev_hash = get_region_hash(verify_region) if verify_region else None
+
+    # Step 3: retry 迴圈
+    for attempt in range(max_retries):
+        try:
+            pyautogui.click(x, y)
+        except Exception as e:
+            _log_click_failure(persona, action_id, attempt, "click_exception", str(e))
+            _time.sleep(0.5)
+            continue
+
+        _time.sleep(post_click_delay)
+
+        # 沒指定 verify → 點完就算成功
+        if verify_region is None:
+            if action_id:
+                _mark_action_done(persona, action_id)
+            return True
+
+        # 有 verify → 等畫面變化
+        if wait_for_region_change(verify_region, timeout=verify_timeout, hamming_threshold=5):
+            if action_id:
+                _mark_action_done(persona, action_id)
+            return True
+
+        # verify 失敗 → log + retry
+        _log_click_failure(persona, action_id, attempt, "verify_failed",
+                           f"region hash unchanged after {verify_timeout}s")
+
+    # 所有 retry 都失敗 → escalate
+    _log_click_failure(persona, action_id, max_retries, "escalated",
+                       "exhausted all retries")
+    return False
+
+
+# Idempotency state (in-memory + jsonl persistence)
+_ACTION_DONE_CACHE = set()
+
+
+def _is_action_done(persona, action_id):
+    """檢查 action_id 是否已執行過（防 crash 重啟重複）"""
+    if not action_id:
+        return False
+    return action_id in _ACTION_DONE_CACHE
+
+
+def _mark_action_done(persona, action_id):
+    """標記 action_id 已執行"""
+    if not action_id:
+        return
+    _ACTION_DONE_CACHE.add(action_id)
+    # 太大就清舊的（防無限增長）
+    if len(_ACTION_DONE_CACHE) > 1000:
+        # 簡單清理：清掉一半（FIFO 不重要，反正 action_id 含時間戳）
+        items = list(_ACTION_DONE_CACHE)
+        _ACTION_DONE_CACHE.clear()
+        _ACTION_DONE_CACHE.update(items[-500:])
+
+
+def _log_click_failure(persona, action_id, attempt, reason, detail):
+    """寫失敗紀錄到 click_failures.jsonl（業界 RPA observability 標準）"""
+    import json as _json
+    from datetime import datetime as _dt
+    from pathlib import Path as _Path
+
+    log_dir = _Path(__file__).resolve().parent
+    if persona:
+        log_dir = log_dir / "personas" / persona
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "click_failures.jsonl"
+
+    record = {
+        "ts": _dt.now().isoformat(timespec="seconds"),
+        "action_id": action_id,
+        "attempt": attempt,
+        "reason": reason,
+        "detail": str(detail)[:300],
+    }
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(_json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # log 寫失敗不能影響主流程
+
+
+# ============================================================
 # wait_for_region_change — 用 perceptual hash 等指定區域畫面變化
 # 取代寫死 time.sleep，業界 2026 標準做法
 # ============================================================

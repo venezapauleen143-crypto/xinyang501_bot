@@ -1,0 +1,2 @@
+{"ts": "2026-05-11T17:45:41", "action_id": "test_fail_1", "attempt": 0, "reason": "verify_failed", "detail": "test detail"}
+{"ts": "2026-05-11T17:45:41", "action_id": "test_fail_1", "attempt": 1, "reason": "verify_failed", "detail": "test detail 2"}

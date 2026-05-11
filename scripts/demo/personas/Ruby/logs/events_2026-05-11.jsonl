@@ -1,1 +1,5 @@
 {"ts": "2026-05-11T15:23:24", "persona": "Ruby", "type": "customer_seen", "customer": "仁輝JAMES", "data": {"prior_history_len": 20}}
+{"ts": "2026-05-11T17:44:43", "persona": "Ruby", "type": "customer_seen", "customer": "佳莹", "data": {"prior_history_len": 18}}
+{"ts": "2026-05-11T17:45:00", "persona": "Ruby", "type": "new_messages", "customer": "佳莹", "data": {"new_them_count": 2, "day_n": 5}}
+{"ts": "2026-05-11T17:45:12", "persona": "Ruby", "type": "reply_sent", "customer": "佳莹", "data": {"reply_len": 33, "segments": 2, "day_n": 5}}
+{"ts": "2026-05-11T17:45:17", "persona": "Ruby", "type": "profile_updated", "customer": "佳莹", "data": {"disclosures": 7, "action": "增量更新"}}
