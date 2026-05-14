@@ -3,3 +3,7 @@
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 72h 沒互動 (current_day=1)", "ts": "2026-05-14T17:17:15.072969", "fp": "4fc303986d4b"}
 {"level": "critical", "rule": "persona_no_profile", "persona": "Angela", "msg": "Angela 0 個 profile（persona dir 存在但無客戶資料，可能未啟動或全部誤排除）", "ts": "2026-05-14T17:17:15.072969", "fp": "d5fcf4fc18f0"}
 {"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 71.3 小時沒 heartbeat", "ts": "2026-05-14T17:19:21.833746", "fp": "fc2bef51ccf8"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 71.8 小時沒 heartbeat", "ts": "2026-05-14T17:49:22.563043", "fp": "7ce676b87866"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "仁輝JAMES", "msg": "仁輝JAMES 已 165h 沒互動 (current_day=1)", "ts": "2026-05-14T17:49:22.563043", "fp": "ff7a33d9b11b"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 72.3 小時沒 heartbeat", "ts": "2026-05-14T18:19:21.598770", "fp": "fc5073533f49"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 73h 沒互動 (current_day=1)", "ts": "2026-05-14T18:19:21.598770", "fp": "4b58dc3b331f"}
