@@ -13,3 +13,7 @@
 {"level": "warning", "rule": "click_failures_high", "persona": "Ruby", "msg": "Ruby click_failures 累計 34 (>10)", "ts": "2026-05-14T19:49:21.599005", "fp": "1d647033febc"}
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 75h 沒互動 (current_day=1)", "ts": "2026-05-14T20:19:21.636691", "fp": "b8330db57c54"}
 {"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 1.2 小時沒 heartbeat", "ts": "2026-05-14T20:49:21.600845", "fp": "3556883ed647"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 1.7 小時沒 heartbeat", "ts": "2026-05-14T21:19:21.589866", "fp": "d59bd4eacf4b"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 76h 沒互動 (current_day=1)", "ts": "2026-05-14T21:19:21.589866", "fp": "5397608463ef"}
+{"level": "critical", "rule": "persona_no_profile", "persona": "Angela", "msg": "Angela 0 個 profile（persona dir 存在但無客戶資料，可能未啟動或全部誤排除）", "ts": "2026-05-14T21:19:21.589866", "fp": "d5fcf4fc18f0"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 2.2 小時沒 heartbeat", "ts": "2026-05-14T21:49:21.607282", "fp": "2119ebbf3265"}
