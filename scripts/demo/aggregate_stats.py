@@ -8,16 +8,29 @@
     python aggregate_stats.py --persona Angela   # 只跑 Angela
 """
 import io
+import sys
 import json
 import csv
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from collections import defaultdict
+
+# 防 Windows GBK 終端機 print emoji 炸 UnicodeEncodeError
+if __name__ == "__main__" and sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PERSONAS_DIR = SCRIPT_DIR / "personas"
 GLOBAL_LOGS_DIR = SCRIPT_DIR / "logs"
+
+# Rule 4 — 階梯式 milestones 最低期望（依 Ruby 14 天前置 stage 設計）
+# 階段：Day 1-2 認識 / Day 3-5 熟悉 / Day 6-12 信任 / Day 13-14 邊界
+DEFAULT_STAGE_MIN_MILESTONES = {3: 1, 5: 3, 7: 5, 10: 8, 13: 11, 14: 12}
+STAGE_MIN_MILESTONES_BY_PERSONA = {
+    "Ruby": {3: 1, 5: 3, 7: 5, 10: 8, 13: 11, 14: 12},
+}
 
 
 def list_all_personas():
@@ -262,15 +275,21 @@ def _detect_customer_alerts(persona, profile, profile_path):
         except Exception:
             pass
 
-    # Rule 4: Day stagnation (milestones 數量 vs current_day 比例)
+    # Rule 4: Day stagnation — config-driven 對應 Ruby 14 天前置 stage 設計
+    # Why: 原 current_day*2*0.5 = current_day 寫死，跟 Day 1-2 認識 / Day 3-5 熟悉 / Day 6-13 信任 / Day 13-14 邊界 階段不符
+    STAGE_MIN_MILESTONES = STAGE_MIN_MILESTONES_BY_PERSONA.get(persona, DEFAULT_STAGE_MIN_MILESTONES)
     if current_day is not None and current_day >= 3:
         milestones = profile.get("milestones") or []
-        expected = current_day * 2
-        if len(milestones) < expected * 0.5:
+        # 找 ≤current_day 的最大 key 對應 min（階梯式）
+        min_expected = 0
+        for d in sorted(STAGE_MIN_MILESTONES):
+            if d <= current_day:
+                min_expected = STAGE_MIN_MILESTONES[d]
+        if len(milestones) < min_expected:
             alerts.append({
                 "level": "warning", "rule": "day_stagnation",
                 "persona": persona, "customer": name,
-                "msg": f"{name} Day={current_day} 但只有 {len(milestones)} milestones (期望 ≥ {int(expected*0.5)})",
+                "msg": f"{name} Day={current_day} 但只有 {len(milestones)} milestones (期望 ≥ {min_expected})",
             })
 
     # Rule 5: Trust progression (Day >= 13 but trust_score < 6)
@@ -286,23 +305,85 @@ def _detect_customer_alerts(persona, profile, profile_path):
 
 
 def _compare_personas(profiles_by_persona):
-    """Rule 6: cross-persona imbalance"""
+    """Rule 6: cross-persona imbalance + persona 0-profile critical"""
     alerts = []
     counts = {p: len(profs) for p, profs in profiles_by_persona.items()}
-    if len(counts) < 2:
+
+    # 🔴 補上 dir 存在但沒 profile 的 persona（原邏輯 silent skip 看不到 Angela 啞掉）
+    for p in list_all_personas():
+        if p not in counts:
+            counts[p] = 0
+
+    # 🔴 C-3: 任何 persona dir 存在但 profile=0 → critical（從 silent skip 改 emit）
+    for p, n in counts.items():
+        if n == 0:
+            alerts.append({
+                "level": "critical", "rule": "persona_no_profile",
+                "persona": p,
+                "msg": f"{p} 0 個 profile（persona dir 存在但無客戶資料，可能未啟動或全部誤排除）",
+            })
+
+    nonzero = {p: n for p, n in counts.items() if n > 0}
+    if len(nonzero) < 2:
         return alerts
-    max_p = max(counts, key=counts.get)
-    min_p = min(counts, key=counts.get)
-    if counts[min_p] > 0 and counts[max_p] / counts[min_p] > 3:
+    max_p = max(nonzero, key=nonzero.get)
+    min_p = min(nonzero, key=nonzero.get)
+    if nonzero[max_p] / nonzero[min_p] > 3:
         alerts.append({
             "level": "warning", "rule": "persona_imbalance",
-            "msg": f"persona 客戶數失衡：{max_p}={counts[max_p]} vs {min_p}={counts[min_p]} (>3:1)",
+            "msg": f"persona 客戶數失衡：{max_p}={nonzero[max_p]} vs {min_p}={nonzero[min_p]} (>3:1)",
         })
     return alerts
 
 
+def _alert_fingerprint(a):
+    """穩定 fingerprint：level + rule + persona + customer + msg"""
+    import hashlib
+    key = "|".join([
+        str(a.get("level", "")),
+        str(a.get("rule", "")),
+        str(a.get("persona", "")),
+        str(a.get("customer", "")),
+        str(a.get("msg", "")),
+    ])
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+
+
+def _load_recent_fingerprints(out_path, window_hours=4):
+    """讀過去 N 小時 alerts.jsonl 內的 fingerprint set（dedup 用）"""
+    if not out_path or not Path(out_path).exists():
+        return set()
+    cutoff = datetime.now() - timedelta(hours=window_hours)
+    seen = set()
+    try:
+        with io.open(out_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    rec_ts = rec.get("ts", "")
+                    if not rec_ts:
+                        continue
+                    try:
+                        rec_dt = datetime.fromisoformat(rec_ts)
+                    except ValueError:
+                        continue
+                    if rec_dt < cutoff:
+                        continue
+                    fp = rec.get("fp") or _alert_fingerprint(rec)
+                    seen.add(fp)
+                except json.JSONDecodeError:
+                    continue
+    except Exception as e:
+        print(f"  [dedup] 讀過去 alerts 失敗（跳過 dedup）：{e}")
+        return set()
+    return seen
+
+
 def export_alerts(all_profiles_with_persona, out_path):
-    """整合 Rule 1-6 寫 alerts JSONL"""
+    """整合 Rule 1-6 寫 alerts JSONL（含 4 小時 fingerprint dedup）"""
     all_alerts = []
 
     profiles_by_persona = defaultdict(list)
@@ -321,16 +402,31 @@ def export_alerts(all_profiles_with_persona, out_path):
         print("  ✓ 無 alert（demo 健康）")
         return None
 
+    # 🔴 Dedup: schtasks 30 分鐘跑一次，持續問題 4 小時內不重複（first-occurrence 立即報）
+    seen_fps = _load_recent_fingerprints(out_path, window_hours=4)
     ts = datetime.now().isoformat()
+    fresh_alerts = []
+    dup_count = 0
     for a in all_alerts:
+        fp = _alert_fingerprint(a)
+        if fp in seen_fps:
+            dup_count += 1
+            continue
         a["ts"] = ts
+        a["fp"] = fp
+        fresh_alerts.append(a)
+        seen_fps.add(fp)  # 防同次 run 內重複
+
+    if not fresh_alerts:
+        print(f"  ✓ {len(all_alerts)} alerts 全為 4 小時內重複（dedup 抑制）")
+        return None
 
     with io.open(out_path, "a", encoding="utf-8") as f:
-        for a in all_alerts:
+        for a in fresh_alerts:
             f.write(json.dumps(a, ensure_ascii=False) + "\n")
 
-    print(f"\n  ⚠ {len(all_alerts)} alerts 觸發：")
-    for a in all_alerts:
+    print(f"\n  ⚠ {len(fresh_alerts)} 新 alerts 觸發（{dup_count} 個被 dedup 抑制）：")
+    for a in fresh_alerts:
         lvl = a["level"].upper()
         print(f"    [{lvl}] [{a['rule']}] {a['msg']}")
 

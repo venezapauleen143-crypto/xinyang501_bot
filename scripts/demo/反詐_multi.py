@@ -182,8 +182,10 @@ def get_persona_for_sandbox(sandbox: str) -> str:
     return DEFAULT_PERSONA
 
 
-# 確保所有 active persona 的目錄都存在
-for _p in PERSONA_CONFIG:
+# 確保所有 active persona 的目錄都存在（C-7: 跳過 inactive，避免 Angela=False 也建空目錄）
+for _p, _cfg in PERSONA_CONFIG.items():
+    if not _cfg.get("active", True):
+        continue
     persona_root(_p)
     persona_histories_dir(_p)
     persona_images_dir(_p)
@@ -555,28 +557,27 @@ def _load_profile(persona, name):
 
 
 def _save_profile(persona, name, profile):
-    """存 profile.json"""
+    """存 profile.json — D-1: 改 atomic write 防斷電/crash 半寫入毀壞"""
     path = _resolve_profile_file(persona, name)
-    try:
-        with io.open(path, "w", encoding="utf-8") as f:
-            json.dump(profile, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        print(f"[profile/{persona}] 寫入 {path.name} 失敗：{e}", flush=True)
+    if not atomic_write_json(profile, path):
+        print(f"[profile/{persona}] 寫入 {path.name} 失敗", flush=True)
         return False
+    return True
 
 
 # ============================================================
 # Atomic write helper（避免 .json 半寫壞）
 # ============================================================
 def atomic_write_json(data, path):
-    """先寫 .tmp → os.replace 原子 rename，crash 也不會毀壞原檔"""
+    """先寫 .tmp → fsync → os.replace 原子 rename，crash/斷電也不會毀壞原檔（D-1）"""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     try:
         with io.open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)  # noqa: atomic-write-internal
+            f.flush()
+            os.fsync(f.fileno())  # 強制落地磁碟，避免 OS buffer 未刷
         os.replace(str(tmp), str(path))  # OS 保證原子操作
         return True
     except Exception as e:
@@ -986,6 +987,8 @@ _PROFILE_TASK_QUEUE = _queue_mod.Queue(maxsize=200)
 _PROFILE_WORKER_COUNT = 2
 _PROFILE_WORKER_STARTED = False
 _PROFILE_WORKER_LOCK = _threading.Lock()
+# Why: 2 worker + main loop 並發讀寫 all_profiles[persona] dict，status snapshot iterate 時 worker 寫入會 RuntimeError；GIL 只保證 single op atomic，RMW 必須 lock
+_PROFILE_DICT_LOCK = _threading.RLock()
 
 
 def _profile_worker_loop():
@@ -1006,7 +1009,8 @@ def _profile_worker_loop():
         all_profiles_ref = task["all_profiles"]  # 已經是該 persona 的 dict
 
         try:
-            current_profile = all_profiles_ref.get(name)
+            with _PROFILE_DICT_LOCK:
+                current_profile = all_profiles_ref.get(name)
 
             if current_profile:
                 # 已有 profile → 增量更新
@@ -1024,7 +1028,8 @@ def _profile_worker_loop():
                 continue
 
             if updated:
-                all_profiles_ref[name] = updated
+                with _PROFILE_DICT_LOCK:
+                    all_profiles_ref[name] = updated
                 _save_profile(persona, name, updated)
                 disc_n = len((updated.get("shared_disclosures") or []))
                 print(f"[profile-worker/{persona}] {name} {action}完成（{disc_n} 筆 disclosures）", flush=True)
@@ -1583,24 +1588,37 @@ def _today_date_header():
     return f"{now.strftime('%Y.%m.%d')} {_WEEKDAY_TW[now.weekday()]}"
 
 
+# C-6: cache 每個 (persona, name) 的最後 date header，避免每次 append 都 read 整檔
+_LAST_DATE_HEADER_CACHE = {}
+_LAST_DATE_HEADER_LOCK = _threading.Lock()
+
+
 def _append_to_history_file(persona, name, sender, text):
     """即時把一條訊息 append 到觀眾的 .txt（LINE 匯出格式）"""
     path = _resolve_history_file(persona, name)
     nickname = persona_nickname(persona) if sender == "me" else name
     timestamp = datetime.now().strftime("%H:%M")
     today_header = _today_date_header()
+    cache_key = (persona, str(path))
 
     try:
-        # 檢查是否需要加日期分隔行
         new_file = not path.exists()
         need_date_header = new_file
+
+        with _LAST_DATE_HEADER_LOCK:
+            cached_header = _LAST_DATE_HEADER_CACHE.get(cache_key)
+
         if not new_file:
-            # 讀檔末看最後的日期分隔，跟今天比
-            with io.open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-            # 找最後一個日期行
-            date_lines = re.findall(r'^\d{4}\.\d{2}\.\d{2}\s*星期.', content, re.MULTILINE)
-            if not date_lines or date_lines[-1] != today_header:
+            if cached_header is None:
+                # cache miss → read 整檔取最後 date header（per-customer 一次性成本）
+                with io.open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                date_lines = re.findall(r'^\d{4}\.\d{2}\.\d{2}\s*星期.', content, re.MULTILINE)
+                cached_header = date_lines[-1] if date_lines else None
+                if cached_header:
+                    with _LAST_DATE_HEADER_LOCK:
+                        _LAST_DATE_HEADER_CACHE[cache_key] = cached_header
+            if cached_header != today_header:
                 need_date_header = True
 
         with io.open(path, "a", encoding="utf-8") as f:
@@ -1609,6 +1627,10 @@ def _append_to_history_file(persona, name, sender, text):
                     f.write("\n")  # 跨日空行分隔
                 f.write(f"{today_header}\n")
             f.write(f"{timestamp} {nickname} {text}\n")
+
+        # 寫成功後更新 cache（跨日後第一次 append 也會更新成今日 header）
+        with _LAST_DATE_HEADER_LOCK:
+            _LAST_DATE_HEADER_CACHE[cache_key] = today_header
     except Exception as e:
         print(f"[history/{persona}] 寫入 {path.name} 失敗：{e}", flush=True)
 
@@ -1783,10 +1805,12 @@ _should_stop = False
 def _signal_handler(signum, frame):
     global _should_stop
     _should_stop = True
-    print(f"\n[STOP] 收到信號 {signum}，準備停止（drain queue 後）...", flush=True)
-    _graceful_shutdown()
+    print(f"\n[STOP] 收到信號 {signum}，主迴圈將跳出（atexit 接手 drain）...", flush=True)
+    # Why: signal handler 內不做 blocking I/O（業界 best practice），drain 留給 atexit.register(_graceful_shutdown) 兜底
 
 signal.signal(signal.SIGINT, _signal_handler)
+# Windows 沒原生 SIGTERM 但 Python 模擬，schtasks /End 走 WM_CLOSE 不會觸發；Linux 才實用
+signal.signal(signal.SIGTERM, _signal_handler)
 if hasattr(signal, "SIGBREAK"):
     signal.signal(signal.SIGBREAK, _signal_handler)
 
@@ -2424,28 +2448,41 @@ def main(stop_time, monitor=None):
     print("=" * 50, flush=True)
 
     # 🔴 啟動前自動跑 audit（找 persona 隔離 violation，有 P0 拒絕啟動）
-    try:
-        import subprocess as _sp
-        audit_script = Path("C:/Users/blue_/.claude/scripts/audit/audit.py")
-        if audit_script.exists():
-            print("\n[Audit] 啟動前 persona 隔離稽核...", flush=True)
-            r = _sp.run(
-                [sys.executable, str(audit_script), "--config", "反詐demo_persona"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=30,
-            )
-            if r.returncode == 0:
-                print("[Audit] ✅ 0 P0 violation，啟動", flush=True)
-            else:
-                print(r.stdout, flush=True)
-                print("\n[Audit] ❌ 偵測到 P0 violation，拒絕啟動。請先修 violation。", flush=True)
-                print("[Audit] 跳過 audit 啟動：python 反詐_multi.py <time> --skip-audit", flush=True)
-                if "--skip-audit" not in sys.argv:
-                    return False
+    # C-5: 加 retry — transient timeout/IO 失敗不該讓 14 天連跑掉一天，但 returncode != 0 (P0 found) 仍拒絕啟動
+    import subprocess as _sp
+    audit_script = Path("C:/Users/blue_/.claude/scripts/audit/audit.py")
+    if audit_script.exists():
+        print("\n[Audit] 啟動前 persona 隔離稽核...", flush=True)
+        r = None
+        for attempt in range(3):
+            try:
+                r = _sp.run(
+                    [sys.executable, str(audit_script), "--config", "反詐demo_persona"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    timeout=30,
+                )
+                break  # 取得 result（無論 returncode 為何）
+            except (_sp.TimeoutExpired, OSError) as e:
+                wait = 2 ** attempt
+                print(f"[Audit] ⚠️ 第 {attempt+1}/3 次嘗試失敗 ({type(e).__name__})，{wait}s 後重試", flush=True)
+                time.sleep(wait)
+            except Exception as e:
+                print(f"[Audit] ⚠️ audit 跑失敗（非 transient）: {e}（跳過繼續啟動）", flush=True)
+                r = None
+                break
+
+        if r is None:
+            print("[Audit] ⚠️ 3 次 retry 後仍失敗（跳過繼續啟動，避免 14 天連跑斷天）", flush=True)
+        elif r.returncode == 0:
+            print("[Audit] ✅ 0 P0 violation，啟動", flush=True)
         else:
-            print(f"[Audit] ⚠️ audit script 不存在（{audit_script}），跳過稽核", flush=True)
-    except Exception as e:
-        print(f"[Audit] ⚠️ audit 跑失敗: {e}（跳過繼續啟動）", flush=True)
+            print(r.stdout, flush=True)
+            print("\n[Audit] ❌ 偵測到 P0 violation，拒絕啟動。請先修 violation。", flush=True)
+            print("[Audit] 跳過 audit 啟動：python 反詐_multi.py <time> --skip-audit", flush=True)
+            if "--skip-audit" not in sys.argv:
+                return False
+    else:
+        print(f"[Audit] ⚠️ audit script 不存在（{audit_script}），跳過稽核", flush=True)
 
     # 載入時段延遲設定
     _load_time_settings(TIME_SETTINGS_PATH)
@@ -2499,7 +2536,8 @@ def main(stop_time, monitor=None):
     import win32gui as _w32g
 
     # 🔴 GPU 記憶體週期釋放（每 GPU_CLEAN_INTERVAL 個主迴圈跑一次）
-    GPU_CLEAN_INTERVAL = 50  # ~ 50 × 10 秒 POLL = 約每 8 分鐘清一次
+    # Why: 從 50 縮到 30，配合 paddle 3.x leak 行為（每 50 OCR call 後 idle pool 顯著膨脹）；30 loop ≈ ~200 OCR call ≈ 5 分鐘
+    GPU_CLEAN_INTERVAL = 30
     STATUS_PRINT_INTERVAL = 6  # ~ 6 × 10 秒 = 約每 1 分鐘印 status
     _loop_counter = 0
 
@@ -2573,9 +2611,16 @@ def main(stop_time, monitor=None):
                 time.sleep(2)
 
         # ② 處理 ready 的 customer（用 name 找對話框 + backpressure）
+        # 🔴 Batch wall-clock budget：5 分鐘上限，避免單一 batch 卡死整個 scheduler（A2 已給 LLM 加 120s timeout，最壞 4min/customer，5min batch 至少跑 1 個）
         ready = _PENDING_SCHEDULER.get_ready()
+        _batch_start = time.monotonic()
+        _BATCH_BUDGET_SEC = 300
+        _batch_processed = 0
         for key, state in ready:
             if should_stop():
+                break
+            if time.monotonic() - _batch_start > _BATCH_BUDGET_SEC:
+                print(f"[Sched] batch 超過 {_BATCH_BUDGET_SEC}s（已處理 {_batch_processed}/{len(ready)}），跳出讓主 loop 重排剩 {len(ready)-_batch_processed} 個", flush=True)
                 break
             persona_name = state["persona"]
             target_name = state["name"]
@@ -2593,12 +2638,16 @@ def main(stop_time, monitor=None):
                 sandbox = PERSONA_CONFIG[persona_name]["sandbox"]
                 set_active_box(sandbox)
                 line = find_line_window()
-                if line:
-                    try:
-                        _w32g.SetForegroundWindow(line[0])
-                    except Exception:
-                        pass
-                    time.sleep(0.5)
+                # C-9: hwnd validity check，避免 stale handle 點空（LINE 視窗 minimize/close）
+                if not line or not win32gui.IsWindow(line[0]):
+                    print(f"[Sched/{persona_name}] LINE 視窗 handle 失效，跳過 '{target_name}' 等下輪重抓", flush=True)
+                    _PENDING_SCHEDULER.remove(key)
+                    continue
+                try:
+                    _w32g.SetForegroundWindow(line[0])
+                except Exception:
+                    pass
+                time.sleep(0.5)
 
                 # 重新掃 LINE，用 name 找對應對話框
                 regions, enriched_unread = find_unread_with_metadata(monitor)
@@ -2624,13 +2673,13 @@ def main(stop_time, monitor=None):
                 time.sleep(0.5)
                 _PENDING_SCHEDULER.remove(key)
                 _LAST_REPLY_TS = time.monotonic()
+                _batch_processed += 1
             except Exception as e:
                 print(f"[ERR/{persona_name}] 處理 '{target_name}' 失敗: {e}", flush=True)
                 import traceback
                 traceback.print_exc()
-                _PENDING_SCHEDULER.remove(key)
+                _PENDING_SCHEDULER.remove(key)  # 失敗就清掉避免卡住（remove 是幂等，不再二次呼叫）
                 time.sleep(2)
-                _PENDING_SCHEDULER.remove(key)  # 失敗也要清掉避免卡住
 
         # ③ TTL 清理：超過 target_delay × 5 還沒處理 → 對方應該封鎖/刪聊天
         _PENDING_SCHEDULER.cleanup_expired(ttl_factor=5)
@@ -2689,12 +2738,14 @@ def main(stop_time, monitor=None):
                 queue_n = _PROFILE_TASK_QUEUE.qsize() if _PROFILE_WORKER_STARTED else 0
                 lines = [f"[Status] global queue={queue_n}"]
                 for persona_name in get_active_personas():
-                    p_hist = all_histories.get(persona_name) or {}
-                    p_prof = all_profiles.get(persona_name) or {}
-                    active_n = len(p_hist)
-                    profile_n = sum(1 for v in p_prof.values() if v)
+                    # 🔴 snapshot 避免 iterate during write 撞 worker RuntimeError
+                    with _PROFILE_DICT_LOCK:
+                        p_hist_keys = list((all_histories.get(persona_name) or {}).keys())
+                        p_prof_values = list((all_profiles.get(persona_name) or {}).values())
+                    active_n = len(p_hist_keys)
+                    profile_n = sum(1 for v in p_prof_values if v)
                     day_dist = {}
-                    for cn in p_hist:
+                    for cn in p_hist_keys:
                         try:
                             dn = _calculate_day_n(persona_name, cn)
                             day_dist[dn] = day_dist.get(dn, 0) + 1
@@ -2702,7 +2753,7 @@ def main(stop_time, monitor=None):
                             continue
                     susp_n = sum(
                         len((v.get("ai_suspicion_flags") or []))
-                        for v in p_prof.values() if v
+                        for v in p_prof_values if v
                     )
                     day_str = " ".join(f"day{d}:{n}" for d, n in sorted(day_dist.items()))
                     lines.append(f"  {persona_name}: active={active_n} profile={profile_n} suspicion={susp_n} | {day_str}")
@@ -2711,9 +2762,11 @@ def main(stop_time, monitor=None):
                 print(f"[Status] 失敗：{e}", flush=True)
 
         # 🔴 GPU 記憶體週期釋放（避免 PaddleOCR 長時間 leak）
+        # 業界 best practice: del → gc.collect → empty_cache 三連，cycle ref 要兩輪 collect 才能完全釋放
         if _loop_counter % GPU_CLEAN_INTERVAL == 0:
             try:
                 gc.collect()
+                gc.collect()  # 第二輪解 cycle reference
                 import paddle
                 paddle.device.cuda.empty_cache()
                 print(f"[GPU] 週期釋放（loop #{_loop_counter}）", flush=True)

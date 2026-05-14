@@ -85,13 +85,18 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 import anthropic
+import httpx
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR.parent))
 
 load_dotenv(Path("C:/Users/blue_/claude-telegram-bot/.env"))
-client = anthropic.Anthropic()
+# Why: SDK 預設 10 min timeout 在網路抖動時會把整個 scheduler 卡死；SDK 內建 2 次重試已足夠，禁止外層再 retry（會堆疊成 10+ 分鐘）
+client = anthropic.Anthropic(
+    timeout=httpx.Timeout(120.0, connect=5.0, read=120.0, write=10.0),
+    max_retries=2,
+)
 TMPDIR = "C:/Users/blue_/Desktop/測試檔案"
 DEFAULT_SOP = "C:/Users/blue_/claude-telegram-bot/scripts/line_sop/織夢小棧.json"
 
@@ -932,6 +937,8 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
     for block in r.content:
         if getattr(block, "type", None) == "text":
             return _to_taiwan(block.text.strip())
+    # 🔴 C-4: 5 輪 tool use 後仍無 text block → 顯式 warning（原本 silent return "" 看不見）
+    print(f"[generate_reply] ⚠️ 5 輪 tool use 後仍無 text block，跳過此次回覆（possibly tool_use loop runaway）", flush=True)
     return ""
 
 

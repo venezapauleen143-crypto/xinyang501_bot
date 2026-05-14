@@ -619,27 +619,33 @@ def safe_click(x, y, verify_region=None, action_id=None, max_retries=3,
 
 
 # Idempotency state (in-memory + jsonl persistence)
+# Why: 多 persona 共用 set，scheduler 跟 worker 可能同時 `if x not in s: s.add(x)` 形成 race；GIL 只保證 single op atomic
+import threading as _threading
+
 _ACTION_DONE_CACHE = set()
+_ACTION_DONE_LOCK = _threading.Lock()
 
 
 def _is_action_done(persona, action_id):
     """檢查 action_id 是否已執行過（防 crash 重啟重複）"""
     if not action_id:
         return False
-    return action_id in _ACTION_DONE_CACHE
+    with _ACTION_DONE_LOCK:
+        return action_id in _ACTION_DONE_CACHE
 
 
 def _mark_action_done(persona, action_id):
     """標記 action_id 已執行"""
     if not action_id:
         return
-    _ACTION_DONE_CACHE.add(action_id)
-    # 太大就清舊的（防無限增長）
-    if len(_ACTION_DONE_CACHE) > 1000:
-        # 簡單清理：清掉一半（FIFO 不重要，反正 action_id 含時間戳）
-        items = list(_ACTION_DONE_CACHE)
-        _ACTION_DONE_CACHE.clear()
-        _ACTION_DONE_CACHE.update(items[-500:])
+    with _ACTION_DONE_LOCK:
+        _ACTION_DONE_CACHE.add(action_id)
+        # 太大就清舊的（防無限增長）
+        if len(_ACTION_DONE_CACHE) > 1000:
+            # 簡單清理：清掉一半（FIFO 不重要，反正 action_id 含時間戳）
+            items = list(_ACTION_DONE_CACHE)
+            _ACTION_DONE_CACHE.clear()
+            _ACTION_DONE_CACHE.update(items[-500:])
 
 
 def _log_click_failure(persona, action_id, attempt, reason, detail):
