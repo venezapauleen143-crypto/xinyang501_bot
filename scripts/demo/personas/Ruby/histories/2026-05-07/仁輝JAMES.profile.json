@@ -8,7 +8,12 @@
     "gender": null,
     "marital_status": null,
     "personality_traits": [
-      "關心他人"
+      "關心他人",
+      "對飲食品質有要求",
+      "務實行動派",
+      "關心他人健康",
+      "有飲食偏好",
+      "容易偷懶"
     ]
   },
   "shared_disclosures": [
@@ -67,9 +72,175 @@
     {
       "speaker": "Ruby",
       "fact": "反問對方是否下班了"
+    },
+    {
+      "speaker": "them",
+      "fact": "向Ruby問候現在在幹嘛"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "在等等找東西吃"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "反問對方是否決定要吃什麼"
+    },
+    {
+      "speaker": "them",
+      "fact": "還沒決定要吃什麼"
+    },
+    {
+      "speaker": "them",
+      "fact": "不知道要吃什麼"
+    },
+    {
+      "speaker": "them",
+      "fact": "詢問Ruby要吃什麼"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "傾向叫外送"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "也在猶豫吃什麼"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "詢問對方那邊有什麼好吃的可以選"
+    },
+    {
+      "speaker": "them",
+      "fact": "所在地區沒什麼好吃的"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "建議對方叫外送"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "也在考慮叫外送"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "也不知道要吃什麼"
+    },
+    {
+      "speaker": "them",
+      "fact": "不太喜歡叫外送"
+    },
+    {
+      "speaker": "them",
+      "fact": "認為很多外送圖文不符"
+    },
+    {
+      "speaker": "them",
+      "fact": "對外送費用感到昂貴"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "同意外送費超貴"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "抱怨外送到手都涼了"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "詢問對方是否出去找吃的或湊合一下"
+    },
+    {
+      "speaker": "them",
+      "fact": "決定出去簡單處理一下飲食"
+    },
+    {
+      "speaker": "them",
+      "fact": "認為外送可能選一個小時還沒結果"
+    },
+    {
+      "speaker": "them",
+      "fact": "詢問Ruby是否決定外送要吃什麼"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "認同出去吃比較快"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "同意外送選到天荒地老還不一定好吃"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "還沒決定外送吃什麼"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "可能隨便吃泡麵算了"
+    },
+    {
+      "speaker": "them",
+      "fact": "認為吃泡麵不健康"
+    },
+    {
+      "speaker": "them",
+      "fact": "詢問Ruby是否經常吃泡麵"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "只是偶爾吃泡麵"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "懶得動的時候才吃泡麵"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "反問對方是否已經出去吃了"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "詢問對方找到什麼吃的"
+    },
+    {
+      "speaker": "them",
+      "fact": "煮泡麵時一定要加兩顆蛋"
+    },
+    {
+      "speaker": "them",
+      "fact": "認為加雙蛋會讓泡麵變好吃"
+    },
+    {
+      "speaker": "them",
+      "fact": "還在偷懶，還沒出去找東西吃"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "泡麵也會加蛋"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "有時候在泡麵裡加起司"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "催促對方快去找東西吃，已經快7點半"
+    },
+    {
+      "speaker": "them",
+      "fact": "承認自己也是會偷懶（回應Ruby說他也會偷懶）"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "表示自己可以叫外送"
+    },
+    {
+      "speaker": "Ruby",
+      "fact": "強調對方不一樣，對方要自己出去走"
     }
   ],
-  "interests": [],
+  "interests": [
+    "飲食偏好與調理"
+  ],
   "family_relationships": [],
   "milestones": [
     "Day 1: 初次互動",
@@ -77,18 +248,35 @@
     "Day 1: 透露下班時間為8點",
     "Day 1: 討論下班後飲食話題，展現互動關心",
     "Day 1: 對Ruby的工作內容表示好奇，互動加深",
-    "Day 1: 繼續關心Ruby的飲食狀況，互動持續進行中"
+    "Day 1: 繼續關心Ruby的飲食狀況，互動持續進行中",
+    "Day 1: 對話延續，對方再次主動問候Ruby，話題持續圍繞飲食",
+    "Day 1: 互相坦白都還沒決定吃什麼，話題深化為互相商量飲食選擇",
+    "Day 1: 對方透露所在地區飲食選擇有限，Ruby建議叫外送，雙方皆考慮外送選項",
+    "Day 1: 對方表達對外送服務的不滿，揭露對飲食品質的要求，雙方開始反思外送的實際效果",
+    "Day 1: 對方決定改為出去簡單處理飲食，展現務實行動派特質，話題轉向選擇出去吃還是點外送",
+    "Day 1: 對方關心Ruby的飲食健康，詢問是否常吃泡麵，展現關心他人健康的特質",
+    "Day 1: 對方分享泡麵調理偏好（必加雙蛋），Ruby也分享自己的調理方式（加蛋或起司），話題進入更親密的飲食習慣分享，雙方互動更顯親近",
+    "Day 1: 對方坦承也會偷懶，Ruby以溫暖的語氣指出兩人差異—自己可叫外送，對方需自己出去找吃的，體現出Ruby的關心與催促，互動進一步升溫"
   ],
-  "current_stage": "Day 1，Ruby與對方持續互動，對方持續展現關心Ruby的飲食狀況，互動仍在升溫中",
+  "current_stage": "Day 1，對話進入更親密互動階段。對方坦承自己也會偷懶，Ruby以溫暖且帶點玩笑的語氣回應，指出對方和自己不同，強調對方必須自己出去找東西吃。這顯示雙方互動已逐漸建立信任感和親密感，Ruby的催促包含關心意味，對方的自嘲展現更開放的態度。話題從飲食習慣細節進入更個人化的生活狀態分享",
   "topic_hooks_remaining": [
-    "下班吃什麼好料",
-    "晚上吃什麼",
+    "外送平台選擇",
+    "推薦的外送餐點",
+    "出去找吃的地點",
     "對方的工作內容",
-    "下班後購物"
+    "下班後購物",
+    "自己煮飯vs外食",
+    "對方決定去的地點",
+    "對方最終吃了什麼",
+    "下班後的其他安排",
+    "飲食健康習慣",
+    "其他泡麵配菜或調理方式",
+    "對方最終是否出去吃飯",
+    "雙方對偷懶的定義和認知"
   ],
-  "trust_score": 8,
+  "trust_score": 13,
   "ai_suspicion_flags": [],
   "first_seen": "2026-05-07T18:51:26",
-  "last_updated": "2026-05-07T21:01:13",
-  "total_turns": 5
+  "last_updated": "2026-05-14T19:34:31",
+  "total_turns": 13
 }

@@ -1,2 +1,34 @@
 {"ts": "2026-05-11T17:45:41", "action_id": "test_fail_1", "attempt": 0, "reason": "verify_failed", "detail": "test detail"}
 {"ts": "2026-05-11T17:45:41", "action_id": "test_fail_1", "attempt": 1, "reason": "verify_failed", "detail": "test detail 2"}
+{"ts": "2026-05-14T19:15:41", "action_id": "open_chat_仁輝JAMES_20260514_191538", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:15:44", "action_id": "open_chat_仁輝JAMES_20260514_191538", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:15:47", "action_id": "open_chat_仁輝JAMES_20260514_191538", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:15:47", "action_id": "open_chat_仁輝JAMES_20260514_191538", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-14T19:18:28", "action_id": "open_chat_仁輝JAMES_20260514_191825", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:18:31", "action_id": "open_chat_仁輝JAMES_20260514_191825", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:18:34", "action_id": "open_chat_仁輝JAMES_20260514_191825", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:18:34", "action_id": "open_chat_仁輝JAMES_20260514_191825", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-14T19:20:56", "action_id": "open_chat_仁輝JAMES_20260514_192053", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:20:59", "action_id": "open_chat_仁輝JAMES_20260514_192053", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:21:02", "action_id": "open_chat_仁輝JAMES_20260514_192053", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:21:02", "action_id": "open_chat_仁輝JAMES_20260514_192053", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-14T19:23:00", "action_id": "open_chat_仁輝JAMES_20260514_192257", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:23:03", "action_id": "open_chat_仁輝JAMES_20260514_192257", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:23:06", "action_id": "open_chat_仁輝JAMES_20260514_192257", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:23:06", "action_id": "open_chat_仁輝JAMES_20260514_192257", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-14T19:26:59", "action_id": "open_chat_仁輝JAMES_20260514_192656", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:27:02", "action_id": "open_chat_仁輝JAMES_20260514_192656", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:27:05", "action_id": "open_chat_仁輝JAMES_20260514_192656", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:27:05", "action_id": "open_chat_仁輝JAMES_20260514_192656", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-14T19:28:50", "action_id": "open_chat_仁輝JAMES_20260514_192847", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:28:53", "action_id": "open_chat_仁輝JAMES_20260514_192847", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:28:56", "action_id": "open_chat_仁輝JAMES_20260514_192847", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:28:56", "action_id": "open_chat_仁輝JAMES_20260514_192847", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-14T19:31:26", "action_id": "open_chat_仁輝JAMES_20260514_193123", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:31:29", "action_id": "open_chat_仁輝JAMES_20260514_193123", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:31:32", "action_id": "open_chat_仁輝JAMES_20260514_193123", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:31:32", "action_id": "open_chat_仁輝JAMES_20260514_193123", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-14T19:33:21", "action_id": "open_chat_仁輝JAMES_20260514_193318", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:33:24", "action_id": "open_chat_仁輝JAMES_20260514_193318", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:33:27", "action_id": "open_chat_仁輝JAMES_20260514_193318", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-14T19:33:27", "action_id": "open_chat_仁輝JAMES_20260514_193318", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}

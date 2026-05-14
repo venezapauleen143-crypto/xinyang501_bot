@@ -1,0 +1,25 @@
+{"ts": "2026-05-14T19:15:48", "persona": "Ruby", "type": "customer_seen", "customer": "仁輝JAMES", "data": {"prior_history_len": 22}}
+{"ts": "2026-05-14T19:16:11", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 8}}
+{"ts": "2026-05-14T19:16:30", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 30, "segments": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:16:36", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 17, "action": "增量更新"}}
+{"ts": "2026-05-14T19:18:51", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:19:10", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 34, "segments": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:19:19", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 23, "action": "增量更新"}}
+{"ts": "2026-05-14T19:21:18", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 8}}
+{"ts": "2026-05-14T19:21:38", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 30, "segments": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:21:48", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 27, "action": "增量更新"}}
+{"ts": "2026-05-14T19:23:27", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:23:44", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 41, "segments": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:23:57", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 33, "action": "增量更新"}}
+{"ts": "2026-05-14T19:27:20", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 4, "day_n": 8}}
+{"ts": "2026-05-14T19:27:39", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 52, "segments": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:27:57", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 40, "action": "增量更新"}}
+{"ts": "2026-05-14T19:29:14", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 8}}
+{"ts": "2026-05-14T19:29:29", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 33, "segments": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:29:46", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 46, "action": "增量更新"}}
+{"ts": "2026-05-14T19:31:48", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 3, "day_n": 8}}
+{"ts": "2026-05-14T19:32:23", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 71, "segments": 3, "day_n": 8}}
+{"ts": "2026-05-14T19:32:43", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 52, "action": "增量更新"}}
+{"ts": "2026-05-14T19:33:50", "persona": "Ruby", "type": "new_messages", "customer": "仁輝JAMES", "data": {"new_them_count": 1, "day_n": 8}}
+{"ts": "2026-05-14T19:34:10", "persona": "Ruby", "type": "reply_sent", "customer": "仁輝JAMES", "data": {"reply_len": 34, "segments": 2, "day_n": 8}}
+{"ts": "2026-05-14T19:34:31", "persona": "Ruby", "type": "profile_updated", "customer": "仁輝JAMES", "data": {"disclosures": 55, "action": "增量更新"}}

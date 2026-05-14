@@ -2672,6 +2672,11 @@ def main(stop_time, monitor=None):
                 pyautogui.press("escape")
                 time.sleep(0.5)
                 _PENDING_SCHEDULER.remove(key)
+                # 🔴 修 diff 漏網 bug：處理完後從「上輪名單」拿掉這個 name
+                # Why: 仁輝若在「處理完→徽章消失前」又傳新訊息，徽章不會真的消失
+                #       下次偵測 current 跟 last 都有他 → diff 判定「老面孔跳過」漏處理
+                #       主動 discard 讓下次徽章重現算「新出現」
+                _LAST_SEEN_UNREAD.get(persona_name, set()).discard(target_name)
                 _LAST_REPLY_TS = time.monotonic()
                 _batch_processed += 1
             except Exception as e:
@@ -2679,6 +2684,7 @@ def main(stop_time, monitor=None):
                 import traceback
                 traceback.print_exc()
                 _PENDING_SCHEDULER.remove(key)  # 失敗就清掉避免卡住（remove 是幂等，不再二次呼叫）
+                _LAST_SEEN_UNREAD.get(persona_name, set()).discard(target_name)
                 time.sleep(2)
 
         # ③ TTL 清理：超過 target_delay × 5 還沒處理 → 對方應該封鎖/刪聊天

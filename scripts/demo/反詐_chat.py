@@ -49,14 +49,60 @@ except ImportError:
     _CC_TW = None
 
 
+# 🔴 大陸詞 → 台灣詞 字串比對字典（OpenCC s2twp 抓不到的口語）
+# 用 (pattern, replacement) tuple，邊界保護避免誤殺
+_TW_VOCAB_FIX = [
+    # 口語詞彙
+    (r'湊合', '將就'),
+    (r'啥(?!小)', '什麼'),  # 不換「啥小」（罵髒）
+    (r'找吃的', '找東西吃'),
+    (r'找喝的', '找飲料'),
+    (r'到手都涼了', '送到都涼掉了'),
+    (r'到手都凉了', '送到都涼掉了'),  # 簡體版
+    (r'都涼了(?!掉)', '都涼掉了'),
+    (r'都凉了(?!掉)', '都涼掉了'),
+    (r'出去走(?![走呀啦~])', '出去走走'),  # 不要重複加
+    (r'那你還是', '那你不然'),  # 「還是」當「不然」用是大陸句法
+    (r'牛逼', '超猛'),
+    (r'怎麼整', '怎麼辦'),
+    (r'怎么整', '怎麼辦'),
+    (r'就行了', '就好了'),
+    (r'沒事的(?!情)', '沒關係'),
+    (r'没事的(?!情)', '沒關係'),
+    # 名詞
+    (r'視頻', '影片'),
+    (r'视频', '影片'),
+    (r'軟件', '軟體'),
+    (r'软件', '軟體'),
+    (r'默認', '預設'),
+    (r'默认', '預設'),
+    (r'信息(?![學学])', '訊息'),  # 保留「信息學」
+    (r'屏幕', '螢幕'),
+]
+import re as _re_taiwan
+
+
 def _to_taiwan(text):
-    """強制台灣化字級 — 不動 emoji / 注音文 / 拉長音"""
-    if not text or _CC_TW is None:
+    """強制台灣化字級 + 詞彙 — 不動 emoji / 注音文 / 拉長音
+
+    雙層：① OpenCC s2twp 字級轉換（簡→繁、軟件→軟體）
+         ② 自製字串比對字典補抓口語（湊合→將就、啥→什麼、找吃的→找東西吃）
+    """
+    if not text:
         return text
-    try:
-        return _CC_TW.convert(text)
-    except Exception:
-        return text
+    # 層 1: OpenCC s2twp
+    if _CC_TW is not None:
+        try:
+            text = _CC_TW.convert(text)
+        except Exception:
+            pass
+    # 層 2: 自製字典補抓口語
+    for pat, repl in _TW_VOCAB_FIX:
+        try:
+            text = _re_taiwan.sub(pat, repl, text)
+        except Exception:
+            pass
+    return text
 
 
 def _extract_reply(raw):
@@ -727,13 +773,31 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
                   保證 AI 100% 記得對方說過的事實（職業、地點、家人等）
     """
     # 組對話歷史（recent window 30 條，覆蓋 day 1-9 的「最近段落」）
+    # 🔴 對方訊息預過 OpenCC s2tw（純字級簡→繁，不動詞彙）→ 降低 context 中簡體 token 密度
+    # Why: 對方（仁輝大陸視角）持續簡體會把模型輸出拉走，先字級繁中化降低污染
     history_lines = []
     for msg in conversation_history[-30:]:
+        text = msg["text"]
+        if msg["sender"] == "them" and _CC_TW is not None:
+            try:
+                text = _CC_TW.convert(text)  # 對方訊息先字級繁中化
+            except Exception:
+                pass
         label = "[客戶]" if msg["sender"] == "them" else "[小編]"
-        history_lines.append(f"{label} {msg['text']}")
+        history_lines.append(f"{label} {text}")
     history_text = "\n".join(history_lines)
 
-    new_text = "\n".join(f"• {m}" for m in new_messages_text)
+    # 新訊息也預先繁中化（對方剛傳的，避免直接污染當輪生成）
+    new_messages_taiwan = []
+    for m in new_messages_text:
+        if _CC_TW is not None:
+            try:
+                new_messages_taiwan.append(_CC_TW.convert(m))
+            except Exception:
+                new_messages_taiwan.append(m)
+        else:
+            new_messages_taiwan.append(m)
+    new_text = "\n".join(f"• {m}" for m in new_messages_taiwan)
 
     # 🔴 雙層記憶：profile（穩定事實）+ recent 30 條（episodic 細節）
     if profile_text:
