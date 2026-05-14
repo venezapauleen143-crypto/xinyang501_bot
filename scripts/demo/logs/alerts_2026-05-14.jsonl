@@ -7,3 +7,5 @@
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "仁輝JAMES", "msg": "仁輝JAMES 已 165h 沒互動 (current_day=1)", "ts": "2026-05-14T17:49:22.563043", "fp": "ff7a33d9b11b"}
 {"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 72.3 小時沒 heartbeat", "ts": "2026-05-14T18:19:21.598770", "fp": "fc5073533f49"}
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 73h 沒互動 (current_day=1)", "ts": "2026-05-14T18:19:21.598770", "fp": "4b58dc3b331f"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 72.8 小時沒 heartbeat", "ts": "2026-05-14T18:49:21.585192", "fp": "570e651a779e"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "仁輝JAMES", "msg": "仁輝JAMES 已 166h 沒互動 (current_day=1)", "ts": "2026-05-14T18:49:21.585192", "fp": "3e3f611a3f60"}
