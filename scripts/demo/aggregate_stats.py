@@ -182,10 +182,167 @@ def export_disclosure_timeline(all_profiles_with_persona, out_path):
     return out_path
 
 
+import re
+
+
+def _extract_current_day(profile):
+    """從 profile.current_stage 或 milestones parse 出 Day X 數字"""
+    stage = profile.get("current_stage") or ""
+    m = re.search(r"Day\s*(\d+)", stage)
+    if m:
+        return int(m.group(1))
+    milestones = profile.get("milestones") or []
+    max_day = 0
+    for ms in milestones:
+        m = re.search(r"Day\s*(\d+)", ms)
+        if m:
+            max_day = max(max_day, int(m.group(1)))
+    return max_day if max_day > 0 else None
+
+
+def _detect_persona_alerts(persona):
+    """Rule 1, 2：persona 級 health 偵測（容錯 Angela 沒檔案）"""
+    alerts = []
+    persona_dir = PERSONAS_DIR / persona
+
+    # Rule 1: heartbeat > 1 小時沒動
+    hb = persona_dir / "heartbeat.json"
+    if hb.exists():
+        try:
+            with io.open(hb, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            last_hb = data.get("last_heartbeat")
+            if last_hb:
+                last_dt = datetime.fromisoformat(last_hb)
+                idle_sec = (datetime.now() - last_dt).total_seconds()
+                if idle_sec > 3600:
+                    alerts.append({
+                        "level": "warning", "rule": "persona_idle",
+                        "persona": persona,
+                        "msg": f"{persona} 已 {idle_sec/3600:.1f} 小時沒 heartbeat",
+                    })
+        except Exception:
+            pass
+
+    # Rule 2: click_failures.jsonl 累計 > 10
+    cf = persona_dir / "click_failures.jsonl"
+    if cf.exists():
+        try:
+            count = sum(1 for line in io.open(cf, "r", encoding="utf-8") if line.strip())
+            if count > 10:
+                alerts.append({
+                    "level": "warning", "rule": "click_failures_high",
+                    "persona": persona,
+                    "msg": f"{persona} click_failures 累計 {count} (>10)",
+                })
+        except Exception:
+            pass
+
+    return alerts
+
+
+def _detect_customer_alerts(persona, profile, profile_path):
+    """Rule 3, 4, 5：客戶級 alert"""
+    alerts = []
+    name = profile.get("name") or profile_path.stem.replace(".profile", "")
+    current_day = _extract_current_day(profile)
+
+    # Rule 3: Customer idle (last_updated > 12h)
+    last_upd = profile.get("last_updated")
+    if last_upd:
+        try:
+            last_dt = datetime.fromisoformat(last_upd)
+            idle_h = (datetime.now() - last_dt).total_seconds() / 3600
+            if idle_h > 12:
+                alerts.append({
+                    "level": "info", "rule": "customer_idle",
+                    "persona": persona, "customer": name,
+                    "msg": f"{name} 已 {idle_h:.0f}h 沒互動 (current_day={current_day})",
+                })
+        except Exception:
+            pass
+
+    # Rule 4: Day stagnation (milestones 數量 vs current_day 比例)
+    if current_day is not None and current_day >= 3:
+        milestones = profile.get("milestones") or []
+        expected = current_day * 2
+        if len(milestones) < expected * 0.5:
+            alerts.append({
+                "level": "warning", "rule": "day_stagnation",
+                "persona": persona, "customer": name,
+                "msg": f"{name} Day={current_day} 但只有 {len(milestones)} milestones (期望 ≥ {int(expected*0.5)})",
+            })
+
+    # Rule 5: Trust progression (Day >= 13 but trust_score < 6)
+    trust = profile.get("trust_score") or 0
+    if current_day is not None and current_day >= 13 and trust < 6:
+        alerts.append({
+            "level": "warning", "rule": "trust_low",
+            "persona": persona, "customer": name,
+            "msg": f"{name} 已 Day {current_day} 但 trust_score={trust} (期望 ≥ 6)",
+        })
+
+    return alerts
+
+
+def _compare_personas(profiles_by_persona):
+    """Rule 6: cross-persona imbalance"""
+    alerts = []
+    counts = {p: len(profs) for p, profs in profiles_by_persona.items()}
+    if len(counts) < 2:
+        return alerts
+    max_p = max(counts, key=counts.get)
+    min_p = min(counts, key=counts.get)
+    if counts[min_p] > 0 and counts[max_p] / counts[min_p] > 3:
+        alerts.append({
+            "level": "warning", "rule": "persona_imbalance",
+            "msg": f"persona 客戶數失衡：{max_p}={counts[max_p]} vs {min_p}={counts[min_p]} (>3:1)",
+        })
+    return alerts
+
+
+def export_alerts(all_profiles_with_persona, out_path):
+    """整合 Rule 1-6 寫 alerts JSONL"""
+    all_alerts = []
+
+    profiles_by_persona = defaultdict(list)
+    for persona, path, p in all_profiles_with_persona:
+        profiles_by_persona[persona].append((path, p))
+
+    for persona in profiles_by_persona:
+        all_alerts.extend(_detect_persona_alerts(persona))
+
+    for persona, path, p in all_profiles_with_persona:
+        all_alerts.extend(_detect_customer_alerts(persona, p, path))
+
+    all_alerts.extend(_compare_personas(profiles_by_persona))
+
+    if not all_alerts:
+        print("  ✓ 無 alert（demo 健康）")
+        return None
+
+    ts = datetime.now().isoformat()
+    for a in all_alerts:
+        a["ts"] = ts
+
+    with io.open(out_path, "a", encoding="utf-8") as f:
+        for a in all_alerts:
+            f.write(json.dumps(a, ensure_ascii=False) + "\n")
+
+    print(f"\n  ⚠ {len(all_alerts)} alerts 觸發：")
+    for a in all_alerts:
+        lvl = a["level"].upper()
+        print(f"    [{lvl}] [{a['rule']}] {a['msg']}")
+
+    return out_path
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--persona", default=None,
                         help="只處理特定 persona（不指定就全部）")
+    parser.add_argument("--alerts", action="store_true",
+                        help="只跑 alert 偵測（B2 自動巡邏模式）")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -214,6 +371,15 @@ def main():
     GLOBAL_LOGS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = f"_{args.persona}" if args.persona else ""
+
+    if args.alerts:
+        # B2 自動巡邏模式：只跑 alert 偵測，不出 CSV
+        today = datetime.now().strftime("%Y-%m-%d")
+        alert_path = GLOBAL_LOGS_DIR / f"alerts_{today}.jsonl"
+        print(f"\n[B2 自動巡邏] 偵測 alerts ...")
+        export_alerts(all_profiles, alert_path)
+        print(f"\n輸出：{alert_path}")
+        return
 
     print(f"\n輸出 CSV：")
     export_per_customer(all_profiles, GLOBAL_LOGS_DIR / f"aggregated_per_customer{suffix}_{ts}.csv")
