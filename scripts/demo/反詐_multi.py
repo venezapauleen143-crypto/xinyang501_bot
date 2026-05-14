@@ -910,6 +910,16 @@ def _update_profile_incrementally(persona, name, old_profile, new_messages):
         if old_profile.get("first_seen"):
             new_profile["first_seen"] = old_profile["first_seen"]
 
+        # 🔴 LRU 淘汰：disclosures 超過 80 筆 → 留最新 80（FIFO，list 已按時序加入）
+        # Why: 14 天連跑可能累積 500-1000 筆事實，prompt 注入會肥到 Claude 抓不到重點
+        # 核心 core_facts 不動（critic 已保護），只淘汰 shared_disclosures 的舊筆
+        DISCLOSURES_MAX = 80
+        disclosures = new_profile.get("shared_disclosures") or []
+        if len(disclosures) > DISCLOSURES_MAX:
+            removed_n = len(disclosures) - DISCLOSURES_MAX
+            new_profile["shared_disclosures"] = disclosures[-DISCLOSURES_MAX:]  # 留最新 80
+            print(f"[profile/{persona}] 🔴 LRU 淘汰：disclosures {len(disclosures)} → {DISCLOSURES_MAX}（刪最舊 {removed_n} 筆）", flush=True)
+
         return new_profile
     except Exception as e:
         print(f"[profile/{persona}] 增量更新 {name} 失敗：{e}，沿用舊 profile", flush=True)
@@ -2143,28 +2153,53 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
         if r > l and b > t:
             ct_bbox = (l, t, r - l, b - t)
 
-    # safe_click：retry + idempotency + verify + logging（業界 RPA 2026 標準）
-    # action_id 含 timestamp → 每次處理都是新 action（不會誤合併）
-    from datetime import datetime as _dt
-    action_id = f"open_chat_{target_name}_{_dt.now().strftime('%Y%m%d_%H%M%S')}"
+    # 🔴 A 方案：點擊前先看當前對話標題列是不是已是目標 → 是 → 跳過點擊（省 6 秒 retry 浪費）
+    # Why: 同一個人連續傳訊息時，畫面已經停在他的對話，safe_click 的 verify 找不到變化 → 誤判失敗 retry 3 次
+    already_open = False
+    if ct_bbox:
+        try:
+            from 反詐_locate import canonicalize_name as _canon
+            full_img, line_crop, (il, it, ir, ib), mon = screenshot_line(monitor)
+            sx_r = full_img.size[0] / mon["width"]
+            sy_r = full_img.size[1] / mon["height"]
+            _ct_il = max(0, int((ct_before.get("left", 0) - mon["left"]) * sx_r) - il)
+            _ct_it = max(0, int((ct_before.get("top", 0) - mon["top"]) * sy_r) - it)
+            _ct_ir = min(line_crop.size[0], int((ct_before.get("right", 0) - mon["left"]) * sx_r) - il)
+            _ct_ib = min(line_crop.size[1], int((ct_before.get("bottom", 0) - mon["top"]) * sy_r) - it)
+            if _ct_ir > _ct_il and _ct_ib > _ct_it:
+                _title_crop = line_crop.crop((_ct_il, _ct_it, _ct_ir, _ct_ib))
+                _title_items = ocr_scan_panel(_title_crop)
+                if _title_items:
+                    _current_title = _title_items[0].get("text", "").strip()
+                    if _canon(_current_title) == _canon(target_name):
+                        already_open = True
+                        print(f"[Customer/{persona}] '{target_name}' 已是當前對話（chat_title 已就位）→ 跳過點擊", flush=True)
+        except Exception as e:
+            print(f"[Customer/{persona}] pre-check chat_title 失敗 ({e}) → 改走 safe_click", flush=True)
 
-    print(f"\n[Customer] 點擊未讀對話 '{target_name}' at ({cx}, {cy})", flush=True)
-    success = safe_click(
-        cx, cy,
-        verify_region=ct_bbox,        # 點完 chat_title 區域要變化
-        action_id=action_id,
-        max_retries=3,
-        verify_timeout=2.5,
-        persona=persona,
-    )
-    if not success:
-        # 全部 retry 都失敗 → log 已寫到 click_failures.jsonl
-        print(f"[Customer/{persona}] ⚠️ safe_click 失敗（已 retry 3 次），跳過 '{target_name}'", flush=True)
-        # 不 return regions，下面 locate_line_regions 還是試試看
+    if not already_open:
+        # safe_click：retry + idempotency + verify + logging（業界 RPA 2026 標準）
+        # action_id 含 timestamp → 每次處理都是新 action（不會誤合併）
+        from datetime import datetime as _dt
+        action_id = f"open_chat_{target_name}_{_dt.now().strftime('%Y%m%d_%H%M%S')}"
 
-    # 沒 ct_bbox 時 safe_click 不 verify，補個寫死 sleep 確保 LINE 載完
-    if not ct_bbox:
-        time.sleep(1.5)
+        print(f"\n[Customer] 點擊未讀對話 '{target_name}' at ({cx}, {cy})", flush=True)
+        success = safe_click(
+            cx, cy,
+            verify_region=ct_bbox,        # 點完 chat_title 區域要變化
+            action_id=action_id,
+            max_retries=3,
+            verify_timeout=2.5,
+            persona=persona,
+        )
+        if not success:
+            # 全部 retry 都失敗 → log 已寫到 click_failures.jsonl
+            print(f"[Customer/{persona}] ⚠️ safe_click 失敗（已 retry 3 次），跳過 '{target_name}'", flush=True)
+            # 不 return regions，下面 locate_line_regions 還是試試看
+
+        # 沒 ct_bbox 時 safe_click 不 verify，補個寫死 sleep 確保 LINE 載完
+        if not ct_bbox:
+            time.sleep(1.5)
 
     regions = locate_line_regions(monitor)
     ct = regions.get("chat_title", {})

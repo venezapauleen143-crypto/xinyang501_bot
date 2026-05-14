@@ -242,7 +242,10 @@ def find_line_window(box=None):
 
 
 def screenshot_line(monitor=None):
-    """截圖指定螢幕，裁切出 LINE 區域。monitor=None 時自動偵測 LINE 在哪個 monitor（桌機/筆電位置不同）"""
+    """截圖指定螢幕，裁切出 LINE 區域。monitor=None 時自動偵測 LINE 在哪個 monitor（桌機/筆電位置不同）
+
+    含 3 次重試：Windows BitBlt 偶發失敗（被其他視窗短暫擋到 / DPI 抽風）→ 半秒後重試，避免一次失敗整輪偵測跳過
+    """
     # 確保 DPI 設定正確（每次呼叫都設，防止被其他模組覆蓋）
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(0)
@@ -255,36 +258,49 @@ def screenshot_line(monitor=None):
 
     hwnd, title, cls, (wl, wt, wr, wb) = line
 
-    with mss.mss() as sct:
-        # 自動偵測 LINE 在哪個 monitor（用視窗中心點判斷）
-        if monitor is None:
-            line_cx = (wl + wr) // 2
-            line_cy = (wt + wb) // 2
-            for i, m in enumerate(sct.monitors[1:], 1):
-                if m["left"] <= line_cx < m["left"] + m["width"] and m["top"] <= line_cy < m["top"] + m["height"]:
-                    monitor = i
-                    break
-            if monitor is None:
-                monitor = 1  # fallback 主螢幕
-        mon = sct.monitors[monitor]
-        img = sct.grab(mon)
-        pil = Image.frombytes("RGB", img.size, img.rgb)
-        iw, ih = pil.size
+    # 🔴 BitBlt 重試迴圈（業界 RPA 標準：偶發截圖失敗自動重試 3 次）
+    last_err = None
+    for attempt in range(3):
+        try:
+            with mss.mss() as sct:
+                # 自動偵測 LINE 在哪個 monitor（用視窗中心點判斷）
+                if monitor is None:
+                    line_cx = (wl + wr) // 2
+                    line_cy = (wt + wb) // 2
+                    for i, m in enumerate(sct.monitors[1:], 1):
+                        if m["left"] <= line_cx < m["left"] + m["width"] and m["top"] <= line_cy < m["top"] + m["height"]:
+                            monitor = i
+                            break
+                    if monitor is None:
+                        monitor = 1  # fallback 主螢幕
+                mon = sct.monitors[monitor]
+                img = sct.grab(mon)
+                pil = Image.frombytes("RGB", img.size, img.rgb)
+                iw, ih = pil.size
 
-    sx = iw / mon["width"]
-    sy = ih / mon["height"]
-    il = int((wl - mon["left"]) * sx)
-    it = int((wt - mon["top"]) * sy)
-    ir = int((wr - mon["left"]) * sx)
-    ib = int((wb - mon["top"]) * sy)
+            sx = iw / mon["width"]
+            sy = ih / mon["height"]
+            il = int((wl - mon["left"]) * sx)
+            it = int((wt - mon["top"]) * sy)
+            ir = int((wr - mon["left"]) * sx)
+            ib = int((wb - mon["top"]) * sy)
 
-    il = max(0, il)
-    it = max(0, it)
-    ir = min(iw, ir)
-    ib = min(ih, ib)
+            il = max(0, il)
+            it = max(0, it)
+            ir = min(iw, ir)
+            ib = min(ih, ib)
 
-    line_crop = pil.crop((il, it, ir, ib))
-    return pil, line_crop, (il, it, ir, ib), mon
+            line_crop = pil.crop((il, it, ir, ib))
+            if attempt > 0:
+                _print(f"[screenshot_line] 第 {attempt+1} 次嘗試成功（前 {attempt} 次失敗）")
+            return pil, line_crop, (il, it, ir, ib), mon
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(0.5)  # 半秒後再試
+                continue
+    # 3 次都失敗才向上拋
+    raise last_err if last_err else RuntimeError("screenshot_line 3 次全失敗")
 
 
 # ============================================================
