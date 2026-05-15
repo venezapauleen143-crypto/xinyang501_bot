@@ -58,3 +58,4 @@
 {"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 18.7 小時沒 heartbeat", "ts": "2026-05-15T14:19:21.981904", "fp": "cef5f45eb83d"}
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "仁輝JAMES", "msg": "仁輝JAMES 已 19h 沒互動 (current_day=1)", "ts": "2026-05-15T14:19:21.981904", "fp": "c96c93c96b45"}
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 93h 沒互動 (current_day=1)", "ts": "2026-05-15T14:19:21.981904", "fp": "2c54a35197ba"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 19.2 小時沒 heartbeat", "ts": "2026-05-15T14:49:21.900540", "fp": "ba4e03b41a60"}
