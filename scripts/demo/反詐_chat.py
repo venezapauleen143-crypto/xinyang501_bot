@@ -469,10 +469,24 @@ def is_only_sticker(new_them):
     if not real_msgs:
         return False  # 全部都是系統訊息或空 → 不需要 Vision
 
+    # 🔴 常見短打招呼 / 應答白名單 — 直接判定「不是貼圖」，避免 Vision 誤解成「同意」
+    # 解 5/15 Natsuki bug：「晚上好」3 中文字被判貼圖 → Vision 默認「同意」 → Ruby 回「你的貼圖哈哈」
+    SHORT_GREETING_WHITELIST = (
+        "晚上好", "早安", "晚安", "午安", "早", "晚", "嗨", "哈囉", "哈嘍",
+        "你好", "您好", "你好嗎", "在嗎", "在不在", "醒了嗎",
+        "OK", "ok", "好", "好的", "好啦", "好喔", "好哦",
+        "可以", "沒事", "沒事的", "OK啦", "好喔",
+        "謝謝", "感謝", "謝", "Thanks", "thanks", "thx",
+        "對啊", "對", "嗯", "嗯嗯", "是的", "是", "對阿",
+    )
     for clean in real_msgs:
-        # 含 4+ 中文字 = 完整中文句子（如「想了解課程」）
+        if clean in SHORT_GREETING_WHITELIST:
+            return False  # 白名單命中 → 不是貼圖
+
+    for clean in real_msgs:
+        # 含 3+ 中文字 = 完整中文短句（從 4 改 3，解「晚上好」「早安阿」等短應答被誤判）
         chinese_count = sum(1 for c in clean if '一' <= c <= '鿿')
-        if chinese_count >= 4:
+        if chinese_count >= 3:
             return False
         # 含 6+ 字（不論中英）= 完整訊息（如「OK 我懂了」「Hello world」）
         if len(clean) >= 6:
@@ -968,7 +982,7 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
     for round_i in range(5):
         r = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1500,  # 1500 給 thinking + reply 充足空間，避免 thinking 太長被切斷導致 reply 沒寫完
+            max_tokens=3000,  # 3000 給 thinking + reply 充足空間（1500 時 Natsuki 案撞上限 thinking 寫 1378 字未到 reply 段）
             system=system_prompt,
             tools=_AI_TOOLS,
             messages=messages,

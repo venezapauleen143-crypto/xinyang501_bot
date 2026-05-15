@@ -1066,6 +1066,32 @@ def _update_profile_incrementally(persona, name, old_profile, new_messages):
         return old_profile
 
 
+# 🔴 對方檔案 schema 不一致防呆（Haiku 抽取時偶爾寫 dict 而非 str）
+# 解 5/15 Natsuki bug：family_relationships 抽成 [{"relation":"父親","fact":"買房"}]
+# 但 join 預期 str → TypeError 整個 handle_one_customer crash
+def _coerce_item_to_str(item):
+    """把 dict / str / 其他型別轉成顯示文字（防 join 爆）"""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        relation = item.get("relation") or item.get("role") or item.get("member")
+        fact = item.get("fact") or item.get("description")
+        if relation and fact:
+            return f"{relation}（{fact}）"
+        if relation:
+            return relation
+        if fact:
+            return fact
+        # 沒命中常見 key，退回 str(dict)
+        return str(item)
+    return str(item)
+
+
+def _safe_join(items, sep="、"):
+    """把混合 str/dict 清單黏成顯示文字"""
+    return sep.join(_coerce_item_to_str(x) for x in items if x)
+
+
 def _format_profile_for_prompt(profile):
     """把 profile 渲染成餵給 AI 的純文字區塊（system_prompt 用）"""
     if not profile:
@@ -1081,18 +1107,19 @@ def _format_profile_for_prompt(profile):
         parts.append(f"- 作息：{core['schedule']}")
     traits = core.get("personality_traits") or []
     if traits:
-        parts.append(f"- 個性：{'、'.join(traits)}")
+        parts.append(f"- 個性：{_safe_join(traits)}")
 
     interests = profile.get("interests") or []
     if interests:
-        parts.append(f"- 興趣愛好：{'、'.join(interests)}")
+        parts.append(f"- 興趣愛好：{_safe_join(interests)}")
 
     family = profile.get("family_relationships") or []
     if family:
-        parts.append(f"- 家庭/關係：{'、'.join(family)}")
+        parts.append(f"- 家庭/關係：{_safe_join(family)}")
 
     disclosures = profile.get("shared_disclosures") or []
-    them_d = [d for d in disclosures if d.get("speaker") == "them"]
+    # 加 isinstance(d, dict) 保險：Haiku 偶爾寫成 str 而非 dict
+    them_d = [d for d in disclosures if isinstance(d, dict) and d.get("speaker") == "them"]
     if them_d:
         parts.append("\n**對方自爆過的事實（時序）：**")
         for d in them_d[-15:]:
@@ -1104,7 +1131,7 @@ def _format_profile_for_prompt(profile):
     if milestones:
         parts.append("\n**關係里程碑：**")
         for m in milestones[-5:]:
-            parts.append(f"  - {m}")
+            parts.append(f"  - {_coerce_item_to_str(m)}")
 
     stage = profile.get("current_stage")
     if stage:

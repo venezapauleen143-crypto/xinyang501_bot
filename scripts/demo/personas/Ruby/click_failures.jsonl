@@ -32,3 +32,247 @@
 {"ts": "2026-05-14T19:33:24", "action_id": "open_chat_仁輝JAMES_20260514_193318", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
 {"ts": "2026-05-14T19:33:27", "action_id": "open_chat_仁輝JAMES_20260514_193318", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
 {"ts": "2026-05-14T19:33:27", "action_id": "open_chat_仁輝JAMES_20260514_193318", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:12:55", "action_id": "open_chat_Natsuki_20260515_181252", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:12:58", "action_id": "open_chat_Natsuki_20260515_181252", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:13:01", "action_id": "open_chat_Natsuki_20260515_181252", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:13:01", "action_id": "open_chat_Natsuki_20260515_181252", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:14:09", "action_id": "open_chat_Natsuki_20260515_181405", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:14:12", "action_id": "open_chat_Natsuki_20260515_181405", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:14:15", "action_id": "open_chat_Natsuki_20260515_181405", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:14:15", "action_id": "open_chat_Natsuki_20260515_181405", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:16:13", "action_id": "open_chat_Natsuki_20260515_181610", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:16:16", "action_id": "open_chat_Natsuki_20260515_181610", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:16:19", "action_id": "open_chat_Natsuki_20260515_181610", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:16:19", "action_id": "open_chat_Natsuki_20260515_181610", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:19:24", "action_id": "open_chat_Natsuki_20260515_181921", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:19:27", "action_id": "open_chat_Natsuki_20260515_181921", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:19:30", "action_id": "open_chat_Natsuki_20260515_181921", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:19:30", "action_id": "open_chat_Natsuki_20260515_181921", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:22:06", "action_id": "open_chat_Natsuki_20260515_182202", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:22:09", "action_id": "open_chat_Natsuki_20260515_182202", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:22:12", "action_id": "open_chat_Natsuki_20260515_182202", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:22:12", "action_id": "open_chat_Natsuki_20260515_182202", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:24:13", "action_id": "open_chat_Natsuki_20260515_182410", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:24:16", "action_id": "open_chat_Natsuki_20260515_182410", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:24:20", "action_id": "open_chat_Natsuki_20260515_182410", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:24:20", "action_id": "open_chat_Natsuki_20260515_182410", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:26:10", "action_id": "open_chat_Natsuki_20260515_182607", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:26:13", "action_id": "open_chat_Natsuki_20260515_182607", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:26:16", "action_id": "open_chat_Natsuki_20260515_182607", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:26:16", "action_id": "open_chat_Natsuki_20260515_182607", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:28:06", "action_id": "open_chat_Natsuki_20260515_182803", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:28:09", "action_id": "open_chat_Natsuki_20260515_182803", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:28:12", "action_id": "open_chat_Natsuki_20260515_182803", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:28:12", "action_id": "open_chat_Natsuki_20260515_182803", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:30:22", "action_id": "open_chat_Natsuki_20260515_183019", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:30:25", "action_id": "open_chat_Natsuki_20260515_183019", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:30:28", "action_id": "open_chat_Natsuki_20260515_183019", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:30:28", "action_id": "open_chat_Natsuki_20260515_183019", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:33:00", "action_id": "open_chat_Natsuki_20260515_183257", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:33:03", "action_id": "open_chat_Natsuki_20260515_183257", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:33:06", "action_id": "open_chat_Natsuki_20260515_183257", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:33:06", "action_id": "open_chat_Natsuki_20260515_183257", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:34:33", "action_id": "open_chat_110_20260515_183430", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:34:36", "action_id": "open_chat_110_20260515_183430", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:34:39", "action_id": "open_chat_110_20260515_183430", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:34:39", "action_id": "open_chat_110_20260515_183430", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:35:36", "action_id": "open_chat_Natsuki_20260515_183533", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:35:39", "action_id": "open_chat_Natsuki_20260515_183533", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:35:42", "action_id": "open_chat_Natsuki_20260515_183533", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:35:42", "action_id": "open_chat_Natsuki_20260515_183533", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:36:14", "action_id": "open_chat_110_20260515_183611", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:36:17", "action_id": "open_chat_110_20260515_183611", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:36:20", "action_id": "open_chat_110_20260515_183611", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:36:20", "action_id": "open_chat_110_20260515_183611", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:39:06", "action_id": "open_chat_110_20260515_183903", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:39:09", "action_id": "open_chat_110_20260515_183903", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:39:12", "action_id": "open_chat_110_20260515_183903", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:39:12", "action_id": "open_chat_110_20260515_183903", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:40:20", "action_id": "open_chat_Natsuki_20260515_184017", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:40:23", "action_id": "open_chat_Natsuki_20260515_184017", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:40:26", "action_id": "open_chat_Natsuki_20260515_184017", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:40:26", "action_id": "open_chat_Natsuki_20260515_184017", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T18:41:23", "action_id": "open_chat_110_20260515_184120", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:41:26", "action_id": "open_chat_110_20260515_184120", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:41:29", "action_id": "open_chat_110_20260515_184120", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T18:41:29", "action_id": "open_chat_110_20260515_184120", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:08:12", "action_id": "open_chat_110_20260515_190809", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:08:15", "action_id": "open_chat_110_20260515_190809", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:08:18", "action_id": "open_chat_110_20260515_190809", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:08:18", "action_id": "open_chat_110_20260515_190809", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:09:37", "action_id": "open_chat_walka_20260515_190934", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:09:40", "action_id": "open_chat_walka_20260515_190934", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:09:43", "action_id": "open_chat_walka_20260515_190934", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:09:43", "action_id": "open_chat_walka_20260515_190934", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:10:41", "action_id": "open_chat_110_20260515_191038", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:10:44", "action_id": "open_chat_110_20260515_191038", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:10:47", "action_id": "open_chat_110_20260515_191038", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:10:47", "action_id": "open_chat_110_20260515_191038", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:12:33", "action_id": "open_chat_walka_20260515_191230", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:12:37", "action_id": "open_chat_walka_20260515_191230", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:12:40", "action_id": "open_chat_walka_20260515_191230", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:12:40", "action_id": "open_chat_walka_20260515_191230", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:13:43", "action_id": "open_chat_Natsuki_20260515_191340", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:13:46", "action_id": "open_chat_Natsuki_20260515_191340", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:13:49", "action_id": "open_chat_Natsuki_20260515_191340", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:13:49", "action_id": "open_chat_Natsuki_20260515_191340", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:14:56", "action_id": "open_chat_110_20260515_191453", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:14:59", "action_id": "open_chat_110_20260515_191453", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:15:02", "action_id": "open_chat_110_20260515_191453", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:15:02", "action_id": "open_chat_110_20260515_191453", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:16:08", "action_id": "open_chat_110_20260515_191605", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:16:11", "action_id": "open_chat_110_20260515_191605", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:16:14", "action_id": "open_chat_110_20260515_191605", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:16:14", "action_id": "open_chat_110_20260515_191605", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:17:34", "action_id": "open_chat_walka_20260515_191731", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:17:37", "action_id": "open_chat_walka_20260515_191731", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:17:40", "action_id": "open_chat_walka_20260515_191731", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:17:40", "action_id": "open_chat_walka_20260515_191731", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T19:18:59", "action_id": "open_chat_walka_20260515_191856", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:19:02", "action_id": "open_chat_walka_20260515_191856", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:19:05", "action_id": "open_chat_walka_20260515_191856", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T19:19:05", "action_id": "open_chat_walka_20260515_191856", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:05:29", "action_id": "open_chat_walka_20260515_200526", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:05:32", "action_id": "open_chat_walka_20260515_200526", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:05:35", "action_id": "open_chat_walka_20260515_200526", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:05:35", "action_id": "open_chat_walka_20260515_200526", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:07:01", "action_id": "open_chat_110_20260515_200658", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:07:05", "action_id": "open_chat_110_20260515_200658", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:07:08", "action_id": "open_chat_110_20260515_200658", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:07:08", "action_id": "open_chat_110_20260515_200658", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:08:48", "action_id": "open_chat_Natsuki_20260515_200845", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:08:51", "action_id": "open_chat_Natsuki_20260515_200845", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:08:54", "action_id": "open_chat_Natsuki_20260515_200845", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:08:54", "action_id": "open_chat_Natsuki_20260515_200845", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:10:35", "action_id": "open_chat_110_20260515_201032", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:10:38", "action_id": "open_chat_110_20260515_201032", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:10:41", "action_id": "open_chat_110_20260515_201032", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:10:41", "action_id": "open_chat_110_20260515_201032", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:12:06", "action_id": "open_chat_walka_20260515_201203", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:12:09", "action_id": "open_chat_walka_20260515_201203", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:12:12", "action_id": "open_chat_walka_20260515_201203", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:12:12", "action_id": "open_chat_walka_20260515_201203", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:13:22", "action_id": "open_chat_Natsuki_20260515_201319", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:13:25", "action_id": "open_chat_Natsuki_20260515_201319", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:13:28", "action_id": "open_chat_Natsuki_20260515_201319", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:13:28", "action_id": "open_chat_Natsuki_20260515_201319", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:14:43", "action_id": "open_chat_110_20260515_201440", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:14:46", "action_id": "open_chat_110_20260515_201440", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:14:49", "action_id": "open_chat_110_20260515_201440", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:14:49", "action_id": "open_chat_110_20260515_201440", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:16:09", "action_id": "open_chat_110_20260515_201605", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:16:12", "action_id": "open_chat_110_20260515_201605", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:16:15", "action_id": "open_chat_110_20260515_201605", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:16:15", "action_id": "open_chat_110_20260515_201605", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:17:21", "action_id": "open_chat_Natsuki_20260515_201718", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:17:24", "action_id": "open_chat_Natsuki_20260515_201718", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:17:27", "action_id": "open_chat_Natsuki_20260515_201718", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:17:27", "action_id": "open_chat_Natsuki_20260515_201718", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:19:36", "action_id": "open_chat_110_20260515_201933", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:19:39", "action_id": "open_chat_110_20260515_201933", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:19:42", "action_id": "open_chat_110_20260515_201933", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:19:42", "action_id": "open_chat_110_20260515_201933", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:21:17", "action_id": "open_chat_Natsuki_20260515_202114", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:21:20", "action_id": "open_chat_Natsuki_20260515_202114", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:21:23", "action_id": "open_chat_Natsuki_20260515_202114", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:21:23", "action_id": "open_chat_Natsuki_20260515_202114", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:23:58", "action_id": "open_chat_Natsuki_20260515_202355", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:24:01", "action_id": "open_chat_Natsuki_20260515_202355", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:24:04", "action_id": "open_chat_Natsuki_20260515_202355", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:24:04", "action_id": "open_chat_Natsuki_20260515_202355", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:26:37", "action_id": "open_chat_Natsuki_20260515_202634", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:26:40", "action_id": "open_chat_Natsuki_20260515_202634", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:26:43", "action_id": "open_chat_Natsuki_20260515_202634", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:26:43", "action_id": "open_chat_Natsuki_20260515_202634", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:37:48", "action_id": "open_chat_Natsuki_20260515_203745", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:37:51", "action_id": "open_chat_Natsuki_20260515_203745", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:37:54", "action_id": "open_chat_Natsuki_20260515_203745", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:37:54", "action_id": "open_chat_Natsuki_20260515_203745", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:40:10", "action_id": "open_chat_Natsuki_20260515_204007", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:40:13", "action_id": "open_chat_Natsuki_20260515_204007", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:40:16", "action_id": "open_chat_Natsuki_20260515_204007", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:40:16", "action_id": "open_chat_Natsuki_20260515_204007", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:41:32", "action_id": "open_chat_110_20260515_204129", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:41:35", "action_id": "open_chat_110_20260515_204129", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:41:38", "action_id": "open_chat_110_20260515_204129", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:41:38", "action_id": "open_chat_110_20260515_204129", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:43:06", "action_id": "open_chat_110_20260515_204303", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:43:10", "action_id": "open_chat_110_20260515_204303", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:43:13", "action_id": "open_chat_110_20260515_204303", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:43:13", "action_id": "open_chat_110_20260515_204303", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:44:21", "action_id": "open_chat_Natsuki_20260515_204418", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:44:24", "action_id": "open_chat_Natsuki_20260515_204418", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:44:27", "action_id": "open_chat_Natsuki_20260515_204418", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:44:27", "action_id": "open_chat_Natsuki_20260515_204418", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:45:35", "action_id": "open_chat_110_20260515_204532", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:45:38", "action_id": "open_chat_110_20260515_204532", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:45:41", "action_id": "open_chat_110_20260515_204532", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:45:41", "action_id": "open_chat_110_20260515_204532", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:47:23", "action_id": "open_chat_110_20260515_204720", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:47:26", "action_id": "open_chat_110_20260515_204720", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:47:29", "action_id": "open_chat_110_20260515_204720", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:47:29", "action_id": "open_chat_110_20260515_204720", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:48:54", "action_id": "open_chat_Natsuki_20260515_204851", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:48:58", "action_id": "open_chat_Natsuki_20260515_204851", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:49:01", "action_id": "open_chat_Natsuki_20260515_204851", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:49:01", "action_id": "open_chat_Natsuki_20260515_204851", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:50:10", "action_id": "open_chat_110_20260515_205007", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:50:13", "action_id": "open_chat_110_20260515_205007", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:50:16", "action_id": "open_chat_110_20260515_205007", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:50:16", "action_id": "open_chat_110_20260515_205007", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:51:35", "action_id": "open_chat_Natsuki_20260515_205132", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:51:38", "action_id": "open_chat_Natsuki_20260515_205132", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:51:41", "action_id": "open_chat_Natsuki_20260515_205132", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:51:41", "action_id": "open_chat_Natsuki_20260515_205132", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:52:57", "action_id": "open_chat_walka_20260515_205254", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:53:00", "action_id": "open_chat_walka_20260515_205254", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:53:03", "action_id": "open_chat_walka_20260515_205254", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:53:03", "action_id": "open_chat_walka_20260515_205254", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:54:16", "action_id": "open_chat_110_20260515_205413", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:54:19", "action_id": "open_chat_110_20260515_205413", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:54:22", "action_id": "open_chat_110_20260515_205413", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:54:22", "action_id": "open_chat_110_20260515_205413", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:55:26", "action_id": "open_chat_Natsuki_20260515_205523", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:55:29", "action_id": "open_chat_Natsuki_20260515_205523", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:55:32", "action_id": "open_chat_Natsuki_20260515_205523", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:55:32", "action_id": "open_chat_Natsuki_20260515_205523", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:56:43", "action_id": "open_chat_110_20260515_205640", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:56:46", "action_id": "open_chat_110_20260515_205640", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:56:49", "action_id": "open_chat_110_20260515_205640", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:56:49", "action_id": "open_chat_110_20260515_205640", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:58:12", "action_id": "open_chat_Natsuki_20260515_205809", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:58:15", "action_id": "open_chat_Natsuki_20260515_205809", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:58:18", "action_id": "open_chat_Natsuki_20260515_205809", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:58:18", "action_id": "open_chat_Natsuki_20260515_205809", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T20:59:46", "action_id": "open_chat_Natsuki_20260515_205943", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:59:50", "action_id": "open_chat_Natsuki_20260515_205943", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:59:53", "action_id": "open_chat_Natsuki_20260515_205943", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T20:59:53", "action_id": "open_chat_Natsuki_20260515_205943", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T21:01:26", "action_id": "open_chat_Natsuki_20260515_210123", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:01:29", "action_id": "open_chat_Natsuki_20260515_210123", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:01:32", "action_id": "open_chat_Natsuki_20260515_210123", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:01:32", "action_id": "open_chat_Natsuki_20260515_210123", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T21:02:50", "action_id": "open_chat_110_20260515_210247", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:02:53", "action_id": "open_chat_110_20260515_210247", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:02:56", "action_id": "open_chat_110_20260515_210247", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:02:56", "action_id": "open_chat_110_20260515_210247", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T21:04:30", "action_id": "open_chat_Natsuki_20260515_210427", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:04:33", "action_id": "open_chat_Natsuki_20260515_210427", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:04:36", "action_id": "open_chat_Natsuki_20260515_210427", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:04:36", "action_id": "open_chat_Natsuki_20260515_210427", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T21:05:54", "action_id": "open_chat_110_20260515_210551", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:05:57", "action_id": "open_chat_110_20260515_210551", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:06:00", "action_id": "open_chat_110_20260515_210551", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:06:00", "action_id": "open_chat_110_20260515_210551", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T21:07:28", "action_id": "open_chat_Natsuki_20260515_210724", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:07:31", "action_id": "open_chat_Natsuki_20260515_210724", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:07:34", "action_id": "open_chat_Natsuki_20260515_210724", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:07:34", "action_id": "open_chat_Natsuki_20260515_210724", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T21:08:42", "action_id": "open_chat_110_20260515_210839", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:08:45", "action_id": "open_chat_110_20260515_210839", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:08:48", "action_id": "open_chat_110_20260515_210839", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:08:48", "action_id": "open_chat_110_20260515_210839", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
+{"ts": "2026-05-15T21:10:13", "action_id": "open_chat_Natsuki_20260515_211010", "attempt": 0, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:10:17", "action_id": "open_chat_Natsuki_20260515_211010", "attempt": 1, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:10:20", "action_id": "open_chat_Natsuki_20260515_211010", "attempt": 2, "reason": "verify_failed", "detail": "region hash unchanged after 2.5s"}
+{"ts": "2026-05-15T21:10:20", "action_id": "open_chat_Natsuki_20260515_211010", "attempt": 3, "reason": "escalated", "detail": "exhausted all retries"}
