@@ -19,3 +19,8 @@
 {"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 2.2 小時沒 heartbeat", "ts": "2026-05-14T21:49:21.607282", "fp": "2119ebbf3265"}
 {"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 2.7 小時沒 heartbeat", "ts": "2026-05-14T22:19:21.611455", "fp": "4dab2dd77809"}
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 77h 沒互動 (current_day=1)", "ts": "2026-05-14T22:19:21.611455", "fp": "ca387135af12"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 3.2 小時沒 heartbeat", "ts": "2026-05-14T22:49:21.626445", "fp": "0cdb181faaa8"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 3.7 小時沒 heartbeat", "ts": "2026-05-14T23:19:21.720968", "fp": "82e58394f631"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 78h 沒互動 (current_day=1)", "ts": "2026-05-14T23:19:21.720968", "fp": "809c30275629"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 4.2 小時沒 heartbeat", "ts": "2026-05-14T23:49:21.637736", "fp": "8a268d90defe"}
+{"level": "warning", "rule": "click_failures_high", "persona": "Ruby", "msg": "Ruby click_failures 累計 34 (>10)", "ts": "2026-05-14T23:49:21.637736", "fp": "1d647033febc"}
