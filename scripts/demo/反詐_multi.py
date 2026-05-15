@@ -263,6 +263,131 @@ def _detect_opponent_location(name, history):
     return None
 
 
+# 🔴 Phase 3: CWA 中央氣象署 — 給台灣 persona 用（補強 wttr.in 不夠細）
+# 含紫外線 / 降雨機率 / 舒適度 / 颱風警報（wttr 沒有）
+_CWA_CITY_MAP = {
+    "台北": "臺北市", "臺北": "臺北市", "新北": "新北市", "桃園": "桃園市",
+    "台中": "臺中市", "臺中": "臺中市", "台南": "臺南市", "臺南": "臺南市",
+    "高雄": "高雄市", "基隆": "基隆市", "新竹": "新竹市", "嘉義": "嘉義市",
+}
+
+
+def _fetch_cwa_weather(city_zh):
+    """CWA 中央氣象署 36 小時預報。台灣 persona 用，香港 persona 不用"""
+    token = os.environ.get("CWA_API_KEY")
+    if not token:
+        return ""
+    cwa_city = _CWA_CITY_MAP.get(city_zh)
+    if not cwa_city:
+        return ""  # 非台灣城市跳過
+    try:
+        import requests as _req
+        r = _req.get(
+            "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001",
+            params={"Authorization": token, "locationName": cwa_city},
+            timeout=10,
+        )
+        data = r.json()
+        if data.get("success") != "true":
+            return ""
+        locs = data["records"]["location"]
+        if not locs:
+            return ""
+        loc = locs[0]
+        elements = {
+            e["elementName"]: e["time"][0]["parameter"]["parameterName"]
+            for e in loc["weatherElement"]
+        }
+        wx = elements.get("Wx", "")
+        pop = elements.get("PoP", "")
+        mint = elements.get("MinT", "")
+        maxt = elements.get("MaxT", "")
+        ci = elements.get("CI", "")
+        return f"🌤 {cwa_city}（CWA 官方）：{wx}，{mint}-{maxt}°C，降雨機率 {pop}%，{ci}"
+    except Exception:
+        return ""
+
+
+# 🔴 Phase 2: 台灣本土 RSS 新聞 top5（補強 fetch_global_news 預設 country=us 不夠台灣本土）
+def _fetch_taiwan_news(top=5):
+    """拉台灣本土 RSS 新聞 top N — 自由 / 公視"""
+    try:
+        import feedparser as _fp
+    except ImportError:
+        return ""
+
+    sources = {
+        "自由": "https://news.ltn.com.tw/rss/all.xml",
+        "公視": "https://news.pts.org.tw/xml/newsfeed.xml",
+    }
+    items = []
+    for name, url in sources.items():
+        try:
+            feed = _fp.parse(url)
+            for e in feed.entries[:3]:
+                title = getattr(e, "title", "").strip()
+                if title:
+                    items.append(f"[{name}] {title[:50]}")
+            if len(items) >= top:
+                break
+        except Exception:
+            continue
+
+    if not items:
+        return ""
+    return "📰 台灣本土新聞：\n" + "\n".join(items[:top])
+
+
+# 🔴 Phase 1: 台灣節日 / 節氣 — 注入 _get_world_context
+# 含法定假日（holidays 套件）+ 民俗節日（母親節 / 父親節 / 七夕 / 雙十一 / 聖誕 / 跨年）
+# 為什麼：14 天連跑會跨節日，Ruby 在母親節不提媽媽 / 端午沒粽子梗會破功
+def _fetch_taiwan_holiday(check_days_ahead=3):
+    """查今天 + 接下來 N 天的台灣節日"""
+    try:
+        import holidays as _holidays_mod
+    except ImportError:
+        return ""
+
+    today = datetime.now().date()
+    tw_holidays = _holidays_mod.Taiwan(years=[today.year, today.year + 1])
+
+    # 民俗節日（不在法定假日內但 Ruby 會聊）
+    from datetime import timedelta as _td
+    custom = {}
+    for y in (today.year, today.year + 1):
+        # 母親節 = 5 月第二個星期日
+        may_first = datetime(y, 5, 1).date()
+        days_to_sunday = (6 - may_first.weekday()) % 7
+        custom[may_first + _td(days=days_to_sunday + 7)] = "母親節"
+        # 父親節 = 8/8
+        custom[datetime(y, 8, 8).date()] = "父親節"
+        # 雙十一
+        custom[datetime(y, 11, 11).date()] = "雙十一光棍節"
+        # 聖誕
+        custom[datetime(y, 12, 24).date()] = "平安夜"
+        custom[datetime(y, 12, 31).date()] = "跨年夜"
+        # 情人節
+        custom[datetime(y, 2, 14).date()] = "情人節"
+
+    # 合併（法定優先）
+    all_days = dict(tw_holidays)
+    for d, n in custom.items():
+        if d not in all_days:
+            all_days[d] = n
+
+    # 找今天 + 接下來 N 天
+    upcoming = []
+    for i in range(check_days_ahead + 1):
+        check = today + _td(days=i)
+        if check in all_days:
+            label = "今天" if i == 0 else ("明天" if i == 1 else f"{i} 天後")
+            upcoming.append(f"{label}（{check.strftime('%m/%d')}）{all_days[check]}")
+
+    if not upcoming:
+        return ""
+    return "🎉 近期節日：" + " / ".join(upcoming)
+
+
 def _get_world_context(persona=DEFAULT_PERSONA, opponent_location=None):
     """組今天的世界資訊：日期、自己所在地天氣、對方所在地天氣、新聞
 
@@ -292,9 +417,14 @@ def _get_world_context(persona=DEFAULT_PERSONA, opponent_location=None):
     )
 
     # 自己所在地天氣（依 persona 不同）
-    self_weather = _safe_call_tool("fetch_weather", self_loc_en)
-    if self_weather:
-        parts.append(f"🌤 {nick} 所在地（{self_loc_zh}）天氣：\n{self_weather[:300]}")
+    # 🔴 Phase 3: 台灣 persona 優先用 CWA 中央氣象署（更細：紫外線/降雨機率/舒適度），香港 persona 走 wttr.in
+    cwa_self = _fetch_cwa_weather(self_loc_zh)
+    if cwa_self:
+        parts.append(cwa_self)
+    else:
+        self_weather = _safe_call_tool("fetch_weather", self_loc_en)
+        if self_weather:
+            parts.append(f"🌤 {nick} 所在地（{self_loc_zh}）天氣：\n{self_weather[:300]}")
 
     if opponent_location:
         opp_weather = _safe_call_tool("fetch_weather", opponent_location)
@@ -304,6 +434,16 @@ def _get_world_context(persona=DEFAULT_PERSONA, opponent_location=None):
     global_news = _safe_call_tool("fetch_global_news", count=3)
     if global_news:
         parts.append(f"📰 今日要聞：\n{global_news[:600]}")
+
+    # 🔴 Phase 1: 台灣節日 / 節氣（只在今天或 3 天內有節才注入）
+    holiday_info = _fetch_taiwan_holiday(check_days_ahead=3)
+    if holiday_info:
+        parts.append(holiday_info)
+
+    # 🔴 Phase 2: 台灣本土 RSS 新聞 top5
+    tw_news = _fetch_taiwan_news(top=5)
+    if tw_news:
+        parts.append(tw_news)
 
     context = "\n\n".join(parts)
     _WORLD_CONTEXT_CACHE[cache_key] = (context, time.time())
