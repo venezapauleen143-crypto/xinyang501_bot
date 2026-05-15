@@ -16,3 +16,4 @@ xtts_reference.wav
 memory.db-shm
 memory.db-wal
 bot_started.flag
+scripts/demo/test_out.txt
