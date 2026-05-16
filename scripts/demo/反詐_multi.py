@@ -1600,7 +1600,16 @@ def _was_greeting_sent_today(persona, name, greeting_type):
 
 
 def _check_proactive_trigger(persona, name):
-    """檢查觀眾是否需要主動發訊息（針對特定 persona）"""
+    """檢查觀眾是否需要主動發訊息（針對特定 persona）
+
+    🔴 2026-05-16 全部停用（用戶要求）：
+    - 拿掉「沉默 2/4/6 小時關心」（SILENCE_THRESHOLD）
+    - 拿掉「時段問候」（GREETING_SLOTS 早安 / 午餐 / 晚安）
+    - 腳本只回覆對方傳來的訊息，不主動搜尋好友 / 發訊
+    要重啟：把下面這一行 return 拿掉即可，後面邏輯保留
+    """
+    return False, "", "Proactive 已停用（用戶要求 2026-05-16）"
+    # 以下邏輯保留但不執行
     if name.startswith(_BLACKLIST_PREFIXES):
         return False, "", ""
     if _is_quiet_hour():
@@ -2420,6 +2429,62 @@ def handle_one_customer(persona, conv, regions, system_prompt, all_histories, al
                 return regions
     if current_messages is None:
         return regions
+
+    # 🆕 階段 2：偵測語音訊息 → 點 ▶ → 錄音 → 轉文字 → 替換訊息 text
+    # 「儲存|另存新檔|分享|傳送至Keep筆記」是 LINE 語音氣泡下的選單列指紋
+    # 替換在過濾雜訊之前做（否則指紋會被當系統訊息殺掉）
+    try:
+        from 反詐_voice import find_voice_markers, detect_play_button, record_loopback, transcribe_wav
+        import threading
+        import numpy as np
+        voice_markers = find_voice_markers(current_messages)
+        if voice_markers:
+            print(f"[Customer/{persona}] 發現 {len(voice_markers)} 條語音訊息，開始轉文字", flush=True)
+            arr = np.array(chat_img)
+            ca = regions["chat_area"]
+            for idx, marker in enumerate(voice_markers):
+                play_x, play_y, method = detect_play_button(arr, marker["marker_y"])
+                if play_x is None:
+                    print(f"[Voice/{persona}] ⚠ 找不到 ▶ marker_y={marker['marker_y']} → 跳過", flush=True)
+                    for m in current_messages:
+                        if m.get("y") == marker["marker_y"] and m.get("sender") == "them":
+                            m["text"] = "[語音 — 無法定位播放鈕]"
+                            break
+                    continue
+                screen_x = ca["left"] + play_x
+                screen_y = ca["top"] + play_y
+                print(f"[Voice/{persona}] #{idx+1} 點 ▶ ({method}) chat=({play_x},{play_y}) screen=({screen_x},{screen_y})", flush=True)
+
+                text_holder = [""]
+                def _record_task(label):
+                    try:
+                        wav = record_loopback(15, label=label)
+                        text_holder[0] = transcribe_wav(wav)
+                    except Exception as e:
+                        print(f"[Voice/{persona}] 錄音/STT 失敗：{type(e).__name__}: {e}", flush=True)
+
+                t = threading.Thread(target=_record_task, args=(f"voice_{idx}",), daemon=True)
+                t.start()
+                time.sleep(0.3)  # 等錄音 stream ready
+                try:
+                    safe_click(screen_x, screen_y, verify_timeout=2.5)
+                except Exception as e:
+                    print(f"[Voice/{persona}] safe_click 失敗：{e}", flush=True)
+                t.join(timeout=20)
+
+                # 替換訊息 text
+                for m in current_messages:
+                    if m.get("y") == marker["marker_y"] and m.get("sender") == "them":
+                        if text_holder[0]:
+                            m["text"] = f"[語音轉文字] {text_holder[0]}"
+                            print(f"[Voice/{persona}] #{idx+1} → 「{text_holder[0]}」", flush=True)
+                        else:
+                            m["text"] = "[語音 — 轉文字失敗]"
+                        break
+    except ImportError as e:
+        print(f"[Voice/{persona}] 模組 import 失敗（先略過語音處理）：{e}", flush=True)
+    except Exception as e:
+        print(f"[Voice/{persona}] 語音處理異常：{type(e).__name__}: {e}", flush=True)
 
     raw_count = len(current_messages)
     # 🆕 過濾 OCR 雜訊（LINE 系統訊息、按鈕、海報等）
