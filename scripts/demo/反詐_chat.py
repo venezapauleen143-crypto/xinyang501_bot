@@ -1109,6 +1109,125 @@ def send_image(image_path, regions):
 
 
 # ============================================================
+# 發送音訊（點 📎 附件鍵 → 系統檔案視窗貼路徑 → Enter 兩次）
+# 對方端會看到「▶ 00:0X」語音訊息氣泡，跟手機錄音無法區分
+#
+# 為什麼不用 WM_DROPFILES：LINE 是 Electron + Chromium，
+# 對主視窗發 WM_DROPFILES 被 Chromium webview 吃掉，已實測無效。
+# 業界 2026 共識（PyWhatsapp + AutoIt）→ 走原生附件流程。
+# 座標完全動態：每次跑都 find_line_window + 像素分析找 #4 附件鍵
+# ============================================================
+def send_audio_via_drop(audio_path, regions):
+    """發送音訊檔到 LINE 對話（點附件鍵 + 系統檔案視窗）
+
+    支援格式：m4a、mp3、wav（LINE 桌機都偵測為音訊）
+    """
+    import os
+    import numpy as np
+    from PIL import Image
+    from collections import defaultdict
+    import mss
+    import win32gui
+    from pywinauto import findwindows
+    from 反詐_locate import find_line_window
+
+    abs_path = os.path.abspath(audio_path)
+    if not os.path.exists(abs_path):
+        print(f"[Audio] 音檔不存在: {abs_path}", flush=True)
+        return False
+
+    # ─── 1. 動態定位 📎 附件鍵 ───
+    line = find_line_window()
+    if not line:
+        print(f"[Audio] find_line_window 找不到 LINE 主視窗", flush=True)
+        return False
+    hwnd, _, _, rect = line
+    left, top, right, bottom = rect
+
+    # ─── 像素分析底部工具列找 #4 = 📎 ───
+    with mss.MSS() as sct:
+        bbox = {"left": left, "top": top, "width": right-left, "height": bottom-top}
+        raw = sct.grab(bbox)
+        arr = np.array(Image.frombytes("RGB", (raw.width, raw.height), raw.rgb))
+    h_win = bottom - top
+    region = arr[h_win-100:, :, :]
+    dark = (region[:, :, 0] < 100) & (region[:, :, 1] < 100) & (region[:, :, 2] < 100)
+    ys_d, xs_d = np.where(dark)
+    buckets = defaultdict(list)
+    for x, y in zip(xs_d, ys_d):
+        buckets[x // 20].append((x, y))
+    icons = []
+    for _, pts in sorted(buckets.items()):
+        if len(pts) < 5:
+            continue
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        icons.append((int(np.mean(xs)), int(np.mean(ys)) + h_win - 100, len(pts)))
+    merged = []
+    for cx, cy, n in icons:
+        if merged and (cx - merged[-1][0]) < 15:
+            m = merged[-1]
+            new_n = m[2] + n
+            merged[-1] = ((m[0]*m[2] + cx*n)//new_n, (m[1]*m[2] + cy*n)//new_n, new_n)
+        else:
+            merged.append((cx, cy, n))
+    if len(merged) < 4:
+        print(f"[Audio] 像素分析找不到 #4 附件鍵（只 {len(merged)} 個圖示）", flush=True)
+        return False
+    cx, cy, _ = merged[3]
+    attach_x, attach_y = left + cx, top + cy
+    print(f"[Audio] 📎 動態位置：({attach_x},{attach_y})", flush=True)
+
+    # ─── 2. 拉 LINE 前景 + 點附件鍵 ───
+    try:
+        win32gui.SetForegroundWindow(hwnd)
+        time.sleep(0.3)
+    except Exception:
+        pass
+    pyautogui.click(attach_x, attach_y)
+
+    # ─── 3. 等系統「開啟」檔案視窗（最多 5 秒）───
+    file_dlg = None
+    t0 = time.time()
+    while time.time() - t0 < 5:
+        try:
+            handles = findwindows.find_windows(class_name="#32770")
+            for hh in handles:
+                title = win32gui.GetWindowText(hh)
+                if title and ("開啟" in title or "Open" in title or "選擇" in title):
+                    file_dlg = hh
+                    break
+            if file_dlg:
+                break
+        except Exception:
+            pass
+        time.sleep(0.3)
+    if not file_dlg:
+        print(f"[Audio] 5 秒沒看到檔案視窗，跳過", flush=True)
+        return False
+
+    # ─── 4. 貼路徑 + Enter（檔案視窗確認）───
+    pyperclip.copy(abs_path)
+    time.sleep(0.3)
+    pyautogui.hotkey("ctrl", "a")
+    time.sleep(0.2)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(0.3)
+    pyautogui.press("enter")
+    time.sleep(2)
+
+    # ─── 5. 等 LINE「傳送檔案」對話框 + Enter（送出）───
+    pyautogui.press("enter")
+    time.sleep(0.8)
+
+    print(f"[Audio] 已發送 {os.path.basename(abs_path)}", flush=True)
+    return True
+
+
+# （舊 WM_DROPFILES 實作已棄用 — LINE Electron 在 Windows 不接受 WM_DROPFILES）
+
+
+# ============================================================
 # 發送訊息（點輸入框 → 打字 → Enter）
 # ============================================================
 def send_reply(msg, regions):

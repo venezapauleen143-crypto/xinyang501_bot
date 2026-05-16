@@ -462,6 +462,23 @@ def _resolve_image_tag(persona, tag):
         return None
     return str(random.choice(images))
 
+
+def _resolve_audio_tag(persona, tag):
+    """從 {audio_xxx} 標記找對應音訊（從該 persona 的 audio/ 目錄）"""
+    # tag 形如 "audio_早安"、"audio_笑聲"
+    category = tag.replace("audio_", "", 1).strip()
+    audio_dir = PERSONA_CONFIG[persona]["root"] / "audio" / category
+    if not audio_dir.exists():
+        return None
+    candidates = (
+        list(audio_dir.glob("*.m4a"))
+        + list(audio_dir.glob("*.mp3"))
+        + list(audio_dir.glob("*.wav"))
+    )
+    if not candidates:
+        return None
+    return str(random.choice(candidates))
+
 # 🔴 PERSONA_NICKNAME 已移除，請用 persona_nickname(persona) 動態取
 # 每個 persona 的 LINE 暱稱在 PERSONA_CONFIG 設定
 
@@ -1867,12 +1884,27 @@ def _send_with_realistic_delay(reply, regions, persona=DEFAULT_PERSONA, name="un
 
     persona: 哪個人設（決定圖片庫位置 + 寫到哪個 .txt）
     """
-    from 反詐_chat import send_reply, send_image
+    from 反詐_chat import send_reply, send_image, send_audio_via_drop
 
     parts = [p.strip() for p in reply.split("|||") if p.strip()]
     for i, part in enumerate(parts):
+        # 圖片標籤 {send_自拍} / {send_食物}
         m = re.match(r'^\{(send_[\w一-鿿]+)\}$', part)
-        if m:
+        # 音訊標籤 {audio_早安} / {audio_笑聲}
+        m_audio = re.match(r'^\{(audio_[\w一-鿿]+)\}$', part)
+        if m_audio:
+            tag = m_audio.group(1)
+            audio_path = _resolve_audio_tag(persona, tag)
+            if audio_path:
+                send_audio_via_drop(audio_path, regions)
+                print(f"[Reply/{persona}] → 🎤 {Path(audio_path).name}（{tag}）", flush=True)
+                audio_marker = f"[音訊:{Path(audio_path).name}]"
+                if history is not None:
+                    history.append({"text": audio_marker, "sender": "me", "y": 0})
+                _append_to_history_file(persona, name, "me", audio_marker)
+            else:
+                print(f"[Reply/{persona}] ⚠ {tag} 找不到對應音檔，跳過", flush=True)
+        elif m:
             tag = m.group(1)
             img_path = _resolve_image_tag(persona, tag)
             if img_path:
