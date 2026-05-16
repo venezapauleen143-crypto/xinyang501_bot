@@ -792,12 +792,19 @@ def generate_reply(system_prompt, conversation_history, new_messages_text, profi
     history_lines = []
     for msg in conversation_history[-30:]:
         text = msg["text"]
-        if msg["sender"] == "them" and _CC_TW is not None:
+        sender = msg.get("sender", "them")
+        if sender == "them" and _CC_TW is not None:
             try:
                 text = _CC_TW.convert(text)  # 對方訊息先字級繁中化
             except Exception:
                 pass
-        label = "[客戶]" if msg["sender"] == "them" else "[小編]"
+        # system marker（日期分隔線）讓 Claude 看到時序
+        if sender == "system":
+            label = "[系統]"
+        elif sender == "them":
+            label = "[客戶]"
+        else:
+            label = "[小編]"
         history_lines.append(f"{label} {text}")
     history_text = "\n".join(history_lines)
 

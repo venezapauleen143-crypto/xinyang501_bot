@@ -42,7 +42,7 @@
     },
     {
       "speaker": "them",
-      "fact": "詢問鹵鹹酥雞配什麼飲料"
+      "fact": "詢問鹹酥雞配什麼飲料"
     },
     {
       "speaker": "them",
@@ -51,6 +51,14 @@
     {
       "speaker": "them",
       "fact": "飲料選擇不包括Ruby建議的特定選項"
+    },
+    {
+      "speaker": "them",
+      "fact": "對飲料選擇用貼圖表達同意或中立態度"
+    },
+    {
+      "speaker": "them",
+      "fact": "詢問鹵鹹酥雞配什麼飲料"
     }
   ],
   "interests": [
@@ -66,9 +74,10 @@
     "Day 1: 第三輪對話，詢求宵夜食物建議",
     "Day 1: 第四輪對話，討論火鍋與鹽酥雞選項，提及今日疲勞",
     "Day 1: 第五輪對話，深化鹹酥雞討論，詢問搭配飲料",
-    "Day 1: 第六輪對話，拒絕特定飲料建議，開始明確表達飲料偏好"
+    "Day 1: 第六輪對話，拒絕特定飲料建議，開始明確表達飲料偏好",
+    "Day 1: 第七輪對話，用貼圖回應飲料建議，Ruby催促walka下班前做決定"
   ],
-  "current_stage": "Day 1，輕鬆閒聊階段，涉及下班後宵夜飲食選擇與飲料搭配話題，walka開始表達具體飲料偏好",
+  "current_stage": "Day 1，輕鬆閒聊階段，涉及下班後宵夜飲食選擇與飲料搭配話題，walka開始表達具體飲料偏好，Ruby開始催促決策",
   "topic_hooks_remaining": [
     "工作內容",
     "工作地點",
@@ -79,6 +88,6 @@
   "trust_score": 1,
   "ai_suspicion_flags": [],
   "first_seen": "2026-05-15T19:13:05",
-  "last_updated": "2026-05-15T20:53:40",
-  "total_turns": 5
+  "last_updated": "2026-05-16T20:35:12",
+  "total_turns": 6
 }

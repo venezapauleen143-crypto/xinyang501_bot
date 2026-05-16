@@ -1,0 +1,75 @@
+{"ts": "2026-05-16T20:30:05", "persona": "Ruby", "type": "customer_seen", "customer": "Natsuki", "data": {"prior_history_len": 106}}
+{"ts": "2026-05-16T20:30:28", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:30:43", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 28, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:31:51", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:32:10", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 31, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:32:18", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:32:45", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:33:19", "persona": "Ruby", "type": "customer_seen", "customer": "110", "data": {"prior_history_len": 88}}
+{"ts": "2026-05-16T20:33:36", "persona": "Ruby", "type": "new_messages", "customer": "110", "data": {"new_them_count": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:33:52", "persona": "Ruby", "type": "reply_sent", "customer": "110", "data": {"reply_len": 40, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:34:23", "persona": "Ruby", "type": "profile_updated", "customer": "110", "data": {"disclosures": 51, "action": "增量更新"}}
+{"ts": "2026-05-16T20:34:40", "persona": "Ruby", "type": "customer_seen", "customer": "walka", "data": {"prior_history_len": 25}}
+{"ts": "2026-05-16T20:34:51", "persona": "Ruby", "type": "new_messages", "customer": "walka", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:35:07", "persona": "Ruby", "type": "reply_sent", "customer": "walka", "data": {"reply_len": 34, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:35:12", "persona": "Ruby", "type": "profile_updated", "customer": "walka", "data": {"disclosures": 12, "action": "增量更新"}}
+{"ts": "2026-05-16T20:36:11", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:36:24", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 29, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:36:58", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:38:19", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:38:33", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 25, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:39:07", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:41:55", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:42:09", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 27, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:42:44", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:45:46", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:45:59", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 39, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:46:33", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:47:10", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:47:27", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 32, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:48:01", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:51:40", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:52:00", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 34, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:52:33", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:54:31", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:54:48", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 27, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:55:21", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:56:00", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:56:16", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 32, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:56:50", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:57:24", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T20:57:39", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 28, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T20:58:14", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T20:59:49", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:00:15", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 47, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:00:48", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:01:26", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T21:01:46", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 43, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:02:21", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:03:35", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T21:03:53", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 33, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:04:28", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:05:34", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T21:05:47", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 26, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:06:22", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:07:33", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T21:07:47", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 33, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:08:21", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:08:55", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:09:08", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 26, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:09:42", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:10:38", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:10:54", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 14, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:11:27", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:12:44", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:13:09", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 25, "segments": 3, "day_n": 2}}
+{"ts": "2026-05-16T21:13:44", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:15:33", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T21:15:54", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 33, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:16:28", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:17:37", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T21:17:55", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 26, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:18:29", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}
+{"ts": "2026-05-16T21:19:18", "persona": "Ruby", "type": "new_messages", "customer": "Natsuki", "data": {"new_them_count": 1, "day_n": 2}}
+{"ts": "2026-05-16T21:19:36", "persona": "Ruby", "type": "reply_sent", "customer": "Natsuki", "data": {"reply_len": 32, "segments": 2, "day_n": 2}}
+{"ts": "2026-05-16T21:20:10", "persona": "Ruby", "type": "profile_updated", "customer": "Natsuki", "data": {"disclosures": 37, "action": "增量更新"}}

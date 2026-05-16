@@ -517,6 +517,16 @@ def _is_ocr_noise(text):
     for noise in _OCR_NOISE_PATTERNS:
         if noise in text:
             return True
+    # LINE 日期分隔線（居中無氣泡的「今天 / 昨天 / 前天」字眼會被 OCR 抓到）
+    # 解 5/16 bug：「今天」被當對方訊息 → Ruby 回「你剛才說『今天』然後呢」
+    if text in ("今天", "昨天", "前天"):
+        return True
+    # LINE 完整日期分隔線（如「2026.05.16 星期六」/「2026/5/16」）
+    if re.match(r'^\d{4}[./年-]\d{1,2}', text):
+        return True
+    # 「以下為尚未...的訊息」前綴（OCR 對「閱讀」辨識多種變體：閱請/開讀/開請/閱讀的息）
+    if text.startswith("以下為尚未") or "以下為尚未" in text:
+        return True
     # 啟發式：純標點/符號（沒有中文、英文、數字）→ 雜訊
     if not re.search(r'[一-鿿A-Za-z0-9]', text):
         return True
@@ -616,8 +626,17 @@ def _load_customer_history(persona, name):
                 line = raw.rstrip()
                 if not line:
                     continue
-                # 跳過日期分隔行：2026.05.05 星期X
-                if re.match(r'^\d{4}\.\d{2}\.\d{2}\s*星期', line):
+                # 日期分隔行：2026.05.05 星期X → 當「系統 marker」塞 history
+                # 讓 Claude 看到時序：「[系統] === 2026.05.16 星期六 ===」
+                # 解 5/16 bug：之前直接 continue 跳過，Claude 看不到隔天
+                date_match = re.match(r'^(\d{4}\.\d{2}\.\d{2}\s*星期.)', line)
+                if date_match:
+                    history.append({
+                        "text": f"=== {date_match.group(1).strip()} ===",
+                        "sender": "system",
+                        "y": 0,
+                    })
+                    last_idx = len(history) - 1
                     continue
                 # 跳過系統訊息
                 if "已收回訊息" in line or "未接來電" in line.replace(" ", ""):
