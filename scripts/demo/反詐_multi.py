@@ -1870,8 +1870,13 @@ def _load_time_settings(path):
         _TIME_SETTINGS = None
 
 
+_FAST_MODE = False  # 啟動參數 --fast 設 True，所有延遲縮 5-30 秒
+
+
 def get_current_delay():
     """根據電腦當下時間，從時段設定抽一個延遲秒數（隨機）"""
+    if _FAST_MODE:
+        return random.uniform(5, 30)  # 測試模式：快回應
     if not _TIME_SETTINGS:
         return random.uniform(30, 90)
     now_hour = datetime.now().hour
@@ -3112,8 +3117,15 @@ def main(stop_time, monitor=None):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(__doc__)
-        print("用法：python 反詐_multi.py <監控時間HH:MM>")
+        print("用法：python 反詐_multi.py <監控時間HH:MM> [--fast]")
+        print("  --fast: 測試模式，所有時段延遲縮成 5-30 秒")
         sys.exit(0)
 
     stop = sys.argv[1]
+
+    # --fast 參數（測試模式）
+    if "--fast" in sys.argv:
+        globals()['_FAST_MODE'] = True
+        print("[Fast] 🚀 測試模式啟動：所有延遲縮成 5-30 秒", flush=True)
+
     main(stop)
