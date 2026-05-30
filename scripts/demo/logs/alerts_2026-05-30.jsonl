@@ -6,3 +6,17 @@
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "Natsuki", "msg": "Natsuki 已 353h 沒互動 (current_day=1)", "ts": "2026-05-30T13:49:22.267044", "fp": "a378e3a41f71"}
 {"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "walka", "msg": "walka 已 329h 沒互動 (current_day=1)", "ts": "2026-05-30T13:49:22.267044", "fp": "2961bda2352d"}
 {"level": "critical", "rule": "persona_no_profile", "persona": "Angela", "msg": "Angela 0 個 profile（persona dir 存在但無客戶資料，可能未啟動或全部誤排除）", "ts": "2026-05-30T13:49:22.267044", "fp": "d5fcf4fc18f0"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 329.0 小時沒 heartbeat", "ts": "2026-05-30T14:19:22.179861", "fp": "07882048c295"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "仁輝JAMES", "msg": "仁輝JAMES 已 379h 沒互動 (current_day=1)", "ts": "2026-05-30T14:19:22.179861", "fp": "baafcac43c98"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 453h 沒互動 (current_day=1)", "ts": "2026-05-30T14:19:22.179861", "fp": "a9d68dee5718"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "Natsuki", "msg": "Natsuki 已 354h 沒互動 (current_day=1)", "ts": "2026-05-30T14:19:22.179861", "fp": "a530df22f4f6"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "walka", "msg": "walka 已 330h 沒互動 (current_day=1)", "ts": "2026-05-30T14:19:22.179861", "fp": "cbd665ecc6b7"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 329.5 小時沒 heartbeat", "ts": "2026-05-30T14:49:22.184905", "fp": "f97ccb3bed58"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "110", "msg": "110 已 354h 沒互動 (current_day=1)", "ts": "2026-05-30T14:49:22.184905", "fp": "903d12f9b48b"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 330.0 小時沒 heartbeat", "ts": "2026-05-30T15:19:22.189979", "fp": "c5fcfdbcaba7"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "仁輝JAMES", "msg": "仁輝JAMES 已 380h 沒互動 (current_day=1)", "ts": "2026-05-30T15:19:22.189979", "fp": "753dde09f270"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "佳莹", "msg": "佳莹 已 454h 沒互動 (current_day=1)", "ts": "2026-05-30T15:19:22.189979", "fp": "c6fde3a86663"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "Natsuki", "msg": "Natsuki 已 355h 沒互動 (current_day=1)", "ts": "2026-05-30T15:19:22.189979", "fp": "2459dc1dc57c"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "walka", "msg": "walka 已 331h 沒互動 (current_day=1)", "ts": "2026-05-30T15:19:22.189979", "fp": "6e0e478c6cc9"}
+{"level": "warning", "rule": "persona_idle", "persona": "Ruby", "msg": "Ruby 已 330.5 小時沒 heartbeat", "ts": "2026-05-30T15:49:21.260957", "fp": "638ff4ae8947"}
+{"level": "info", "rule": "customer_idle", "persona": "Ruby", "customer": "110", "msg": "110 已 355h 沒互動 (current_day=1)", "ts": "2026-05-30T15:49:21.260957", "fp": "711dc571a226"}
