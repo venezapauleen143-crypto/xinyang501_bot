@@ -17,3 +17,7 @@ memory.db-shm
 memory.db-wal
 bot_started.flag
 scripts/demo/test_out.txt
+
+# === 反詐 demo 持續追加的流水帳（jsonl），跨機會卡同步；彙整 csv 報表保留追蹤（2026-06-01 補）===
+scripts/demo/logs/*.jsonl
+scripts/demo/logs/*.bak
